@@ -144,6 +144,7 @@ export function ProjectDetail() {
               repo={meta.repo}
               framework={meta.framework}
               kn={knowledge?.knowledge ?? {}}
+              docPath={knowledge?.docPath ?? ""}
               onBuild={() => build(meta)}
             />
           )}
@@ -226,6 +227,7 @@ function KnowledgeTab({
   repo,
   framework,
   kn,
+  docPath,
   onBuild,
 }: {
   indexed: boolean;
@@ -236,6 +238,7 @@ function KnowledgeTab({
   repo: string;
   framework: string;
   kn: Partial<import("@/types/api").KnowledgeBody>;
+  docPath: string;
   onBuild: () => void;
 }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -284,6 +287,11 @@ function KnowledgeTab({
               Last indexed {lastIndexed ? new Date(lastIndexed).toLocaleString() : "—"} &middot;{" "}
               {confidence}% confidence
             </div>
+            {docPath && (
+              <div className="mt-0.5 truncate font-mono text-[11px] text-[#6c6c7e]" title={docPath}>
+                knowledge.md · knowledge.json → {docPath}
+              </div>
+            )}
           </div>
         </div>
         <Button variant="glass" onClick={onBuild}>

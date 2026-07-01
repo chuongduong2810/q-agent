@@ -16,6 +16,7 @@ DEFAULTS: dict[str, Any] = {
     "retryFlaky": True,
     "screenshotOnFail": True,
     "video": False,
+    "maxCasesPerTicket": 8,
 }
 
 

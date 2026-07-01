@@ -85,6 +85,30 @@ def linked_cases(external_id: str, db: Session = Depends(get_db)) -> list[Linked
     )
 
 
+@router.get("/{external_id}/provider-test-cases")
+def provider_test_cases(external_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    """Existing test cases in the provider (e.g. ADO Test Case work items).
+
+    Lets the app show/manage test cases that already live in the provider, and is
+    what generation reads to continue the existing numbering/naming convention.
+    """
+    ticket = db.query(Ticket).filter(Ticket.external_id == external_id).first()
+    kind = ticket.provider_kind if ticket else "ado"
+    provider = db.query(Provider).filter(Provider.kind == kind).first()
+    if not provider:
+        return []
+    decrypted = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
+    try:
+        adapter = get_adapter(kind, provider.config or {}, decrypted)
+        items = adapter.list_test_cases(external_id)
+    except Exception:  # noqa: BLE001 - degrade gracefully (provider/network hiccup)
+        return []
+    return [
+        {"externalId": tc.get("external_id", ""), "title": tc.get("title", ""), "state": tc.get("state", "")}
+        for tc in items
+    ]
+
+
 @router.post("/sync", response_model=SyncResult)
 def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult:
     """Pull tickets from the given provider's adapter and upsert Ticket rows."""

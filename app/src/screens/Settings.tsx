@@ -62,6 +62,27 @@ export function Settings() {
                 <span className="w-5 text-center font-mono text-[14px] font-bold">{settings.parallel}</span>
               </div>
             </div>
+            <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
+              <div>
+                <div className="text-[14px] font-semibold">Max test cases per ticket</div>
+                <div className="text-[12px] text-muted">
+                  Cap AI generation to at most {settings.maxCasesPerTicket} cases per ticket
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={20}
+                  value={settings.maxCasesPerTicket}
+                  onChange={(e) => updateSettings.mutate({ maxCasesPerTicket: Number(e.target.value) })}
+                  className="w-[150px] accent-[#8b5cf6]"
+                />
+                <span className="w-5 text-center font-mono text-[14px] font-bold">
+                  {settings.maxCasesPerTicket}
+                </span>
+              </div>
+            </div>
             <ToggleRow
               title="Auto-retry flaky tests"
               description="Retry failed cases up to 2 times"

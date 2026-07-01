@@ -72,6 +72,26 @@ def test_pipeline_creates_analysis_and_cases(db_session, seed_ticket, monkeypatc
     assert all(c.approval == "pending" for c in cases)
 
 
+def test_pipeline_caps_and_continues_numbering(db_session, seed_ticket, monkeypatch):
+    """Respects maxCasesPerTicket and continues codes from existing provider cases."""
+    from app.services import settings_store
+
+    run = _make_run(db_session, seed_ticket.external_id)
+    monkeypatch.setattr(settings_store, "load_settings", lambda: {"maxCasesPerTicket": 2})
+    # Existing provider test cases up to TC-05 -> new codes start at TC-06.
+    monkeypatch.setattr(ai_service, "provider_case_offset", lambda db, ticket: 5)
+
+    many = [dict(CANNED_CASES[0]) for _ in range(6)]  # Claude returns 6; cap is 2
+    responses = iter([CANNED_ANALYSIS, many])
+    monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
+
+    ai_service.run_generation_pipeline(run.id, blocking=True)
+
+    cases = db_session.query(TestCase).filter(TestCase.run_id == run.id).order_by(TestCase.code).all()
+    assert len(cases) == 2  # capped
+    assert [c.code for c in cases] == ["TC-06", "TC-07"]  # continued from offset
+
+
 def test_pipeline_surfaces_claude_error(db_session, seed_ticket, monkeypatch):
     run = _make_run(db_session, seed_ticket.external_id)
 

@@ -157,6 +157,7 @@ def update_settings_endpoint(body: SettingsUpdate) -> SettingsOut:
         "retryFlaky": updates.get("retry_flaky"),
         "screenshotOnFail": updates.get("screenshot_on_fail"),
         "video": updates.get("video"),
+        "maxCasesPerTicket": updates.get("max_cases_per_ticket"),
     }
     saved = settings_store.save_settings(camel_updates)
     return SettingsOut.model_validate(saved)

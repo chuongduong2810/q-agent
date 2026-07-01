@@ -12,15 +12,20 @@ OWN DB session via ``SessionLocal`` rather than reusing a request-scoped session
 
 from __future__ import annotations
 
+import re
 import threading
 
 from sqlalchemy.orm import Session
 
+from app import crypto
 from app import db as db_module
 from app.logging import logger
+from app.models.provider import Provider
 from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
+from app.services import settings_store
+from app.services.adapters import get_adapter
 from app.services.claude_cli import ClaudeError, run_json
 from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR
 from app.services.prompts import (
@@ -57,6 +62,32 @@ def next_case_code(db: Session, run_id: int, ticket_external_id: str) -> str:
         if suffix.isdigit():
             max_n = max(max_n, int(suffix))
     return f"TC-{max_n + 1:02d}"
+
+
+def provider_case_offset(db: Session, ticket: Ticket) -> int:
+    """Highest existing 'TC-NN' number among the ticket's provider test cases.
+
+    Pulls existing test cases from the provider (ADO/Jira) so generated codes
+    continue the existing numbering/naming instead of restarting at TC-01.
+    Best-effort: returns 0 if the provider is unavailable or has none.
+    """
+    provider = db.query(Provider).filter(Provider.kind == ticket.provider_kind).first()
+    if not provider:
+        return 0
+    try:
+        secrets = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
+        adapter = get_adapter(ticket.provider_kind, provider.config or {}, secrets)
+        existing = adapter.list_test_cases(ticket.external_id)
+    except Exception as exc:  # noqa: BLE001 - never block generation on a provider hiccup
+        logger.warning("Could not pull existing test cases for {}: {}", ticket.external_id, exc)
+        return 0
+    max_n = 0
+    for tc in existing or []:
+        for field in (str(tc.get("code", "")), str(tc.get("title", ""))):
+            match = re.search(r"TC-(\d+)", field)
+            if match:
+                max_n = max(max_n, int(match.group(1)))
+    return max_n
 
 
 def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
@@ -106,13 +137,18 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
 
         _publish_phase(run.id, ticket.external_id, PHASE_GENERATING, "Generating test cases...")
 
+        max_cases = int(settings_store.load_settings().get("maxCasesPerTicket", 8) or 8)
+        # Continue numbering from existing provider test cases (match convention).
+        offset = provider_case_offset(db, ticket)
+
         cases = run_json(
-            build_generation_prompt(ticket, analysis),
+            build_generation_prompt(ticket, analysis, max_cases=max_cases),
             skill=TEST_CASE_GENERATOR,
             label=f"Generate cases: {ticket.external_id}",
         )
         if not isinstance(cases, list):
             raise ClaudeError("Claude generation response was not a JSON array")
+        cases = cases[:max_cases]  # enforce the per-ticket cap
 
         case_count = 0
         for i, raw_case in enumerate(cases, start=1):
@@ -125,7 +161,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             test_case = TestCase(
                 run_id=run.id,
                 ticket_external_id=ticket.external_id,
-                code=f"TC-{i:02d}",
+                code=f"TC-{offset + i:02d}",
                 title=raw_case.get("title", ""),
                 precondition=raw_case.get("precondition", ""),
                 steps=steps,

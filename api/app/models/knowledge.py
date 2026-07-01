@@ -36,6 +36,8 @@ class ProjectKnowledge(Base):
     # {branch, stack[], architecture, domain, locator, assets, pageObjects,
     #  fixtures, utilities[]}
     knowledge: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Directory holding the emitted knowledge.md + knowledge.json (skill artifacts).
+    doc_path: Mapped[str] = mapped_column(String(600), default="")
 
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)

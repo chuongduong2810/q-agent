@@ -177,6 +177,31 @@ def test_ado_fetch_tickets_raises_provider_error_on_non_sprint_wiql_400():
 
 
 @respx.mock
+def test_ado_list_test_cases_returns_titles():
+    adapter = AzureDevOpsAdapter(
+        config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
+        secrets={"pat": "secret-pat"},
+    )
+    respx.post("https://dev.azure.com/myorg/MyProj/_apis/wit/wiql").mock(
+        return_value=httpx.Response(200, json={"workItems": [{"id": 501}, {"id": 502}]})
+    )
+    respx.get("https://dev.azure.com/myorg/_apis/wit/workitems").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "value": [
+                    {"id": 501, "fields": {"System.Title": "TC-08: Login", "System.State": "Design"}},
+                    {"id": 502, "fields": {"System.Title": "TC-09: Logout", "System.State": "Ready"}},
+                ]
+            },
+        )
+    )
+    cases = adapter.list_test_cases("SUR-1428")
+    assert [c["external_id"] for c in cases] == ["501", "502"]
+    assert cases[0]["title"] == "TC-08: Login"
+
+
+@respx.mock
 def test_ado_publish_comment_uses_basic_auth():
     adapter = AzureDevOpsAdapter(
         config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},

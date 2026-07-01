@@ -64,8 +64,12 @@ class Settings(BaseSettings):
     def evidence_dir(self) -> Path:
         return self.workspace_dir / "evidence"
 
+    @property
+    def knowledge_dir(self) -> Path:
+        return self.workspace_dir / "knowledge"
+
     def ensure_dirs(self) -> None:
-        for d in (self.workspace_dir, self.specs_dir, self.evidence_dir):
+        for d in (self.workspace_dir, self.specs_dir, self.evidence_dir, self.knowledge_dir):
             d.mkdir(parents=True, exist_ok=True)
 
 

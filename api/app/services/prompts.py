@@ -72,16 +72,18 @@ def build_analysis_prompt(ticket: Ticket) -> str:
     )
 
 
-def build_generation_prompt(ticket: Ticket, analysis: dict) -> str:
+def build_generation_prompt(ticket: Ticket, analysis: dict, max_cases: int = 8) -> str:
     """Prompt asking Claude to generate ADO-style manual test cases for a ticket.
 
     Returns a JSON array of case objects (title, precondition, steps, priority,
-    testType, automation, platform).
+    testType, automation, platform). ``max_cases`` caps how many are generated.
     """
     return (
         "You are a senior QA engineer. Using the ticket and the prior requirement "
         "analysis below, write a set of ADO-style manual test cases that give good "
         "coverage of the acceptance criteria, business rules, and edge cases.\n\n"
+        f"Generate AT MOST {max_cases} test cases — prioritise the highest-value "
+        "coverage if you would otherwise exceed that.\n\n"
         f"{_ticket_context(ticket)}\n\n"
         f"Prior analysis (JSON):\n{analysis}\n\n"
         "Each test case must have: a clear title, a precondition, a list of steps "

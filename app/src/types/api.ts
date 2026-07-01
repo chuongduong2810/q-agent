@@ -62,6 +62,7 @@ export interface ProjectKnowledgeOut {
   needsRefresh: boolean;
   lastIndexed: string | null;
   knowledge: Partial<KnowledgeBody>;
+  docPath: string;
 }
 
 export interface KnowledgeBuildRequest {
@@ -352,6 +353,7 @@ export interface SettingsOut {
   retryFlaky: boolean;
   screenshotOnFail: boolean;
   video: boolean;
+  maxCasesPerTicket: number;
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 

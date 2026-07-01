@@ -108,3 +108,12 @@ class ProviderAdapter(ABC):
         default raises since not every provider supports test cases.
         """
         raise ProviderError("Creating test cases is not supported for this provider")
+
+    def list_test_cases(self, ticket_external_id: str | None = None) -> list[dict[str, Any]]:
+        """List existing test cases in the provider (optionally scoped to a work item).
+
+        Returns ``[{external_id, title, state}]``. Used to continue the existing
+        numbering/naming when generating and to manage provider test cases in-app.
+        Default: none.
+        """
+        return []

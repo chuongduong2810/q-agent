@@ -429,6 +429,35 @@ class AzureDevOpsAdapter(ProviderAdapter):
             )
             resp.raise_for_status()
 
+    def list_test_cases(self, ticket_external_id: str | None = None) -> list[dict[str, Any]]:
+        """List the project's 'Test Case' work items (id + title + state)."""
+        if not self.project:
+            return []
+        with self._client() as client:
+            try:
+                ids = self._run_wiql(
+                    client,
+                    self.project,
+                    [
+                        f"[System.TeamProject] = '{_wiql_literal(self.project)}'",
+                        "[System.WorkItemType] = 'Test Case'",
+                        "[System.State] <> 'Removed'",
+                    ],
+                )
+            except _WiqlError:
+                return []
+            if not ids:
+                return []
+            items = self._get_work_items(client, ids[: self.MAX_SYNC_ITEMS])
+            return [
+                {
+                    "external_id": str(it["id"]),
+                    "title": it.get("fields", {}).get("System.Title", ""),
+                    "state": it.get("fields", {}).get("System.State", ""),
+                }
+                for it in items
+            ]
+
     def create_test_case(
         self,
         ticket_external_id: str,

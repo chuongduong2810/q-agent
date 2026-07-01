@@ -83,6 +83,7 @@ class ProjectKnowledgeOut(ApiModel):
     needs_refresh: bool = False
     last_indexed: datetime | None = None
     knowledge: dict = Field(default_factory=dict)
+    doc_path: str = ""
 
 
 class KnowledgeBuildRequest(ApiModel):
@@ -397,6 +398,7 @@ class SettingsOut(ApiModel):
     retry_flaky: bool = True
     screenshot_on_fail: bool = True
     video: bool = False
+    max_cases_per_ticket: int = 8
 
 
 class SettingsUpdate(ApiModel):
@@ -404,3 +406,4 @@ class SettingsUpdate(ApiModel):
     retry_flaky: bool | None = None
     screenshot_on_fail: bool | None = None
     video: bool | None = None
+    max_cases_per_ticket: int | None = None
