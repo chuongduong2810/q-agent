@@ -96,7 +96,7 @@ export function Automation() {
         <h1 className="m-0 text-[28px] font-black tracking-tight">Automation</h1>
       </div>
       <div className="mb-4">
-        <PipelineRail stage={5} />
+        <PipelineRail stage={6} />
       </div>
 
       {thinking && (

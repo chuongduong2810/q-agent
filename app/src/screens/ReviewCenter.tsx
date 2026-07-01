@@ -6,7 +6,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { approvalColors, Pill, priorityBg, priorityColor } from "@/components/ui/badges";
 import { EmptyState, Spinner } from "@/components/ui/misc";
-import { useCaseMutations, useGenerateAutomation, useRun, useRunCases } from "@/hooks/queries";
+import { useCaseMutations, useCreateAndLink, useRun, useRunCases } from "@/hooks/queries";
 import { useRunSocket } from "@/hooks/useRunSocket";
 import { useUI } from "@/store/ui";
 import type { TestCaseOut } from "@/types/api";
@@ -35,11 +35,30 @@ export function ReviewCenter() {
   const { setApproval, regenerateCase, approveAll, approveTicket, updateCase } = useCaseMutations(
     activeRunId ?? 0,
   );
-  const generateAutomation = useGenerateAutomation(activeRunId ?? 0);
+  const createAndLink = useCreateAndLink(activeRunId ?? 0);
+  const setActiveRun = useUI((s) => s.setActiveRun);
   useRunSocket(activeRunId);
 
   const reviewOpenTicket = useUI((s) => s.reviewOpenTicket);
   const toggleReviewTicket = useUI((s) => s.toggleReviewTicket);
+  const reviewSel = useUI((s) => s.reviewSel);
+  const toggleReviewSel = useUI((s) => s.toggleReviewSel);
+  const clearReviewSel = useUI((s) => s.clearReviewSel);
+
+  const selectedIds = useMemo(
+    () => Object.keys(reviewSel).filter((k) => reviewSel[Number(k)]).map(Number),
+    [reviewSel],
+  );
+
+  const approveSelected = () => {
+    selectedIds.forEach((caseId) => setApproval.mutate({ caseId, approval: "approved" }));
+    clearReviewSel();
+  };
+  const startCreateLink = (link: boolean) => {
+    createAndLink.mutate({ link });
+    if (activeRunId != null) setActiveRun(activeRunId);
+    navigate("sync");
+  };
 
   const tickets = useMemo(() => groupByTicket(cases ?? []), [cases]);
 
@@ -73,18 +92,23 @@ export function ReviewCenter() {
           </div>
           <h1 className="m-0 text-[28px] font-black tracking-tight">Review Center</h1>
         </div>
-        <div className="flex gap-2.5">
-          <Button variant="success" onClick={() => approveAll.mutate()} disabled={approveAll.isPending}>
-            Approve entire run
+        <div className="flex flex-wrap justify-end gap-2.5">
+          {selectedIds.length > 0 && (
+            <Button variant="success" onClick={approveSelected}>
+              Approve selected ({selectedIds.length})
+            </Button>
+          )}
+          <Button variant="glass" onClick={() => approveAll.mutate()} disabled={approveAll.isPending}>
+            Approve all
           </Button>
           <Button
-            variant="primary"
-            onClick={() => {
-              generateAutomation.mutate();
-              navigate("automation");
-            }}
+            onClick={() => startCreateLink(false)}
+            className="border-[rgba(139,92,246,.32)] bg-[rgba(139,92,246,.16)] text-[#c4b5fd] hover:bg-[rgba(139,92,246,.24)]"
           >
-            Generate automation
+            Create test cases
+          </Button>
+          <Button variant="primary" onClick={() => startCreateLink(true)}>
+            Create &amp; link to ticket
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>
@@ -287,6 +311,8 @@ function CaseRow({
   const startEdit = useUI((s) => s.startEdit);
   const updateDraft = useUI((s) => s.updateDraft);
   const cancelEdit = useUI((s) => s.cancelEdit);
+  const selected = useUI((s) => !!s.reviewSel[c.id]);
+  const toggleReviewSel = useUI((s) => s.toggleReviewSel);
 
   const expanded = expandedCase === c.id;
   const isEditing = editingCase === c.id;
@@ -303,6 +329,19 @@ function CaseRow({
   return (
     <div className="overflow-hidden rounded-[14px] border" style={{ background: "rgba(255,255,255,.03)", borderColor: statusBorder }}>
       <div className="flex cursor-pointer items-center gap-2.5 px-[15px] py-3" onClick={() => toggleCase(c.id)}>
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleReviewSel(c.id);
+          }}
+          className="flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-[6px] border transition-colors"
+          style={{
+            background: selected ? "linear-gradient(135deg,#8b5cf6,#6366f1)" : "rgba(255,255,255,.04)",
+            borderColor: selected ? "transparent" : "rgba(255,255,255,.14)",
+          }}
+        >
+          {selected && <Check size={12} color="#fff" strokeWidth={3.2} />}
+        </div>
         <ChevronRight
           size={15}
           className="text-muted transition-transform"

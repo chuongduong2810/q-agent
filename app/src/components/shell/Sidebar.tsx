@@ -31,7 +31,7 @@ const NAV: NavItem[] = [
   { id: "projects", label: "Projects", icon: FolderKanban, also: ["project"] },
   { id: "tickets", label: "Tickets", icon: Ticket, also: ["ticket"] },
   { id: "runs", label: "Runs", icon: SquareStack, also: ["run"] },
-  { id: "review", label: "Review Center", icon: CheckSquare },
+  { id: "review", label: "Review Center", icon: CheckSquare, also: ["sync"] },
   { id: "automation", label: "Automation", icon: Terminal },
   { id: "console", label: "Execution", icon: ListChecks },
   { id: "evidence", label: "Evidence", icon: Image, also: ["comment"] },

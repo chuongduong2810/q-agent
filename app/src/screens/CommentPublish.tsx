@@ -80,7 +80,7 @@ export function CommentPublish() {
       </div>
 
       <div className="mb-4">
-        <PipelineRail stage={8} />
+        <PipelineRail stage={9} />
       </div>
 
       {isLoading ? (

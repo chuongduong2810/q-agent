@@ -114,6 +114,13 @@ export const useTicket = (externalId: string | null) =>
     enabled: !!externalId,
   });
 
+export const useLinkedCases = (externalId: string | null) =>
+  useQuery({
+    queryKey: queryKeys.linkedCases(externalId ?? ""),
+    queryFn: () => api.linkedCases(externalId as string),
+    enabled: !!externalId,
+  });
+
 export const useSyncTickets = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -191,6 +198,26 @@ export const useCaseMutations = (runId: number | string) => {
       onSuccess: invalidate,
     }),
   };
+};
+
+// -------------------------------------------------------------- create & link
+export const useLinkStatus = (runId: number | string | null) =>
+  useQuery({
+    queryKey: queryKeys.linkStatus(runId ?? 0),
+    queryFn: () => api.linkStatus(runId as number),
+    enabled: runId != null,
+    refetchInterval: (q) => (q.state.data?.status === "running" ? 1200 : false),
+  });
+
+export const useCreateAndLink = (runId: number | string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { link?: boolean; ticketIds?: string[] }) => api.createAndLink(runId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.linkStatus(runId) });
+      qc.invalidateQueries({ queryKey: queryKeys.run(runId) });
+    },
+  });
 };
 
 // -------------------------------------------------------------- automation

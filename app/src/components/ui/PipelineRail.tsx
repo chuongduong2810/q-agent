@@ -10,6 +10,7 @@ const STAGES = [
   "Select",
   "Analyze",
   "Review",
+  "Link",
   "Automate",
   "Execute",
   "Evidence",
@@ -20,11 +21,12 @@ const STAGES = [
 export const runStatusToStage: Record<string, number> = {
   processing: 3,
   review: 4,
-  automation: 5,
-  executing: 6,
-  evidence: 7,
-  comment: 8,
-  done: 8,
+  sync: 5,
+  automation: 6,
+  executing: 7,
+  evidence: 8,
+  comment: 9,
+  done: 9,
 };
 
 export function PipelineRail({ stage }: { stage: number }) {

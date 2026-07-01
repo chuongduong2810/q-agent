@@ -13,6 +13,7 @@ import type { ProgressEvent, RunTicketOut } from "@/types/api";
 const RUN_STATUS_LABEL: Record<string, string> = {
   processing: "AI processing",
   review: "Ready for review",
+  sync: "Creating & linking",
   automation: "Automation",
   executing: "Executing",
   evidence: "Evidence ready",

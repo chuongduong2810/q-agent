@@ -178,9 +178,41 @@ export interface TestCaseCreate {
   platform?: string;
 }
 
+export interface LinkedTestCaseOut {
+  id: number;
+  ticketExternalId: string;
+  providerKind: string;
+  externalId: string;
+  title: string;
+  status: string;
+  url: string;
+  linked: boolean;
+  updatedAt: string | null;
+}
+
+export interface LinkTicketResult {
+  ticketExternalId: string;
+  providerKind: string;
+  count: number;
+  created: boolean;
+  linked: boolean;
+  error: string;
+}
+
+export interface LinkStatusOut {
+  status: "idle" | "running" | "done";
+  results: LinkTicketResult[];
+}
+
+export interface CreateLinkRequest {
+  link?: boolean;
+  ticketIds?: string[];
+}
+
 export type RunStatus =
   | "processing"
   | "review"
+  | "sync"
   | "automation"
   | "executing"
   | "evidence"

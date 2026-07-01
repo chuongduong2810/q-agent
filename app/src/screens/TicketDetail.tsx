@@ -1,8 +1,101 @@
-import { ArrowLeft, FileText, GitBranch } from "lucide-react";
+import { ArrowLeft, CheckSquare, ExternalLink, FileText, GitBranch, RefreshCw } from "lucide-react";
 import { Pill, StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
-import { useTicket } from "@/hooks/queries";
+import { useLinkedCases, useTicket } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
+import { providerLabel } from "@/data/projects";
+import type { LinkedTestCaseOut, ProviderKind } from "@/types/api";
+
+const CASE_STATUS_COLOR: Record<string, [string, string]> = {
+  Design: ["#a78bfa", "rgba(139,92,246,.14)"],
+  Ready: ["#6ee7b7", "rgba(16,185,129,.14)"],
+  Open: ["#67e8f9", "rgba(34,211,238,.13)"],
+  "To Do": ["#fbbf24", "rgba(251,191,36,.13)"],
+};
+
+/** Test cases created in the provider and linked back to this work item. */
+function LinkedTestCases({ externalId }: { externalId: string }) {
+  const { data: cases, isFetching, refetch } = useLinkedCases(externalId);
+  const linked = cases ?? [];
+  const has = linked.length > 0;
+
+  return (
+    <div className="glass mb-[14px] rounded-[22px] p-5">
+      <div className="mb-[14px] flex items-center gap-2.5">
+        <span className="flex-1 text-[14px] font-bold">Linked test cases</span>
+        {has && (
+          <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)">
+            {linked.length} linked
+          </Pill>
+        )}
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-1.5 rounded-[10px] border border-white/[0.1] bg-white/[0.05] px-3 py-[7px] text-[12px] font-semibold text-ink-soft hover:bg-white/[0.1]"
+        >
+          <RefreshCw size={13} strokeWidth={2.2} className={isFetching ? "animate-[spin_.7s_linear_infinite]" : ""} />
+          Refresh
+        </button>
+      </div>
+
+      {has ? (
+        <>
+          <div className="overflow-hidden rounded-[13px] border border-white/[0.07]">
+            <div className="grid grid-cols-[78px_1fr_92px_92px] gap-2.5 bg-white/[0.04] px-3.5 py-[9px] text-[10px] font-bold tracking-[.05em] text-[#7a7a8c]">
+              <span>ID</span>
+              <span>TITLE</span>
+              <span>STATUS</span>
+              <span>LINK</span>
+            </div>
+            {linked.map((lc) => (
+              <LinkedRow key={lc.id} lc={lc} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col items-center rounded-[14px] border border-dashed border-white/[0.1] bg-white/[0.02] px-5 py-7 text-center">
+          <CheckSquare size={26} color="#6c6c7e" strokeWidth={1.8} className="mb-2.5" />
+          <div className="mb-1 text-[13.5px] font-semibold">No test cases linked yet</div>
+          <div className="max-w-[320px] text-[12.5px] leading-relaxed text-[#8b8b9e]">
+            Approve and create test cases in the Review Center to link them to this work item.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinkedRow({ lc }: { lc: LinkedTestCaseOut }) {
+  const [color, bg] = CASE_STATUS_COLOR[lc.status] ?? ["#a78bfa", "rgba(139,92,246,.14)"];
+  const prov = providerLabel[lc.providerKind as ProviderKind] ?? lc.providerKind;
+  return (
+    <div className="grid grid-cols-[78px_1fr_92px_92px] items-center gap-2.5 border-t border-white/[0.05] px-3.5 py-[11px] text-[12.5px]">
+      <span className="truncate font-mono font-semibold text-cyan-soft">{lc.externalId}</span>
+      <span className="truncate text-ink-soft">{lc.title}</span>
+      <span>
+        <span className="rounded-full px-[9px] py-[3px] text-[10.5px] font-bold" style={{ color, background: bg }}>
+          {lc.status}
+        </span>
+      </span>
+      <span>
+        {lc.url ? (
+          <a
+            href={lc.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-violet hover:underline"
+            title={`Open in ${prov}`}
+          >
+            Open <ExternalLink size={12} strokeWidth={2.2} />
+          </a>
+        ) : lc.linked ? (
+          <span className="text-[11px] text-[#6ee7b7]">linked</span>
+        ) : (
+          <span className="text-[11px] text-[#7a7a8c]">—</span>
+        )}
+      </span>
+    </div>
+  );
+}
 
 export function TicketDetail() {
   const activeTicket = useUI((s) => s.activeTicket);
@@ -74,6 +167,8 @@ export function TicketDetail() {
               ))}
             </div>
           </div>
+
+          <LinkedTestCases externalId={detail.externalId} />
 
           <div className="glass rounded-[22px] p-5">
             <div className="mb-[14px] text-[14px] font-bold">Comments</div>

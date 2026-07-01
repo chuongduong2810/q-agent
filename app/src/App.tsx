@@ -17,6 +17,7 @@ import { TicketDetail } from "@/screens/TicketDetail";
 import { Runs } from "@/screens/Runs";
 import { RunDetail } from "@/screens/RunDetail";
 import { ReviewCenter } from "@/screens/ReviewCenter";
+import { CreateLinkSync } from "@/screens/CreateLinkSync";
 import { Automation } from "@/screens/Automation";
 import { Execution } from "@/screens/Execution";
 import { Evidence } from "@/screens/Evidence";
@@ -35,6 +36,7 @@ const SCREENS: Record<Screen, ComponentType> = {
   runs: Runs,
   run: RunDetail,
   review: ReviewCenter,
+  sync: CreateLinkSync,
   automation: Automation,
   console: Execution,
   evidence: Evidence,

@@ -11,6 +11,7 @@ export type Screen =
   | "runs"
   | "run"
   | "review"
+  | "sync"
   | "automation"
   | "console"
   | "evidence"
@@ -21,6 +22,7 @@ export type Screen =
 export type RunStatus =
   | "processing"
   | "review"
+  | "sync"
   | "automation"
   | "executing"
   | "evidence"

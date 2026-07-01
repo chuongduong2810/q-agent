@@ -72,7 +72,7 @@ export function Evidence() {
       </div>
 
       <div className="mb-4">
-        <PipelineRail stage={7} />
+        <PipelineRail stage={8} />
       </div>
 
       {isLoading ? (

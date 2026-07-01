@@ -81,6 +81,9 @@ interface UIState {
   expandedCase: number | null;
   editingCase: number | null;
   draft: CaseDraft | null;
+  reviewSel: Record<number, boolean>;
+  toggleReviewSel: (caseId: number) => void;
+  clearReviewSel: () => void;
   toggleReviewTicket: (tid: string) => void;
   toggleCase: (caseId: number) => void;
   startEdit: (caseId: number, draft: CaseDraft) => void;
@@ -163,6 +166,10 @@ export const useUI = create<UIState>((set) => ({
   expandedCase: null,
   editingCase: null,
   draft: null,
+  reviewSel: {},
+  toggleReviewSel: (caseId) =>
+    set((s) => ({ reviewSel: { ...s.reviewSel, [caseId]: !s.reviewSel[caseId] } })),
+  clearReviewSel: () => set({ reviewSel: {} }),
   toggleReviewTicket: (tid) =>
     set((s) => ({ reviewOpenTicket: s.reviewOpenTicket === tid ? null : tid })),
   toggleCase: (caseId) => set((s) => ({ expandedCase: s.expandedCase === caseId ? null : caseId })),

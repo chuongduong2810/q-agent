@@ -13,7 +13,15 @@ from __future__ import annotations
 
 from app.db import SessionLocal, init_db, utcnow
 from app.logging import logger, setup_logging
-from app.models import ProjectKnowledge, Provider, Run, RunTicket, TestCase, Ticket
+from app.models import (
+    LinkedTestCase,
+    ProjectKnowledge,
+    Provider,
+    Run,
+    RunTicket,
+    TestCase,
+    Ticket,
+)
 
 TICKETS = [
     dict(external_id="SUR-1428", provider_kind="ado", title="View list of all broker agencies", status="Ready for QA", priority="High", assignee="Maya Kaur", sprint="Sprint 24", labels=["broker-mgmt", "list-view"], work_item_type="User Story",
@@ -118,6 +126,28 @@ def seed() -> None:
             db.flush()
             for pos, tid in enumerate(hr["tickets"]):
                 db.add(RunTicket(run_id=r.id, ticket_external_id=tid, position=pos, gen_status="done"))
+
+        # Linked test cases — a few already created + linked to SUR-1428 (demo).
+        db.query(LinkedTestCase).delete()
+        for i, (title, st) in enumerate(
+            [
+                ("Broker Management loads with two tabs", "Ready"),
+                ("Agency row shows name, number, type, status", "Design"),
+                ("Ellipsis on an Active agency offers Deactivate", "Design"),
+            ]
+        ):
+            db.add(
+                LinkedTestCase(
+                    run_id=run.id,
+                    ticket_external_id="SUR-1428",
+                    provider_kind="ado",
+                    external_id=str(4200 + i),
+                    title=title,
+                    status=st,
+                    url="https://dev.azure.com/surency/_workitems/edit/" + str(4200 + i),
+                    linked=True,
+                )
+            )
 
         # Project Knowledge — one project pre-indexed so the detail view has content.
         db.query(ProjectKnowledge).delete()

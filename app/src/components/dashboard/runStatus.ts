@@ -5,6 +5,7 @@ import type { RunOut, RunStatus } from "@/types/api";
 const statusColor: Record<RunStatus, string> = {
   processing: "#22d3ee",
   review: "#f59e0b",
+  sync: "#a78bfa",
   automation: "#a78bfa",
   executing: "#a78bfa",
   evidence: "#a78bfa",
@@ -15,6 +16,7 @@ const statusColor: Record<RunStatus, string> = {
 const statusLabel: Record<RunStatus, string> = {
   processing: "Processing",
   review: "Review",
+  sync: "Create & Link",
   automation: "Automation",
   executing: "Executing",
   evidence: "Evidence",

@@ -8,6 +8,9 @@ import type {
   AiActivity,
   AnnotationShape,
   AutomationSpecOut,
+  CreateLinkRequest,
+  LinkedTestCaseOut,
+  LinkStatusOut,
   EvidenceGrouped,
   EvidenceOut,
   ExecutionOut,
@@ -113,6 +116,8 @@ export const api = {
   listTickets: (params: { status?: string; assignee?: string; sprint?: string; q?: string } = {}) =>
     get<TicketOut[]>("/tickets" + qs(params)),
   getTicket: (externalId: string) => get<TicketDetailOut>(`/tickets/${externalId}`),
+  linkedCases: (externalId: string) =>
+    get<LinkedTestCaseOut[]>(`/tickets/${encodeURIComponent(externalId)}/linked-cases`),
   syncTickets: (body: SyncRequest) => post<SyncResult>("/tickets/sync", body),
 
   // runs
@@ -132,6 +137,9 @@ export const api = {
   approveAll: (runId: number | string) => post<TestCaseOut[]>(`/runs/${runId}/approve-all`),
   approveTicket: (runId: number | string, tid: string) =>
     post<TestCaseOut[]>(`/runs/${runId}/tickets/${tid}/approve`),
+  createAndLink: (runId: number | string, body: CreateLinkRequest) =>
+    post<LinkStatusOut>(`/runs/${runId}/testcases/create-link`, body),
+  linkStatus: (runId: number | string) => get<LinkStatusOut>(`/runs/${runId}/linked`),
 
   // automation
   generateAutomation: (runId: number | string) =>
