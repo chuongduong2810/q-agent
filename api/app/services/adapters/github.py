@@ -83,6 +83,7 @@ class GitHubAdapter(ProviderAdapter):
         sprint: str | None = None,
         sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
+        include_comments: bool = False,
     ) -> list[NormalizedTicket]:
         if not self.org or not self.repo:
             raise ProviderError("GitHub org/repo is not configured")
@@ -99,7 +100,25 @@ class GitHubAdapter(ProviderAdapter):
                 resp.raise_for_status()
                 issues = [i for i in resp.json() if "pull_request" not in i]
 
-            return [self._normalize(client, issue) for issue in issues]
+            return [
+                self._normalize(client, issue, include_comments=include_comments) for issue in issues
+            ]
+
+    def fetch_comments(self, ticket_external_id: str) -> list[dict[str, Any]]:
+        with self._client() as client:
+            resp = client.get(
+                f"/repos/{self.org}/{self.repo}/issues/{ticket_external_id}/comments"
+            )
+            if resp.status_code != 200:
+                return []
+            return [
+                {
+                    "who": (c.get("user") or {}).get("login", ""),
+                    "when": c.get("created_at", ""),
+                    "text": c.get("body", "") or "",
+                }
+                for c in resp.json()
+            ]
 
     def _current_login(self, client: httpx.Client) -> str:
         resp = client.get("/user")
@@ -113,13 +132,15 @@ class GitHubAdapter(ProviderAdapter):
         resp.raise_for_status()
         return resp.json()
 
-    def _normalize(self, client: httpx.Client, issue: dict[str, Any]) -> NormalizedTicket:
+    def _normalize(
+        self, client: httpx.Client, issue: dict[str, Any], *, include_comments: bool = False
+    ) -> NormalizedTicket:
         number = issue.get("number")
         labels = [lbl.get("name", "") if isinstance(lbl, dict) else lbl for lbl in issue.get("labels", [])]
         assignee = (issue.get("assignee") or {}).get("login", "") if issue.get("assignee") else ""
 
         comments = []
-        if issue.get("comments", 0):
+        if include_comments and issue.get("comments", 0):
             resp = client.get(f"/repos/{self.org}/{self.repo}/issues/{number}/comments")
             if resp.status_code == 200:
                 for c in resp.json():

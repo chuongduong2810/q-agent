@@ -155,6 +155,7 @@ class JiraAdapter(ProviderAdapter):
         sprint: str | None = None,
         sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
+        include_comments: bool = False,  # Jira returns comments inline; flag unused
     ) -> list[NormalizedTicket]:
         jql = self._build_jql(mode=mode, sprint=sprint, sprint_path=sprint_path, ticket_ids=ticket_ids)
         with self._client() as client:

@@ -53,13 +53,22 @@ class ProviderAdapter(ABC):
         sprint: str | None = None,
         sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
+        include_comments: bool = False,
     ) -> list[NormalizedTicket]:
         """Fetch and normalize tickets for the given selection mode.
 
         ``sprint`` is the human name; ``sprint_path`` is the provider-native
         identifier from :meth:`list_sprints` (ADO iteration path / Jira sprint id)
         and is preferred when present.
+
+        ``include_comments`` is False for bulk sync (comments would require one
+        extra request per ticket — an N+1 that makes sync crawl); comments are
+        loaded lazily on the ticket-detail view via :meth:`fetch_comments`.
         """
+
+    def fetch_comments(self, ticket_external_id: str) -> list[dict[str, Any]]:
+        """Fetch a single ticket's comments on demand. Default: none."""
+        return []
 
     def list_sprints(self) -> list[dict[str, Any]]:
         """Return the project's sprints/iterations as [{id, name, path, ...}].

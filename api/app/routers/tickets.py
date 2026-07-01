@@ -48,6 +48,22 @@ def get_ticket(external_id: str, db: Session = Depends(get_db)) -> TicketDetailO
     ticket = db.query(Ticket).filter(Ticket.external_id == external_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail=f"Ticket '{external_id}' not found")
+
+    # Comments are skipped during bulk sync (N+1). Load them lazily on first view.
+    if not ticket.comments:
+        provider = db.query(Provider).filter(Provider.kind == ticket.provider_kind).first()
+        if provider:
+            decrypted = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
+            try:
+                adapter = get_adapter(provider.kind, provider.config or {}, decrypted)
+                comments = adapter.fetch_comments(external_id)
+                if comments:
+                    ticket.comments = comments
+                    db.commit()
+                    db.refresh(ticket)
+            except Exception:  # noqa: BLE001 - detail must never fail on comment fetch
+                db.rollback()
+
     return TicketDetailOut.model_validate(ticket)
 
 

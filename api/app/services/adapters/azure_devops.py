@@ -170,6 +170,9 @@ class AzureDevOpsAdapter(ProviderAdapter):
         walk(root)
         return sprints
 
+    # Max work items pulled in a single sync — keeps sync responsive on large sprints.
+    MAX_SYNC_ITEMS = 200
+
     def fetch_tickets(
         self,
         *,
@@ -177,6 +180,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
         sprint: str | None = None,
         sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
+        include_comments: bool = False,
     ) -> list[NormalizedTicket]:
         project = self.project
         if not project:
@@ -188,8 +192,21 @@ class AzureDevOpsAdapter(ProviderAdapter):
             )
             if not ids:
                 return []
+            if len(ids) > self.MAX_SYNC_ITEMS:
+                logger.warning(
+                    "ADO sync capped at {} of {} work items", self.MAX_SYNC_ITEMS, len(ids)
+                )
+                ids = ids[: self.MAX_SYNC_ITEMS]
             items = self._get_work_items(client, ids)
-            return [self._normalize(client, item) for item in items]
+            return [self._normalize(client, item, include_comments=include_comments) for item in items]
+
+    def fetch_comments(self, ticket_external_id: str) -> list[dict[str, Any]]:
+        try:
+            wi_id = int(ticket_external_id)
+        except (TypeError, ValueError):
+            return []
+        with self._client() as client:
+            return self._fetch_comments(client, wi_id)
 
     def _query_work_item_ids(
         self,
@@ -271,13 +288,15 @@ class AzureDevOpsAdapter(ProviderAdapter):
             items.extend(resp.json().get("value", []))
         return items
 
-    def _normalize(self, client: httpx.Client, item: dict[str, Any]) -> NormalizedTicket:
+    def _normalize(
+        self, client: httpx.Client, item: dict[str, Any], *, include_comments: bool = False
+    ) -> NormalizedTicket:
         fields = item.get("fields", {})
         wi_id = item["id"]
 
         labels = [t.strip() for t in (fields.get("System.Tags") or "").split(";") if t.strip()]
         ac_html = fields.get("Microsoft.VSTS.Common.AcceptanceCriteria", "")
-        comments = self._fetch_comments(client, wi_id)
+        comments = self._fetch_comments(client, wi_id) if include_comments else []
         attachments, linked_prs = self._parse_relations(item.get("relations", []))
 
         assigned_to = fields.get("System.AssignedTo") or {}
