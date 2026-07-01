@@ -20,12 +20,14 @@ from sqlalchemy.orm import Session
 
 from app import crypto
 from app.db import get_db
+from app.logging import logger
 from app.models.provider import PROVIDER_KINDS, Provider
 from app.schemas import (
     ProviderFieldsIn,
     ProviderOut,
     SettingsOut,
     SettingsUpdate,
+    SprintOut,
     TestConnectionResult,
 )
 from app.services import settings_store
@@ -115,6 +117,30 @@ def test_provider_connection(kind: str, db: Session = Depends(get_db)) -> TestCo
         message=result.get("message", ""),
         detail=result.get("detail", {}) or {},
     )
+
+
+@router.get("/providers/{kind}/sprints", response_model=list[SprintOut])
+def list_provider_sprints(kind: str, db: Session = Depends(get_db)) -> list[SprintOut]:
+    """Return the provider's real sprints/iterations for the configured project.
+
+    Resilient: an unconfigured/unsupported provider yields an empty list so the
+    sprint picker degrades gracefully rather than erroring the UI.
+    """
+    _validate_kind(kind)
+    provider = db.query(Provider).filter(Provider.kind == kind).first()
+    if not provider:
+        return []
+    decrypted = {key: crypto.decrypt(value) for key, value in (provider.secrets or {}).items()}
+    try:
+        adapter = get_adapter(kind, provider.config or {}, decrypted)
+        sprints = adapter.list_sprints()
+    except ProviderError as exc:
+        logger.warning("Sprint list for '{}' unavailable: {}", kind, exc)
+        return []
+    except Exception as exc:  # noqa: BLE001 - upstream/API hiccup shouldn't 500 the picker
+        logger.warning("Sprint list for '{}' failed: {}", kind, exc)
+        return []
+    return [SprintOut.model_validate(s) for s in sprints]
 
 
 @router.get("/settings", response_model=SettingsOut, tags=["settings"])

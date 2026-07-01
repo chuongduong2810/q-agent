@@ -20,6 +20,7 @@ import type {
   RunOut,
   SettingsOut,
   SettingsUpdate,
+  SprintOut,
   SyncRequest,
   SyncResult,
   TestCaseCreate,
@@ -88,6 +89,7 @@ export const api = {
   saveProvider: (kind: ProviderKind, body: ProviderFieldsIn) =>
     put<ProviderOut>(`/providers/${kind}`, body),
   testConnection: (kind: ProviderKind) => post<TestConnectionResult>(`/providers/${kind}/test`),
+  listSprints: (kind: ProviderKind) => get<SprintOut[]>(`/providers/${kind}/sprints`),
   getSettings: () => get<SettingsOut>("/settings"),
   updateSettings: (body: SettingsUpdate) => put<SettingsOut>("/settings", body),
 

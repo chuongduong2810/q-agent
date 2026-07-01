@@ -5,26 +5,28 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
-import { useSyncTickets, useTickets } from "@/hooks/queries";
+import { useProviders, useSprints, useSyncTickets, useTickets } from "@/hooks/queries";
 import { useUI, type TicketFilter } from "@/store/ui";
-import type { TicketOut } from "@/types/api";
+import type { ProviderKind, TicketOut } from "@/types/api";
 
 const FILTERS: { id: TicketFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "ready", label: "Ready for QA" },
   { id: "mine", label: "My tickets" },
-  { id: "sprint", label: "Sprint 24" },
 ];
 
 /** Maps the store's ticket filter to the query params `useTickets` expects. */
-function filterToParams(filter: TicketFilter): { status?: string; assignee?: string; sprint?: string } {
+function filterToParams(
+  filter: TicketFilter,
+  sprintName: string | undefined,
+): { status?: string; assignee?: string; sprint?: string } {
   switch (filter) {
     case "ready":
       return { status: "Ready for QA" };
     case "mine":
       return { assignee: "Maya Kaur" };
     case "sprint":
-      return { sprint: "Sprint 24" };
+      return sprintName ? { sprint: sprintName } : {};
     default:
       return {};
   }
@@ -50,15 +52,43 @@ export function Tickets() {
   const setSelected = useUI((s) => s.setSelected);
   const openTicket = useUI((s) => s.openTicket);
   const openCreateRun = useUI((s) => s.openCreateRun);
+  const selectedSprint = useUI((s) => s.selectedSprint);
+  const setSelectedSprint = useUI((s) => s.setSelectedSprint);
 
-  const filters = { ...filterToParams(ticketFilter), q: ticketSearch || undefined };
+  // Pick the connected provider that supports sprints (ADO preferred, then Jira).
+  const { data: providers } = useProviders();
+  const providerKind: ProviderKind = useMemo(() => {
+    const connected = (providers ?? []).filter((p) => p.connected);
+    return (
+      connected.find((p) => p.kind === "ado")?.kind ??
+      connected.find((p) => p.kind === "jira")?.kind ??
+      "ado"
+    );
+  }, [providers]);
+  const { data: sprints } = useSprints(providerKind);
+
+  const filters = { ...filterToParams(ticketFilter, selectedSprint?.name), q: ticketSearch || undefined };
   const { data: tickets, isLoading } = useTickets(filters);
   const syncTickets = useSyncTickets();
 
   const selCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
 
-  const selectSprint = () => {
-    const ids = (tickets ?? []).filter((t) => t.sprint === "Sprint 24").map((t) => t.externalId);
+  const onPickSprint = (path: string) => {
+    const sprint = (sprints ?? []).find((s) => s.path === path);
+    if (!sprint) {
+      setSelectedSprint(null);
+      if (ticketFilter === "sprint") setTicketFilter("all");
+      return;
+    }
+    setSelectedSprint({ name: sprint.name, path: sprint.path });
+    setTicketFilter("sprint");
+  };
+
+  const selectSprintTickets = () => {
+    if (!selectedSprint) return;
+    const ids = (tickets ?? [])
+      .filter((t) => t.sprint === selectedSprint.name)
+      .map((t) => t.externalId);
     setSelected(ids);
   };
   const selectAssigned = () => {
@@ -67,13 +97,18 @@ export function Tickets() {
   };
 
   const handleSync = () => {
-    syncTickets.mutate(
-      { providerKind: "ado", mode: "sprint", sprint: "Sprint 24" },
-      {
-        onSuccess: (res) => toast.success(`Synced ${res.synced} ticket${res.synced === 1 ? "" : "s"}`),
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Sync failed"),
-      },
-    );
+    const body = selectedSprint
+      ? {
+          providerKind,
+          mode: "sprint" as const,
+          sprint: selectedSprint.name,
+          sprintPath: selectedSprint.path,
+        }
+      : { providerKind, mode: "assigned" as const };
+    syncTickets.mutate(body, {
+      onSuccess: (res) => toast.success(`Synced ${res.synced} ticket${res.synced === 1 ? "" : "s"}`),
+      onError: (err) => toast.error(err instanceof Error ? err.message : "Sync failed"),
+    });
   };
 
   return (
@@ -116,12 +151,33 @@ export function Tickets() {
           );
         })}
 
-        <button
-          onClick={selectSprint}
-          className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
+        <select
+          value={selectedSprint?.path ?? ""}
+          onChange={(e) => onPickSprint(e.target.value)}
+          className="cursor-pointer rounded-[11px] border px-[13px] py-2 text-[12.5px] font-semibold outline-none"
+          style={{
+            background: selectedSprint ? "rgba(139,92,246,.2)" : "rgba(255,255,255,.05)",
+            borderColor: selectedSprint ? "rgba(139,92,246,.35)" : "rgba(255,255,255,.09)",
+            color: selectedSprint ? "#fff" : "#dcdce4",
+          }}
         >
-          Select Sprint 24
-        </button>
+          <option value="" style={{ background: "#14141c" }}>
+            {sprints?.length ? "All sprints" : "No sprints"}
+          </option>
+          {(sprints ?? []).map((s) => (
+            <option key={s.id || s.path} value={s.path} style={{ background: "#14141c" }}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        {selectedSprint && (
+          <button
+            onClick={selectSprintTickets}
+            className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
+          >
+            Select in {selectedSprint.name}
+          </button>
+        )}
         <button
           onClick={selectAssigned}
           className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"

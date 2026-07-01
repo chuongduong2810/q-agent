@@ -46,6 +46,18 @@ class _WiqlError(RuntimeError):
     """A 400 from the WIQL endpoint, carrying ADO's validation message."""
 
 
+def _classification_path_to_iteration(node_path: str) -> str:
+    """Convert a classification-node path to a System.IterationPath value.
+
+    ``\\Surency\\Iteration\\Release 1\\Sprint 3`` -> ``Surency\\Release 1\\Sprint 3``
+    (strip the leading separator and the structural ``Iteration`` segment).
+    """
+    parts = [p for p in node_path.split("\\") if p]
+    if len(parts) >= 2 and parts[1] == "Iteration":
+        parts = [parts[0]] + parts[2:]
+    return "\\".join(parts)
+
+
 def _strip_html(html: str) -> str:
     """Best-effort HTML -> plain text for ADO rich-text fields."""
     if not html:
@@ -121,11 +133,49 @@ class AzureDevOpsAdapter(ProviderAdapter):
                 for p in data.get("value", [])
             ]
 
+    def list_sprints(self) -> list[dict[str, Any]]:
+        """Enumerate the project's iterations via classification nodes.
+
+        Uses the project-scoped iteration tree (no team required) and converts each
+        node's classification path (``\\Project\\Iteration\\Sprint``) into the
+        ``System.IterationPath`` form (``Project\\Sprint``) that WIQL expects.
+        """
+        project = self.project
+        if not project:
+            raise ProviderError("Azure DevOps project is not configured")
+        with self._client() as client:
+            resp = client.get(
+                f"/{quote(project)}/_apis/wit/classificationnodes/iterations",
+                params={"$depth": 10, "api-version": API_VERSION},
+            )
+            resp.raise_for_status()
+            root = resp.json()
+
+        sprints: list[dict[str, Any]] = []
+
+        def walk(node: dict[str, Any]) -> None:
+            for child in node.get("children", []) or []:
+                attrs = child.get("attributes") or {}
+                sprints.append(
+                    {
+                        "id": str(child.get("identifier") or child.get("id", "")),
+                        "name": child.get("name", ""),
+                        "path": _classification_path_to_iteration(child.get("path", "")),
+                        "start_date": attrs.get("startDate"),
+                        "finish_date": attrs.get("finishDate"),
+                    }
+                )
+                walk(child)
+
+        walk(root)
+        return sprints
+
     def fetch_tickets(
         self,
         *,
         mode: str = "sprint",
         sprint: str | None = None,
+        sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
     ) -> list[NormalizedTicket]:
         project = self.project
@@ -133,7 +183,9 @@ class AzureDevOpsAdapter(ProviderAdapter):
             raise ProviderError("Azure DevOps project is not configured")
 
         with self._client() as client:
-            ids = self._query_work_item_ids(client, project, mode=mode, sprint=sprint, ticket_ids=ticket_ids)
+            ids = self._query_work_item_ids(
+                client, project, mode=mode, sprint=sprint, sprint_path=sprint_path, ticket_ids=ticket_ids
+            )
             if not ids:
                 return []
             items = self._get_work_items(client, ids)
@@ -146,6 +198,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
         *,
         mode: str,
         sprint: str | None,
+        sprint_path: str | None,
         ticket_ids: list[str] | None,
     ) -> list[int]:
         if mode == "selected" and ticket_ids:
@@ -158,10 +211,10 @@ class AzureDevOpsAdapter(ProviderAdapter):
             "[System.State] <> 'Removed'",
         ]
         conditions = list(base_conditions)
-        if mode == "sprint" and sprint:
-            conditions.append(
-                f"[System.IterationPath] UNDER '{_wiql_literal(project)}\\{_wiql_literal(sprint)}'"
-            )
+        # Prefer the native iteration path from list_sprints; fall back to project\name.
+        iteration = sprint_path or (f"{project}\\{sprint}" if sprint else None)
+        if mode == "sprint" and iteration:
+            conditions.append(f"[System.IterationPath] UNDER '{_wiql_literal(iteration)}'")
         elif mode == "assigned":
             conditions.append("[System.AssignedTo] = @Me")
 
@@ -172,7 +225,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
             # exist in this project (e.g. a placeholder sprint name). Retry once
             # without the iteration filter so sync still returns the project's
             # work items; otherwise surface ADO's own error message.
-            if mode == "sprint" and sprint:
+            if mode == "sprint" and iteration:
                 logger.warning(
                     "ADO WIQL rejected iteration filter ({}); retrying without sprint scope", exc
                 )

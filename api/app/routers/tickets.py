@@ -63,7 +63,10 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
     try:
         adapter = get_adapter(provider.kind, provider.config or {}, decrypted_secrets)
         fetched = adapter.fetch_tickets(
-            mode=body.mode, sprint=body.sprint, ticket_ids=body.ticket_ids
+            mode=body.mode,
+            sprint=body.sprint,
+            sprint_path=body.sprint_path,
+            ticket_ids=body.ticket_ids,
         )
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

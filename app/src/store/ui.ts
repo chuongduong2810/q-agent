@@ -42,11 +42,14 @@ interface UIState {
   selected: Record<string, boolean>;
   ticketSearch: string;
   ticketFilter: TicketFilter;
+  /** The real sprint chosen in the picker (name + provider-native path/id). */
+  selectedSprint: { name: string; path: string } | null;
   toggleSelected: (id: string) => void;
   setSelected: (ids: string[]) => void;
   clearSelected: () => void;
   setTicketSearch: (q: string) => void;
   setTicketFilter: (f: TicketFilter) => void;
+  setSelectedSprint: (s: { name: string; path: string } | null) => void;
 
   // create-run modal
   createRunOpen: boolean;
@@ -113,11 +116,13 @@ export const useUI = create<UIState>((set) => ({
   selected: {},
   ticketSearch: "",
   ticketFilter: "all",
+  selectedSprint: null,
   toggleSelected: (id) => set((s) => ({ selected: { ...s.selected, [id]: !s.selected[id] } })),
   setSelected: (ids) => set({ selected: Object.fromEntries(ids.map((id) => [id, true])) }),
   clearSelected: () => set({ selected: {} }),
   setTicketSearch: (q) => set({ ticketSearch: q }),
   setTicketFilter: (f) => set({ ticketFilter: f }),
+  setSelectedSprint: (s) => set({ selectedSprint: s }),
 
   createRunOpen: false,
   runScope: "selected",

@@ -81,6 +81,7 @@ class GitHubAdapter(ProviderAdapter):
         *,
         mode: str = "sprint",
         sprint: str | None = None,
+        sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
     ) -> list[NormalizedTicket]:
         if not self.org or not self.repo:

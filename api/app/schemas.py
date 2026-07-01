@@ -102,10 +102,20 @@ class TicketDetailOut(TicketOut):
     linked_prs: list[PullRequestOut] = Field(default_factory=list)
 
 
+class SprintOut(ApiModel):
+    id: str
+    name: str
+    path: str  # ADO iteration path (Project\Sprint) or Jira sprint id
+    start_date: str | None = None
+    finish_date: str | None = None
+    state: str | None = None
+
+
 class SyncRequest(ApiModel):
     provider_kind: str
     mode: str = "sprint"  # sprint | assigned | selected | all
     sprint: str | None = None
+    sprint_path: str | None = None
     ticket_ids: list[str] = Field(default_factory=list)
 
 
@@ -199,6 +209,7 @@ class RunCreate(ApiModel):
     workers: int = 4
     retry_policy: int = 2
     sprint: str | None = None
+    sprint_path: str | None = None
 
 
 # ---------------------------------------------------------------- Automation

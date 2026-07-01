@@ -78,10 +78,20 @@ export interface TicketDetailOut extends TicketOut {
   linkedPrs: PullRequestOut[];
 }
 
+export interface SprintOut {
+  id: string;
+  name: string;
+  path: string; // ADO iteration path (Project\Sprint) or Jira sprint id
+  startDate?: string | null;
+  finishDate?: string | null;
+  state?: string | null;
+}
+
 export interface SyncRequest {
   providerKind: ProviderKind;
   mode?: string;
   sprint?: string | null;
+  sprintPath?: string | null;
   ticketIds?: string[];
 }
 export interface SyncResult {
@@ -177,6 +187,7 @@ export interface RunCreate {
   workers?: number;
   retryPolicy?: number;
   sprint?: string | null;
+  sprintPath?: string | null;
 }
 
 export interface AutomationSpecOut {

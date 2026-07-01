@@ -51,9 +51,22 @@ class ProviderAdapter(ABC):
         *,
         mode: str = "sprint",
         sprint: str | None = None,
+        sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
     ) -> list[NormalizedTicket]:
-        """Fetch and normalize tickets for the given selection mode."""
+        """Fetch and normalize tickets for the given selection mode.
+
+        ``sprint`` is the human name; ``sprint_path`` is the provider-native
+        identifier from :meth:`list_sprints` (ADO iteration path / Jira sprint id)
+        and is preferred when present.
+        """
+
+    def list_sprints(self) -> list[dict[str, Any]]:
+        """Return the project's sprints/iterations as [{id, name, path, ...}].
+
+        Default: none (e.g. GitHub). Providers with iterations override this.
+        """
+        return []
 
     # -- Write ------------------------------------------------------------
     @abstractmethod

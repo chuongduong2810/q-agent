@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
+from app.models.ticket import Ticket
 from app.schemas import RunCreate, RunDetailOut, RunOut, RunTicketOut
 from app.services.ai_service import run_generation_pipeline
 
@@ -59,7 +60,19 @@ def list_runs(db: Session = Depends(get_db)) -> list[Run]:
 
 @router.post("", response_model=RunDetailOut)
 def create_run(body: RunCreate, db: Session = Depends(get_db)) -> Run:
-    ticket_ids = body.ticket_ids or []
+    ticket_ids = list(body.ticket_ids or [])
+    # For a sprint-scoped run without explicit ids, resolve the sprint's tickets
+    # from the synced DB (matched on the sprint leaf name).
+    if not ticket_ids and body.scope == "sprint" and body.sprint:
+        ticket_ids = [
+            t.external_id
+            for t in db.query(Ticket).filter(Ticket.sprint == body.sprint).all()
+        ]
+        if not ticket_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No synced tickets found for sprint '{body.sprint}'. Sync the sprint first.",
+            )
     if not ticket_ids:
         raise HTTPException(status_code=400, detail="ticket_ids must not be empty")
 

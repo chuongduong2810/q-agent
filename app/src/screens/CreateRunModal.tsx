@@ -26,6 +26,7 @@ export function CreateRunModal() {
   const selected = useUI((s) => s.selected);
   const setActiveRun = useUI((s) => s.setActiveRun);
   const navigate = useUI((s) => s.navigate);
+  const selectedSprint = useUI((s) => s.selectedSprint);
 
   const { data: tickets } = useTickets();
   const createRun = useCreateRun();
@@ -33,12 +34,18 @@ export function CreateRunModal() {
   if (!open) return null;
 
   const selN = Object.values(selected).filter(Boolean).length;
-  const sprintN = (tickets ?? []).filter((t) => t.sprint === "Sprint 24").length;
+  const sprintName = selectedSprint?.name;
+  const sprintN = sprintName ? (tickets ?? []).filter((t) => t.sprint === sprintName).length : 0;
   const assignedN = (tickets ?? []).filter((t) => t.assignee === "Maya Kaur").length;
 
   const scopeOptions = [
     { id: "selected" as const, label: "Selected tickets", sub: "Only the tickets you picked on the Tickets page", count: `${selN} selected` },
-    { id: "sprint" as const, label: "Entire Sprint 24", sub: "Every ticket in the active sprint", count: `${sprintN} tickets` },
+    {
+      id: "sprint" as const,
+      label: sprintName ? `Entire ${sprintName}` : "Entire sprint",
+      sub: sprintName ? "Every ticket in the chosen sprint" : "Pick a sprint on the Tickets page first",
+      count: `${sprintN} tickets`,
+    },
     { id: "assigned" as const, label: "My assigned tickets", sub: "All tickets assigned to you", count: `${assignedN} tickets` },
   ];
 
@@ -56,7 +63,8 @@ export function CreateRunModal() {
         env: runEnv,
         workers: runWorkers,
         retryPolicy: runRetry,
-        sprint: runScope === "sprint" ? "Sprint 24" : undefined,
+        sprint: runScope === "sprint" ? selectedSprint?.name : undefined,
+        sprintPath: runScope === "sprint" ? selectedSprint?.path : undefined,
       },
       {
         onSuccess: (run) => {

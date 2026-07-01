@@ -19,6 +19,7 @@ from app.services.adapters import register
 from app.services.adapters.base import NormalizedTicket, ProviderAdapter, ProviderError
 
 API_PREFIX = "/rest/api/3"
+AGILE_PREFIX = "/rest/agile/1.0"
 
 # Best-effort custom field id for acceptance criteria (varies by Jira instance).
 ACCEPTANCE_CRITERIA_FIELD = "customfield_10020"
@@ -110,14 +111,52 @@ class JiraAdapter(ProviderAdapter):
                 for p in data.get("values", [])
             ]
 
+    def list_sprints(self) -> list[dict[str, Any]]:
+        """List active + future sprints across the project's agile boards.
+
+        Returns [{id, name, path, state}] where ``path`` is the numeric sprint id
+        (JQL ``sprint = <id>`` is the most reliable form). Best-effort: a project
+        without agile boards yields an empty list rather than an error.
+        """
+        if not self.project:
+            return []
+        sprints: dict[str, dict[str, Any]] = {}
+        try:
+            with self._client() as client:
+                boards = client.get(
+                    f"{AGILE_PREFIX}/board", params={"projectKeyOrId": self.project}
+                )
+                boards.raise_for_status()
+                for board in boards.json().get("values", []):
+                    resp = client.get(
+                        f"{AGILE_PREFIX}/board/{board['id']}/sprint",
+                        params={"state": "active,future"},
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    for sp in resp.json().get("values", []):
+                        sid = str(sp.get("id"))
+                        sprints[sid] = {
+                            "id": sid,
+                            "name": sp.get("name", sid),
+                            "path": sid,
+                            "start_date": sp.get("startDate"),
+                            "finish_date": sp.get("endDate"),
+                            "state": sp.get("state"),
+                        }
+        except httpx.HTTPError:
+            return list(sprints.values())
+        return list(sprints.values())
+
     def fetch_tickets(
         self,
         *,
         mode: str = "sprint",
         sprint: str | None = None,
+        sprint_path: str | None = None,
         ticket_ids: list[str] | None = None,
     ) -> list[NormalizedTicket]:
-        jql = self._build_jql(mode=mode, sprint=sprint, ticket_ids=ticket_ids)
+        jql = self._build_jql(mode=mode, sprint=sprint, sprint_path=sprint_path, ticket_ids=ticket_ids)
         with self._client() as client:
             resp = client.post(
                 f"{API_PREFIX}/search/jql",
@@ -143,7 +182,14 @@ class JiraAdapter(ProviderAdapter):
             data = resp.json()
             return [self._normalize(issue) for issue in data.get("issues", [])]
 
-    def _build_jql(self, *, mode: str, sprint: str | None, ticket_ids: list[str] | None) -> str:
+    def _build_jql(
+        self,
+        *,
+        mode: str,
+        sprint: str | None,
+        sprint_path: str | None = None,
+        ticket_ids: list[str] | None = None,
+    ) -> str:
         if mode == "selected" and ticket_ids:
             keys = ",".join(ticket_ids)
             return f"key in ({keys})"
@@ -151,8 +197,12 @@ class JiraAdapter(ProviderAdapter):
         conditions = []
         if self.project:
             conditions.append(f"project = {self.project}")
-        if mode == "sprint" and sprint:
-            conditions.append(f"sprint = '{sprint}'")
+        if mode == "sprint" and (sprint_path or sprint):
+            # sprint_path is the numeric sprint id (preferred); else match by name.
+            if sprint_path and str(sprint_path).isdigit():
+                conditions.append(f"sprint = {sprint_path}")
+            else:
+                conditions.append(f"sprint = '{(sprint or sprint_path)}'")
         elif mode == "assigned":
             conditions.append("assignee = currentUser()")
 

@@ -48,6 +48,14 @@ export const useTestConnection = () => {
   });
 };
 
+export const useSprints = (kind: ProviderKind | null) =>
+  useQuery({
+    queryKey: queryKeys.sprints(kind ?? ""),
+    queryFn: () => api.listSprints(kind as ProviderKind),
+    enabled: !!kind,
+    staleTime: 60_000,
+  });
+
 export const useSettings = () =>
   useQuery({ queryKey: queryKeys.settings, queryFn: api.getSettings });
 

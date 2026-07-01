@@ -121,6 +121,49 @@ def test_ado_fetch_tickets_retries_without_iteration_when_sprint_path_invalid():
 
 
 @respx.mock
+def test_ado_list_sprints_converts_iteration_paths():
+    adapter = AzureDevOpsAdapter(
+        config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
+        secrets={"pat": "secret-pat"},
+    )
+    respx.get(
+        "https://dev.azure.com/myorg/MyProj/_apis/wit/classificationnodes/iterations"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "MyProj",
+                "path": "\\MyProj\\Iteration",
+                "children": [
+                    {
+                        "name": "Sprint 1",
+                        "identifier": "a1",
+                        "path": "\\MyProj\\Iteration\\Sprint 1",
+                        "attributes": {"startDate": "2026-01-01T00:00:00Z"},
+                    },
+                    {
+                        "name": "Release 1",
+                        "identifier": "r1",
+                        "path": "\\MyProj\\Iteration\\Release 1",
+                        "children": [
+                            {
+                                "name": "Sprint 2",
+                                "identifier": "a2",
+                                "path": "\\MyProj\\Iteration\\Release 1\\Sprint 2",
+                            }
+                        ],
+                    },
+                ],
+            },
+        )
+    )
+    sprints = {s["name"]: s["path"] for s in adapter.list_sprints()}
+    assert sprints["Sprint 1"] == "MyProj\\Sprint 1"  # IterationPath form (no \Iteration)
+    assert sprints["Release 1"] == "MyProj\\Release 1"
+    assert sprints["Sprint 2"] == "MyProj\\Release 1\\Sprint 2"  # nested preserved
+
+
+@respx.mock
 def test_ado_fetch_tickets_raises_provider_error_on_non_sprint_wiql_400():
     adapter = AzureDevOpsAdapter(
         config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
