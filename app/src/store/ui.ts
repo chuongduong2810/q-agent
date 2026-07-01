@@ -10,6 +10,7 @@ import type { TestStep } from "@/types/api";
 
 /** Sidebar nav → screen mapping; screens not in the nav (ticket/run/comment) are pushed programmatically. */
 export type TicketFilter = "all" | "ready" | "mine" | "sprint";
+export type ProjectTab = "overview" | "knowledge" | "tickets" | "runs" | "settings";
 export type EvidenceTab = "screenshot" | "video" | "trace" | "console" | "network";
 export type AnnotationTool = "cursor" | "rectangle" | "arrow" | "highlight" | "circle" | "text";
 
@@ -29,6 +30,18 @@ interface UIState {
   openTicket: (externalId: string) => void;
   openProject: (name: string) => void;
   setActiveRun: (runId: number | null) => void;
+
+  // project detail
+  projectTab: ProjectTab;
+  setProjectTab: (t: ProjectTab) => void;
+
+  // Project Knowledge build overlay (cosmetic step animation over the real build)
+  knowledgeBuilding: boolean;
+  buildProjectName: string;
+  knowledgeStep: number;
+  startKnowledgeBuild: (name: string) => void;
+  tickKnowledgeStep: (max: number) => void;
+  endKnowledgeBuild: () => void;
 
   // command palette
   paletteOpen: boolean;
@@ -103,8 +116,19 @@ export const useUI = create<UIState>((set) => ({
   activeRunId: null,
   navigate: (screen) => set({ screen, paletteOpen: false }),
   openTicket: (externalId) => set({ activeTicket: externalId, screen: "ticket" }),
-  openProject: (name) => set({ activeProject: name, screen: "tickets" }),
+  openProject: (name) => set({ activeProject: name, screen: "project", projectTab: "overview" }),
   setActiveRun: (runId) => set({ activeRunId: runId }),
+
+  projectTab: "overview",
+  setProjectTab: (t) => set({ projectTab: t }),
+
+  knowledgeBuilding: false,
+  buildProjectName: "",
+  knowledgeStep: 0,
+  startKnowledgeBuild: (name) =>
+    set({ knowledgeBuilding: true, buildProjectName: name, knowledgeStep: 0 }),
+  tickKnowledgeStep: (max) => set((s) => ({ knowledgeStep: Math.min(s.knowledgeStep + 1, max) })),
+  endKnowledgeBuild: () => set({ knowledgeBuilding: false, knowledgeStep: 0 }),
 
   paletteOpen: false,
   paletteQuery: "",

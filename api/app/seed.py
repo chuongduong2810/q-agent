@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from app.db import SessionLocal, init_db, utcnow
 from app.logging import logger, setup_logging
-from app.models import Provider, Run, RunTicket, TestCase, Ticket
+from app.models import ProjectKnowledge, Provider, Run, RunTicket, TestCase, Ticket
 
 TICKETS = [
     dict(external_id="SUR-1428", provider_kind="ado", title="View list of all broker agencies", status="Ready for QA", priority="High", assignee="Maya Kaur", sprint="Sprint 24", labels=["broker-mgmt", "list-view"], work_item_type="User Story",
@@ -119,8 +119,36 @@ def seed() -> None:
             for pos, tid in enumerate(hr["tickets"]):
                 db.add(RunTicket(run_id=r.id, ticket_external_id=tid, position=pos, gen_status="done"))
 
+        # Project Knowledge — one project pre-indexed so the detail view has content.
+        db.query(ProjectKnowledge).delete()
+        db.add(
+            ProjectKnowledge(
+                key="Surency Platform",
+                name="Surency Platform",
+                provider="Azure DevOps",
+                repo="surency-eng/surency-web",
+                framework="Playwright",
+                status="indexed",
+                confidence=93,
+                version="v3",
+                needs_refresh=True,
+                last_indexed=utcnow(),
+                knowledge={
+                    "branch": "main",
+                    "stack": ["React 18", "TypeScript", "Vite", "Node 20", ".NET 8 API"],
+                    "architecture": "Modular monolith — feature modules (Brokers, Claims, Members) over a REST API with a shared design system.",
+                    "domain": "Broker & agency management, licensing, member onboarding and claims for a benefits administration platform.",
+                    "locator": "Prefer getByRole + data-testid; fall back to accessible name.",
+                    "assets": 148,
+                    "pageObjects": 32,
+                    "fixtures": 12,
+                    "utilities": ["api-client.ts", "auth.setup.ts", "seed-data.ts", "test-users.ts"],
+                },
+            )
+        )
+
         db.commit()
-        logger.info("Seeded {} tickets, RUN-204 (review) + {} historical runs.", len(TICKETS), len(HISTORICAL_RUNS))
+        logger.info("Seeded {} tickets, RUN-204 (review) + {} historical runs + 1 knowledge base.", len(TICKETS), len(HISTORICAL_RUNS))
     finally:
         db.close()
 

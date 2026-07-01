@@ -14,6 +14,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import type {
   AnnotationShape,
   AutomationSpecOut,
+  KnowledgeBuildRequest,
   ProviderFieldsIn,
   ProviderKind,
   RunCreate,
@@ -76,6 +77,29 @@ export const useRefreshProjects = () => {
   return useMutation({
     mutationFn: api.refreshProjects,
     onSuccess: (data) => qc.setQueryData(queryKeys.projects, data),
+  });
+};
+
+export const useKnowledgeList = () =>
+  useQuery({ queryKey: queryKeys.knowledgeList, queryFn: api.listKnowledge });
+
+export const useProjectKnowledge = (key: string | null) =>
+  useQuery({
+    queryKey: queryKeys.projectKnowledge(key ?? ""),
+    queryFn: () => api.getProjectKnowledge(key as string),
+    enabled: !!key,
+    retry: false,
+  });
+
+export const useBuildKnowledge = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: KnowledgeBuildRequest }) =>
+      api.buildKnowledge(key, body),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.projectKnowledge(data.key), data);
+      qc.invalidateQueries({ queryKey: queryKeys.knowledgeList });
+    },
   });
 };
 

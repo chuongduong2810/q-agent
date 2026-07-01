@@ -7,16 +7,19 @@ Endpoints to implement:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import crypto
 from app.db import get_db
+from app.models.knowledge import ProjectKnowledge
 from app.models.project import Project
 from app.models.provider import Provider
-from app.schemas import ProjectOut
+from app.schemas import KnowledgeBuildRequest, ProjectKnowledgeOut, ProjectOut
+from app.services import knowledge_service
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
+from app.services.claude_cli import ClaudeError
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -67,3 +70,49 @@ def refresh_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
 
     db.commit()
     return [ProjectOut.model_validate(p) for p in db.query(Project).all()]
+
+
+# ------------------------------------------------------------- Project Knowledge
+@router.get("/knowledge", response_model=list[ProjectKnowledgeOut])
+def list_knowledge(db: Session = Depends(get_db)) -> list[ProjectKnowledge]:
+    """All Project Knowledge Bases (drives the Projects grid's status badges)."""
+    return db.query(ProjectKnowledge).all()
+
+
+@router.get("/{key}/knowledge", response_model=ProjectKnowledgeOut)
+def get_knowledge(key: str, db: Session = Depends(get_db)) -> ProjectKnowledge:
+    row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == key).first()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"No knowledge base for project '{key}'")
+    return row
+
+
+@router.post("/{key}/knowledge/build", response_model=ProjectKnowledgeOut)
+def build_knowledge(
+    key: str, body: KnowledgeBuildRequest, db: Session = Depends(get_db)
+) -> ProjectKnowledge:
+    """Build (or rebuild) a project's knowledge base via Claude (project-bootstrap)."""
+    row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == key).first()
+    if not row:
+        row = ProjectKnowledge(key=key, name=body.name or key)
+        db.add(row)
+    if body.name:
+        row.name = body.name
+    if body.provider is not None:
+        row.provider = body.provider
+    if body.repo is not None:
+        row.repo = body.repo
+    if body.framework:
+        row.framework = body.framework
+
+    try:
+        payload = knowledge_service.build_knowledge_payload(
+            row.name, row.provider, row.repo, row.framework
+        )
+    except ClaudeError as exc:
+        raise HTTPException(status_code=502, detail=f"Knowledge build failed: {exc}") from exc
+
+    knowledge_service.apply_build(row, payload)
+    db.commit()
+    db.refresh(row)
+    return row

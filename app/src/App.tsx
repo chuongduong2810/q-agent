@@ -10,6 +10,8 @@ import type { Screen } from "@/types";
 
 import { Dashboard } from "@/screens/Dashboard";
 import { Projects } from "@/screens/Projects";
+import { ProjectDetail } from "@/screens/ProjectDetail";
+import { KnowledgeBuildOverlay } from "@/screens/KnowledgeBuildOverlay";
 import { Tickets } from "@/screens/Tickets";
 import { TicketDetail } from "@/screens/TicketDetail";
 import { Runs } from "@/screens/Runs";
@@ -27,6 +29,7 @@ import { CreateRunModal } from "@/screens/CreateRunModal";
 const SCREENS: Record<Screen, ComponentType> = {
   dashboard: Dashboard,
   projects: Projects,
+  project: ProjectDetail,
   tickets: Tickets,
   ticket: TicketDetail,
   runs: Runs,
@@ -93,6 +96,7 @@ function Shell() {
       </AppLayout>
       <CommandPalette />
       <CreateRunModal />
+      <KnowledgeBuildOverlay />
     </>
   );
 }

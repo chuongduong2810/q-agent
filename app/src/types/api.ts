@@ -36,6 +36,41 @@ export interface ProjectOut {
   meta: Record<string, unknown>;
 }
 
+export interface KnowledgeBody {
+  branch: string;
+  stack: string[];
+  architecture: string;
+  domain: string;
+  locator: string;
+  assets: number;
+  pageObjects: number;
+  fixtures: number;
+  utilities: string[];
+}
+
+export type KnowledgeStatus = "not_indexed" | "indexed" | "stale";
+
+export interface ProjectKnowledgeOut {
+  key: string;
+  name: string;
+  provider: string;
+  repo: string;
+  framework: string;
+  status: KnowledgeStatus;
+  confidence: number;
+  version: string;
+  needsRefresh: boolean;
+  lastIndexed: string | null;
+  knowledge: Partial<KnowledgeBody>;
+}
+
+export interface KnowledgeBuildRequest {
+  name?: string;
+  provider?: string;
+  repo?: string;
+  framework?: string;
+}
+
 export interface PullRequestOut {
   repo: string;
   num: string;

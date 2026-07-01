@@ -5,6 +5,7 @@ export type Provider = "ado" | "jira" | "github";
 export type Screen =
   | "dashboard"
   | "projects"
+  | "project"
   | "tickets"
   | "ticket"
   | "runs"

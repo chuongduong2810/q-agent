@@ -10,6 +10,8 @@ import type {
   EvidenceGrouped,
   EvidenceOut,
   ExecutionOut,
+  KnowledgeBuildRequest,
+  ProjectKnowledgeOut,
   ProjectOut,
   ProviderFieldsIn,
   ProviderKind,
@@ -96,6 +98,13 @@ export const api = {
   // projects
   listProjects: () => get<ProjectOut[]>("/projects"),
   refreshProjects: () => post<ProjectOut[]>("/projects/refresh"),
+
+  // project knowledge
+  listKnowledge: () => get<ProjectKnowledgeOut[]>("/projects/knowledge"),
+  getProjectKnowledge: (key: string) =>
+    get<ProjectKnowledgeOut>(`/projects/${encodeURIComponent(key)}/knowledge`),
+  buildKnowledge: (key: string, body: KnowledgeBuildRequest) =>
+    post<ProjectKnowledgeOut>(`/projects/${encodeURIComponent(key)}/knowledge/build`, body),
 
   // tickets
   listTickets: (params: { status?: string; assignee?: string; sprint?: string; q?: string } = {}) =>

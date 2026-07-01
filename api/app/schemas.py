@@ -57,6 +57,41 @@ class ProjectOut(ApiModel):
     meta: dict = Field(default_factory=dict)
 
 
+class KnowledgeBody(ApiModel):
+    """The learned knowledge base contents (what project-bootstrap produces)."""
+
+    branch: str = "main"
+    stack: list[str] = Field(default_factory=list)
+    architecture: str = ""
+    domain: str = ""
+    locator: str = ""
+    assets: int = 0
+    page_objects: int = 0
+    fixtures: int = 0
+    utilities: list[str] = Field(default_factory=list)
+
+
+class ProjectKnowledgeOut(ApiModel):
+    key: str
+    name: str
+    provider: str = ""
+    repo: str = ""
+    framework: str = "Playwright"
+    status: str = "not_indexed"
+    confidence: int = 0
+    version: str = "v1"
+    needs_refresh: bool = False
+    last_indexed: datetime | None = None
+    knowledge: dict = Field(default_factory=dict)
+
+
+class KnowledgeBuildRequest(ApiModel):
+    name: str | None = None
+    provider: str | None = None
+    repo: str | None = None
+    framework: str | None = None
+
+
 # ---------------------------------------------------------------- Tickets
 class PullRequestOut(ApiModel):
     repo: str

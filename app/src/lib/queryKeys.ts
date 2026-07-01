@@ -7,6 +7,8 @@ export const queryKeys = {
   sprints: (kind: string) => ["providers", kind, "sprints"] as const,
   settings: ["settings"] as const,
   projects: ["projects"] as const,
+  knowledgeList: ["projects", "knowledge"] as const,
+  projectKnowledge: (key: string) => ["projects", key, "knowledge"] as const,
   tickets: (filters?: Record<string, string | undefined>) =>
     ["tickets", filters ?? {}] as const,
   ticket: (externalId: string) => ["tickets", "detail", externalId] as const,

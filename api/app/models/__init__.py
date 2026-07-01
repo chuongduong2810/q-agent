@@ -8,6 +8,7 @@ from app.models.testcase import AutomationSpec, TestCase
 from app.models.execution import Evidence, Execution, ExecutionResult
 from app.models.report import Report
 from app.models.comment import TicketComment
+from app.models.knowledge import ProjectKnowledge
 
 __all__ = [
     "Provider",
@@ -22,4 +23,5 @@ __all__ = [
     "Evidence",
     "Report",
     "TicketComment",
+    "ProjectKnowledge",
 ]

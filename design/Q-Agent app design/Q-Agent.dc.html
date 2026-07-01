@@ -105,7 +105,7 @@
             <div><div style="font-size:13px;color:#8b8b9e;font-weight:500;margin-bottom:5px">Wednesday, July 1 &#183; Good morning, Maya</div><h1 style="margin:0;font-size:32px;font-weight:900;letter-spacing:-.03em">Mission control</h1></div>
             <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:12px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25)"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;animation:pulseDot 1.8s infinite"></span><span style="font-size:12.5px;font-weight:600;color:#fbbf24">1 run in review</span></div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px">
             <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
               <div style="padding:18px;border-radius:20px;background:rgba(255,255,255,.035);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.07);animation:fadeInUp .5s ease both" style-hover="border-color:rgba(139,92,246,.32);transform:translateY(-3px)">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px"><span style="font-size:12.5px;color:#9494a6;font-weight:500">{{ s.label }}</span><span dangerouslySetInnerHTML="{{ s.icon }}" style="color:{{ s.color }}"></span></div>
@@ -160,15 +160,116 @@
       <!-- ---------- PROJECTS ---------- -->
       <sc-if value="{{ isProjects }}" hint-placeholder-val="">
         <div style="animation:fadeInUp .5s ease both;padding:2px 4px 40px">
-          <div style="margin-bottom:20px"><div style="font-size:13px;color:#8b8b9e;font-weight:500;margin-bottom:5px">Across 2 connected providers</div><h1 style="margin:0;font-size:28px;font-weight:900;letter-spacing:-.03em">Projects</h1></div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
-            <sc-for list="{{ projectsView }}" as="p" hint-placeholder-count="4">
-              <div onClick="{{ p.open }}" style="padding:20px;border-radius:20px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid {{ p.border }};cursor:pointer;animation:fadeInUp .45s ease both" style-hover="border-color:rgba(139,92,246,.35);transform:translateY(-3px)">
-                <div style="display:flex;align-items:center;gap:11px;margin-bottom:16px"><div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;background:{{ p.provColor }};color:{{ p.glyphColor }}">{{ p.provGlyph }}</div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div><div style="font-size:11px;color:#8b8b9e">{{ p.provider }}</div></div><sc-if value="{{ p.active }}" hint-placeholder-val=""><span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(139,92,246,.24);color:#c4b5fd">Active</span></sc-if></div>
-                <div style="display:flex;gap:18px"><div><div style="font-size:20px;font-weight:900">{{ p.tickets }}</div><div style="font-size:11px;color:#8b8b9e">tickets</div></div><div><div style="font-size:20px;font-weight:900;color:#a78bfa">{{ p.runs }}</div><div style="font-size:11px;color:#8b8b9e">active runs</div></div><div><div style="font-size:20px;font-weight:900;color:#6ee7b7">{{ p.rate }}</div><div style="font-size:11px;color:#8b8b9e">pass rate</div></div></div>
+          <div style="margin-bottom:20px"><div style="font-size:13px;color:#8b8b9e;font-weight:500;margin-bottom:5px">Across 2 connected providers &#183; Q&#8209;Agent learns each project before it tests</div><h1 style="margin:0;font-size:28px;font-weight:900;letter-spacing:-.03em">Projects</h1></div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+            <sc-for list="{{ projectsView }}" as="p" hint-placeholder-count="3">
+              <div onClick="{{ p.open }}" style="display:flex;flex-direction:column;padding:20px;border-radius:20px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid {{ p.border }};cursor:pointer;animation:fadeInUp .45s ease both" style-hover="border-color:rgba(139,92,246,.35);transform:translateY(-3px)">
+                <div style="display:flex;align-items:center;gap:11px;margin-bottom:16px"><div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;background:{{ p.provColor }};color:{{ p.glyphColor }}">{{ p.provGlyph }}</div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div><div style="font-size:11px;color:#8b8b9e;font-family:'JetBrains Mono',monospace">{{ p.repo }}</div></div><sc-if value="{{ p.active }}" hint-placeholder-val=""><span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;background:rgba(139,92,246,.24);color:#c4b5fd">Active</span></sc-if></div>
+                <div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:12px;background:{{ p.statusBg }};margin-bottom:14px"><span style="width:8px;height:8px;border-radius:50%;background:{{ p.statusDot }}"></span><span style="font-size:12px;font-weight:700;color:{{ p.statusColor }}">Knowledge: {{ p.statusLabel }}</span></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-bottom:16px">
+                  <div><div style="font-size:10.5px;color:#7a7a8c;margin-bottom:2px">Last indexed</div><div style="font-size:12.5px;font-weight:600">{{ p.lastIndexed }}</div></div>
+                  <div><div style="font-size:10.5px;color:#7a7a8c;margin-bottom:2px">Confidence</div><div style="font-size:12.5px;font-weight:700;color:{{ p.confColor }}">{{ p.confidence }}%</div></div>
+                  <div><div style="font-size:10.5px;color:#7a7a8c;margin-bottom:2px">Framework</div><div style="font-size:12.5px;font-weight:600">{{ p.framework }}</div></div>
+                  <div><div style="font-size:10.5px;color:#7a7a8c;margin-bottom:2px">Provider</div><div style="font-size:12.5px;font-weight:600">{{ p.provider }}</div></div>
+                </div>
+                <sc-if value="{{ p.notIndexed }}" hint-placeholder-val="">
+                  <button onClick="{{ p.build }}" style="margin-top:auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 8px 22px -8px rgba(139,92,246,.8)" style-hover="filter:brightness(1.08)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>Build Project Knowledge</button>
+                </sc-if>
+                <sc-if value="{{ p.indexed }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><span style="font-size:11.5px;color:#8b8b9e"><b style="color:#c3c3d0">{{ p.tickets }}</b> tickets &#183; <b style="color:#c3c3d0">{{ p.runs }}</b> runs</span><span style="font-size:12px;font-weight:700;color:#a78bfa;display:flex;align-items:center;gap:5px">Open<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></div>
+                </sc-if>
               </div>
             </sc-for>
           </div>
+        </div>
+      </sc-if>
+
+      <!-- ---------- PROJECT DETAIL ---------- -->
+      <sc-if value="{{ isProject }}" hint-placeholder-val="">
+        <div style="animation:fadeInUp .5s ease both;padding:2px 4px 40px">
+          <button onClick="{{ goProjects }}" style="display:flex;align-items:center;gap:7px;background:none;border:none;color:#8b8b9e;font-size:12.5px;font-weight:600;cursor:pointer;padding:0;margin-bottom:14px" style-hover="color:#c7c7d4"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg> All projects</button>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+            <div style="width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;background:{{ proj.provColor }};color:{{ proj.glyphColor }}">{{ proj.provGlyph }}</div>
+            <div style="flex:1"><h1 style="margin:0;font-size:26px;font-weight:900;letter-spacing:-.03em">{{ proj.name }}</h1><div style="font-size:12.5px;color:#8b8b9e;font-family:'JetBrains Mono',monospace">{{ proj.repo }} &#183; {{ proj.provider }}</div></div>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:12px;background:{{ projStatusBg }}"><span style="width:8px;height:8px;border-radius:50%;background:{{ projStatusDot }}"></span><span style="font-size:12.5px;font-weight:700;color:{{ projStatusColor }}">Knowledge: {{ projStatusLabel }}</span></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.06)"><sc-for list="{{ projTabs }}" as="t" hint-placeholder-count="5"><button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div>
+
+          <!-- OVERVIEW TAB -->
+          <sc-if value="{{ projOverview }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px">
+              <div style="padding:18px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="font-size:12px;color:#9494a6;margin-bottom:10px">Tickets</div><div style="font-size:26px;font-weight:900">{{ proj.tickets }}</div></div>
+              <div style="padding:18px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="font-size:12px;color:#9494a6;margin-bottom:10px">Active runs</div><div style="font-size:26px;font-weight:900;color:#a78bfa">{{ proj.runs }}</div></div>
+              <div style="padding:18px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="font-size:12px;color:#9494a6;margin-bottom:10px">Pass rate</div><div style="font-size:26px;font-weight:900;color:#6ee7b7">{{ proj.rate }}</div></div>
+              <div style="padding:18px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="font-size:12px;color:#9494a6;margin-bottom:10px">Knowledge confidence</div><div style="font-size:26px;font-weight:900;color:{{ knConfColor }}">{{ proj.confidence }}%</div></div>
+            </div>
+            <div style="position:relative;overflow:hidden;padding:24px;border-radius:20px;background:linear-gradient(135deg,rgba(139,92,246,.18),rgba(99,102,241,.08));border:1px solid rgba(139,92,246,.26)">
+              <div style="position:absolute;top:-30px;right:-20px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,.35),transparent 65%);filter:blur(20px)"></div>
+              <div style="position:relative;display:flex;align-items:center;gap:18px">
+                <div style="width:54px;height:54px;border-radius:16px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 10px 26px -8px rgba(139,92,246,.8)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg></div>
+                <div style="flex:1"><div style="font-size:17px;font-weight:800;margin-bottom:4px">Project Knowledge powers every AI workflow</div><p style="margin:0;font-size:13px;color:#c3c3d4;line-height:1.5;max-width:520px">Before analysing requirements, generating test cases, or writing Playwright, Q&#8209;Agent reuses what it learned about this repository — architecture, page objects, fixtures and conventions.</p></div>
+                <button onClick="{{ t_knowledge }}" style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;background:#fff;color:#12121a;border:none;font-weight:700;font-size:13px;cursor:pointer" style-hover="transform:translateY(-2px)">View Project Knowledge<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#12121a" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- PROJECT KNOWLEDGE TAB -->
+          <sc-if value="{{ projKnowledgeTab }}" hint-placeholder-val="">
+            <sc-if value="{{ projNotIndexed }}" hint-placeholder-val="">
+              <div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:56px 30px;border-radius:22px;background:rgba(255,255,255,.035);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.07)">
+                <div style="width:72px;height:72px;border-radius:22px;background:linear-gradient(135deg,rgba(139,92,246,.24),rgba(99,102,241,.12));display:flex;align-items:center;justify-content:center;margin-bottom:20px"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg></div>
+                <h2 style="margin:0 0 8px;font-size:21px;font-weight:800">This project isn't indexed yet</h2>
+                <p style="margin:0 0 22px;font-size:13.5px;color:#a0a0b2;max-width:420px;line-height:1.55">Build the Project Knowledge Base so Q&#8209;Agent understands the repository, its architecture, existing Playwright assets and conventions before it starts testing.</p>
+                <button onClick="{{ buildKnowledge }}" style="display:flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 10px 26px -8px rgba(139,92,246,.8)" style-hover="transform:translateY(-2px);filter:brightness(1.08)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>Build Project Knowledge</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ projIndexed }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <!-- knowledge header actions -->
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 18px;border-radius:16px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07);margin-bottom:14px">
+                  <div style="display:flex;align-items:center;gap:11px;flex:1;min-width:220px"><div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg></div><div><div style="font-size:14px;font-weight:700">Knowledge Base {{ proj.version }}</div><div style="font-size:12px;color:#8b8b9e">Last indexed {{ proj.lastIndexed }} &#183; {{ proj.confidence }}% confidence</div></div></div>
+                  <button onClick="{{ reindexProject }}" style="display:flex;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.32);color:#c4b5fd;font-weight:600;font-size:12.5px;cursor:pointer" style-hover="background:rgba(139,92,246,.24)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/></svg>Re-index</button>
+                  <button onClick="{{ reindexProject }}" style="display:flex;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#dcdce4;font-weight:600;font-size:12.5px;cursor:pointer" style-hover="background:rgba(255,255,255,.1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Refresh repository</button>
+                  <button onClick="{{ noop }}" style="display:flex;align-items:center;gap:7px;padding:9px 14px;border-radius:11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#dcdce4;font-weight:600;font-size:12.5px;cursor:pointer" style-hover="background:rgba(255,255,255,.1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg>Compare latest changes</button>
+                </div>
+                <sc-if value="{{ projNeedsRefresh }}" hint-placeholder-val="">
+                  <div style="display:flex;align-items:center;gap:11px;padding:13px 16px;border-radius:14px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.28);margin-bottom:14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span style="font-size:13px;color:#fbdf9e;flex:1">The repository changed significantly since the last index. Rebuilding the Project Knowledge Base is recommended.</span><button onClick="{{ reindexProject }}" style="padding:8px 14px;border-radius:10px;background:#fbbf24;border:none;color:#3a2e05;font-weight:700;font-size:12.5px;cursor:pointer">Rebuild now</button></div>
+                </sc-if>
+                <!-- knowledge cards grid -->
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:14px">
+                  <div style="padding:18px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67e8f9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg><span style="font-size:12.5px;color:#9494a6;font-weight:600">Repository</span></div><div style="font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;word-break:break-all">{{ proj.repo }}</div><div style="font-size:12px;color:#8b8b9e;margin-top:6px">Branch: <b style="color:#c3c3d0">{{ kn.branch }}</b></div></div>
+                  <div style="padding:18px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg><span style="font-size:12.5px;color:#9494a6;font-weight:600">Automation framework</span></div><div style="font-size:16px;font-weight:800">{{ proj.framework }}</div><div style="font-size:12px;color:#8b8b9e;margin-top:6px">TypeScript &#183; @playwright/test</div></div>
+                  <div style="padding:18px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12A10 10 0 1 1 12 2"/><path d="M22 4 12 14.01l-3-3"/></svg><span style="font-size:12.5px;color:#9494a6;font-weight:600">Knowledge confidence</span></div><div style="font-size:22px;font-weight:900;color:{{ knConfColor }};margin-bottom:8px">{{ proj.confidence }}%</div><div style="height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden"><div style="width:{{ proj.confidence }}%;height:100%;background:linear-gradient(90deg,#8b5cf6,#22d3ee);border-radius:6px"></div></div></div>
+                </div>
+                <!-- tech stack + assets -->
+                <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-bottom:14px">
+                  <div style="padding:20px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:12px">Technology stack</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px"><sc-for list="{{ knStack }}" as="t" hint-placeholder-count="4"><span style="font-size:12px;font-weight:600;padding:6px 12px;border-radius:10px;background:rgba(139,92,246,.14);color:#c4b5fd">{{ t }}</span></sc-for></div>
+                    <div style="font-size:13px;font-weight:700;margin-bottom:12px">Reusable test utilities</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ knUtils }}" as="u" hint-placeholder-count="3"><span style="font-size:11.5px;font-family:'JetBrains Mono',monospace;padding:5px 11px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:#c3c3d0">{{ u }}</span></sc-for></div>
+                  </div>
+                  <div style="padding:20px;border-radius:18px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:14px">Existing Playwright assets</div>
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <div style="display:flex;align-items:center;gap:12px"><div style="width:34px;height:34px;border-radius:10px;background:rgba(34,211,238,.13);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#67e8f9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div><div style="flex:1"><div style="font-size:13px;font-weight:600">Spec files</div></div><div style="font-size:20px;font-weight:900;color:#67e8f9">{{ kn.assets }}</div></div>
+                      <div style="display:flex;align-items:center;gap:12px"><div style="width:34px;height:34px;border-radius:10px;background:rgba(139,92,246,.14);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M14 7h7M7 14v7"/></svg></div><div style="flex:1"><div style="font-size:13px;font-weight:600">Page objects</div></div><div style="font-size:20px;font-weight:900;color:#a78bfa">{{ kn.pageObjects }}</div></div>
+                      <div style="display:flex;align-items:center;gap:12px"><div style="width:34px;height:34px;border-radius:10px;background:rgba(16,185,129,.14);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg></div><div style="flex:1"><div style="font-size:13px;font-weight:600">Shared fixtures</div></div><div style="font-size:20px;font-weight:900;color:#6ee7b7">{{ kn.fixtures }}</div></div>
+                    </div>
+                  </div>
+                </div>
+                <!-- expandable sections -->
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <sc-for list="{{ knowledgeSections }}" as="sec" hint-placeholder-count="3">
+                    <div style="border-radius:16px;background:rgba(255,255,255,.035);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.07);overflow:hidden">
+                      <div onClick="{{ sec.toggle }}" style="display:flex;align-items:center;gap:12px;padding:15px 18px;cursor:pointer"><span dangerouslySetInnerHTML="{{ sec.iconHtml }}"></span><span style="flex:1;font-size:14px;font-weight:600">{{ sec.label }}</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b8b9e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="{{ sec.chev }}"><path d="M9 6l6 6-6 6"/></svg></div>
+                      <sc-if value="{{ sec.open }}" hint-placeholder-val=""><div style="padding:0 18px 16px 46px;font-size:13px;line-height:1.6;color:#c3c3d0;animation:fadeInUp .3s ease both">{{ sec.body }}</div></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
         </div>
       </sc-if>
 
@@ -312,7 +413,7 @@
             <div style="display:flex;gap:9px"><button onClick="{{ approveAllRun }}" style="padding:10px 15px;border-radius:12px;background:rgba(16,185,129,.16);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;font-weight:600;font-size:13px;cursor:pointer" style-hover="background:rgba(16,185,129,.24)">Approve entire run</button><button onClick="{{ goAutomation }}" style="display:flex;align-items:center;gap:7px;padding:10px 16px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 8px 22px -8px rgba(139,92,246,.8)" style-hover="filter:brightness(1.08)">Generate automation<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
           </div>
           <div style="margin-bottom:14px"><dc-import name="PipelineRail" stage="3" hint-size="100%,76px"></dc-import></div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px">
             <div style="padding:16px 18px;border-radius:16px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="font-size:26px;font-weight:900;color:#6ee7b7;line-height:1">{{ rApproved }}</div><div style="font-size:12px;color:#8b8b9e;margin-top:5px">Approved</div></div>
             <div style="padding:16px 18px;border-radius:16px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="font-size:26px;font-weight:900;color:#fbbf24;line-height:1">{{ rPending }}</div><div style="font-size:12px;color:#8b8b9e;margin-top:5px">Needs review</div></div>
             <div style="padding:16px 18px;border-radius:16px;background:rgba(255,255,255,.035);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)"><div style="font-size:26px;font-weight:900;color:#fb7185;line-height:1">{{ rRejected }}</div><div style="font-size:12px;color:#8b8b9e;margin-top:5px">Rejected</div></div>
@@ -364,6 +465,7 @@
                               <div style="display:flex;gap:8px"><button onClick="{{ saveEdit }}" style="display:flex;align-items:center;gap:6px;padding:8px 15px;border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer" style-hover="filter:brightness(1.08)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Save changes</button><button onClick="{{ cancelEdit }}" style="padding:8px 15px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#c3c3d0;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="background:rgba(255,255,255,.1)">Cancel</button></div>
                             </div>
                           </sc-if>
+                          </div>
                         </sc-if>
                       </div>
                     </sc-for>
@@ -375,6 +477,7 @@
         </div>
       </sc-if>
 
+      <!-- AUTOMATION SCREEN -->
       <!-- ---------- AUTOMATION ---------- -->
       <sc-if value="{{ isAutomation }}" hint-placeholder-val="">
         <div style="animation:fadeInUp .5s ease both;padding:2px 4px 40px">
@@ -563,6 +666,29 @@
   </div>
 </sc-if>
 
+<!-- ================= AI KNOWLEDGE BUILD OVERLAY ================= -->
+<sc-if value="{{ knowledgeBuilding }}" hint-placeholder-val="">
+  <div style="position:fixed;inset:0;z-index:60;background:rgba(6,6,10,.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeInUp .25s ease both">
+    <div style="width:min(560px,94vw);border-radius:24px;background:rgba(20,20,30,.94);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border:1px solid rgba(139,92,246,.28);box-shadow:0 40px 100px -20px rgba(0,0,0,.85);overflow:hidden;animation:scaleIn .3s ease both">
+      <div style="position:relative;padding:30px 30px 22px;overflow:hidden">
+        <div style="position:absolute;top:-40px;right:-30px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,.4),transparent 65%);filter:blur(24px);animation:glowPulse 4s ease-in-out infinite"></div>
+        <div style="position:relative;display:flex;align-items:center;gap:14px">
+          <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 30px rgba(139,92,246,.7);animation:floaty 3s ease-in-out infinite"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg></div>
+          <div><div style="font-size:18px;font-weight:800;letter-spacing:-.02em">Learning {{ buildProjectName }}</div><div style="font-size:12.5px;color:#a0a0b4;margin-top:2px">Q&#8209;Agent is building the Project Knowledge Base</div></div>
+        </div>
+      </div>
+      <div style="padding:6px 30px 30px;display:flex;flex-direction:column;gap:3px">
+        <sc-for list="{{ buildSteps }}" as="st" hint-placeholder-count="10">
+          <div style="display:flex;align-items:center;gap:13px;padding:8px 0">
+            <sc-if value="{{ st.done }}" hint-placeholder-val=""><span style="width:22px;height:22px;flex-shrink:0;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span style="font-size:13.5px;color:#8b8b9e">{{ st.text }}</span></sc-if>
+            <sc-if value="{{ st.active }}" hint-placeholder-val="{{ true }}"><span style="width:22px;height:22px;flex-shrink:0;border-radius:50%;border:2px solid rgba(167,139,250,.35);border-top-color:#a78bfa;animation:spin .8s linear infinite"></span><span style="font-size:13.5px;color:#ececf1;font-weight:600">{{ st.text }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
 <!-- ================= CREATE RUN MODAL ================= -->
 <sc-if value="{{ createRunOpen }}" hint-placeholder-val="">
   <div onClick="{{ closeCreateRun }}" style="position:fixed;inset:0;z-index:50;background:rgba(6,6,10,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeInUp .2s ease both">
@@ -590,6 +716,7 @@ class Component extends DCLogic {
   state = {
     screen:'dashboard', paletteOpen:false, paletteQuery:'',
     activeProject:'Surency Platform', activeTicket:'SUR-1428',
+    projectTab:'overview', knowledgeBuilding:false, knowledgeStep:0, knowledgeExpanded:{}, buildingProject:null, projectStatus:{}, projectMeta:{},
     syncing:false, selected:{}, ticketSearch:'', ticketFilter:'all',
     createRunOpen:false, runScope:'selected', runFramework:'Playwright', runEnv:'Staging', runWorkers:4,
     run:{ id:'RUN-204', name:'Sprint 24 — Broker regression', scope:'Selected tickets', framework:'Playwright', env:'Staging', workers:4, tickets:['SUR-1428','SUR-1402','SUR-1390'], status:'review' },
@@ -658,6 +785,17 @@ class Component extends DCLogic {
     {id:'RUN-198',name:'Claims portal',meta:'5 tickets · 63 cases',rate:'91%',color:'#f59e0b',ago:'2d',status:'done'},
   ];
 
+  projectsData = [
+    {name:'Surency Platform',provider:'Azure DevOps',provGlyph:'A',provColor:'#0078d4',glyphColor:'#fff',tickets:42,runs:1,rate:'94%',active:true,status:'ready',framework:'Playwright',repo:'surency-eng/surency-web',lastIndexed:'2 hours ago',confidence:96,version:'v14',
+      knowledge:{branch:'main',stack:['React 18','TypeScript','Vite','Node 20','.NET 8 API'],architecture:'Modular monolith — feature modules (Brokers, Claims, Members) over a REST API with a shared design system.',assets:148,pageObjects:32,fixtures:12,locator:'Prefer getByRole + data-testid; fall back to accessible name.',domain:'Broker & agency management, licensing, member onboarding and claims for a benefits administration platform.',utilities:['api-client.ts','auth.setup.ts','seed-data.ts','test-users.ts']}},
+    {name:'Surency Mobile',provider:'Azure DevOps',provGlyph:'A',provColor:'#0078d4',glyphColor:'#fff',tickets:28,runs:0,rate:'91%',active:false,status:'needs_refresh',framework:'Playwright',repo:'surency-eng/surency-mobile',lastIndexed:'9 days ago',confidence:74,version:'v6',
+      knowledge:{branch:'main',stack:['React Native','Expo','TypeScript'],architecture:'Expo-managed React Native app with a shared API layer mirroring the web platform.',assets:52,pageObjects:14,fixtures:5,locator:'testID props mapped to Playwright/Detox selectors.',domain:'Mobile broker and member self-service — licensing, claims status, notifications.',utilities:['device.setup.ts','api-client.ts','fixtures.ts']}},
+    {name:'Claims Portal',provider:'Jira',provGlyph:'J',provColor:'#2684ff',glyphColor:'#fff',tickets:63,runs:0,rate:'97%',active:false,status:'not_indexed',framework:'Playwright',repo:'surency-eng/claims-portal',lastIndexed:'—',confidence:0,version:'—',
+      knowledge:{branch:'main',stack:['Angular 17','TypeScript','NgRx','Java Spring API'],architecture:'Angular SPA over a Spring Boot claims service with an event-driven adjudication pipeline.',assets:96,pageObjects:24,fixtures:8,locator:'data-test attributes mapped to Playwright role selectors.',domain:'Claims intake, adjudication, payments and appeals for benefits members.',utilities:['api-client.ts','auth.setup.ts','claim-factory.ts']}},
+  ];
+
+  knowledgeSteps = ['Connecting repository…','Reading documentation…','Understanding project architecture…','Detecting technology stack…','Finding existing Playwright tests…','Discovering page objects…','Learning coding conventions…','Building project knowledge base…','Optimizing AI context…','Knowledge base ready.'];
+
   genericCases(t){ return [
     {id:'TC-01',title:'Happy path — '+t.title,priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.0s',precond:'Feature is available to the user.',steps:[{a:'Perform the primary action.',e:'The expected outcome occurs.'}]},
     {id:'TC-02',title:'Validation & error handling',priority:'Medium',testType:'Functional',automation:'Playwright',plat:'Web',dur:'2.6s',precond:'Feature is available.',steps:[{a:'Submit invalid input.',e:'A clear validation message is shown.'}]},
@@ -684,7 +822,12 @@ class Component extends DCLogic {
   navigate=(s)=>this.setState({screen:s,paletteOpen:false});
   noop=()=>{}; stop=(e)=>e.stopPropagation();
   goDash=()=>this.navigate('dashboard'); goProjects=()=>this.navigate('projects'); goTickets=()=>this.navigate('tickets'); goRuns=()=>this.navigate('runs'); goReview=()=>this.navigate('review'); goAutomation=()=>this.navigate('automation'); goConsole=()=>this.navigate('console'); goEvidence=()=>this.navigate('evidence'); goReports=()=>this.navigate('reports'); goSettings=()=>this.navigate('settings'); goRun=()=>this.navigate('run'); goComment=()=>this.navigate('comment');
-  openProject=(n)=>this.setState({activeProject:n,screen:'tickets'});
+  openProject=(n)=>this.setState({activeProject:n,screen:'project',projectTab:'overview'});
+  setProjectTab=(t)=>{ if(t==='tickets'){this.navigate('tickets');return;} if(t==='runs'){this.navigate('runs');return;} if(t==='settings'){this.navigate('settings');return;} this.setState({projectTab:t}); };
+  effStatus(name){ return this.state.projectStatus[name] || (this.projectsData.find(p=>p.name===name)||{}).status; }
+  toggleKnowledge=(k)=>this.setState(s=>({knowledgeExpanded:{...s.knowledgeExpanded,[k]:!s.knowledgeExpanded[k]}}));
+  buildKnowledge=(name)=>{ if(this.state.knowledgeBuilding)return; const target=name||this.state.activeProject; this.setState({knowledgeBuilding:true,knowledgeStep:0,buildingProject:target,activeProject:target}); clearInterval(this._kb); this._kb=setInterval(()=>this.setState(s=>{ const n=s.knowledgeStep+1; if(n>=this.knowledgeSteps.length){ clearInterval(this._kb); return {knowledgeStep:this.knowledgeSteps.length,knowledgeBuilding:false,projectStatus:{...s.projectStatus,[target]:'ready'},projectMeta:{...s.projectMeta,[target]:{confidence:93,lastIndexed:'just now',version:'v1'}},screen:'project',projectTab:'knowledge'}; } return {knowledgeStep:n}; }),620); };
+  reindexProject=(name)=>this.buildKnowledge(name);
   openTicket=(id)=>this.setState({activeTicket:id,screen:'ticket'});
   openPalette=()=>{ this.setState({paletteOpen:true,paletteQuery:''}); setTimeout(()=>{try{this.paletteRef.current&&this.paletteRef.current.focus();}catch(e){}},30); };
   closePalette=()=>this.setState({paletteOpen:false});
@@ -765,7 +908,7 @@ class Component extends DCLogic {
   highlight(code){ let h=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); const store=[]; const stash=(c,t)=>{store.push('<span style="color:'+c+'">'+t+'</span>');return '\u0000'+(store.length-1)+'\u0000';}; h=h.replace(/(\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g,m=>stash('#6b7280',m)); h=h.replace(/('[^'\n]*'|`[^`]*`|"[^"\n]*")/g,m=>stash('#6ee7b7',m)); h=h.replace(/\b(import|from|const|let|async|await|test|expect|return|new|of|true|false)\b/g,m=>stash('#c4b5fd',m)); h=h.replace(/\u0000(\d+)\u0000/g,(_,i)=>store[+i]); return {__html:h}; }
 
   componentDidMount(){ this._key=(e)=>{ if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();this.setState(s=>({paletteOpen:!s.paletteOpen,paletteQuery:''}));setTimeout(()=>{try{this.paletteRef.current&&this.paletteRef.current.focus();}catch(err){}},30);} if(e.key==='Escape')this.setState({paletteOpen:false,createRunOpen:false}); }; window.addEventListener('keydown',this._key); this.initThree(0); }
-  componentWillUnmount(){ window.removeEventListener('keydown',this._key); ['_t2','_athink','_et','_et2','_rg','_cp','_sy','_pc','_pb','_proc'].forEach(k=>{clearTimeout(this[k]);clearInterval(this[k]);}); if(this._three){cancelAnimationFrame(this.raf);window.removeEventListener('mousemove',this._three.onMove);window.removeEventListener('resize',this._three.onResize);try{this._three.renderer.dispose();this._three.el.innerHTML='';}catch(e){}} }
+  componentWillUnmount(){ window.removeEventListener('keydown',this._key); ['_t2','_athink','_et','_et2','_rg','_cp','_sy','_pc','_pb','_proc','_kb'].forEach(k=>{clearTimeout(this[k]);clearInterval(this[k]);}); if(this._three){cancelAnimationFrame(this.raf);window.removeEventListener('mousemove',this._three.onMove);window.removeEventListener('resize',this._three.onResize);try{this._three.renderer.dispose();this._three.el.innerHTML='';}catch(e){}} }
   initThree(tries){ const THREE=window.THREE; if((this.props.showParticles??true)===false)return; if(!THREE||!this.bgRef.current){ if(tries<30)setTimeout(()=>this.initThree(tries+1),200); return; } const el=this.bgRef.current; const W=()=>el.clientWidth||window.innerWidth,H=()=>el.clientHeight||window.innerHeight; const scene=new THREE.Scene(); const camera=new THREE.PerspectiveCamera(60,W()/H(),1,4000); camera.position.z=720; const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true}); renderer.setPixelRatio(Math.min(window.devicePixelRatio,2)); renderer.setSize(W(),H()); el.appendChild(renderer.domElement); const N=Math.max(30,Math.min(180,this.props.particleDensity??90)); const pts=[],pos=[]; for(let i=0;i<N;i++){const v=new THREE.Vector3((Math.random()-.5)*1500,(Math.random()-.5)*950,(Math.random()-.5)*720);pts.push(v);pos.push(v.x,v.y,v.z);} const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); const points=new THREE.Points(g,new THREE.PointsMaterial({color:0xa78bfa,size:5.5,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false})); const lp=[]; for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){if(pts[i].distanceTo(pts[j])<240){lp.push(pts[i].x,pts[i].y,pts[i].z,pts[j].x,pts[j].y,pts[j].z);}} const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(lp,3)); const lines=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x6d5cff,transparent:true,opacity:.16,blending:THREE.AdditiveBlending})); const group=new THREE.Group();group.add(points);group.add(lines);scene.add(group); let mx=0,my=0; const onMove=(e)=>{mx=e.clientX/window.innerWidth-.5;my=e.clientY/window.innerHeight-.5;}; const onResize=()=>{camera.aspect=W()/H();camera.updateProjectionMatrix();renderer.setSize(W(),H());}; window.addEventListener('mousemove',onMove);window.addEventListener('resize',onResize); const clock=new THREE.Clock(); const animate=()=>{this.raf=requestAnimationFrame(animate);const t=clock.getElapsedTime();group.rotation.y=t*0.035+mx*0.45;group.rotation.x=my*0.3+Math.sin(t*0.1)*0.05;camera.position.x+=(mx*140-camera.position.x)*0.03;camera.position.y+=(-my*90-camera.position.y)*0.03;camera.lookAt(scene.position);renderer.render(scene,camera);}; animate(); this._three={renderer,onMove,onResize,el}; }
 
   prColor(p){return p==='High'?'#fb7185':p==='Medium'?'#fbbf24':'#94a3b8';}
@@ -787,7 +930,7 @@ class Component extends DCLogic {
     const glowOn=(this.props.ambientGlow??true);
     const runStageMap={processing:2,review:3,automation:4,executing:5,evidence:6,comment:7,done:7};
     const runStage=runStageMap[run.status]??0;
-    const navItems=this.navDefs.map(n=>({label:n.label,badge:n.badge,icon:this.ic(n.icon),go:()=>this.navigate(n.id), style:'display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;transition:background .15s;'+((s.screen===n.id||(n.id==='tickets'&&s.screen==='ticket')||(n.id==='runs'&&s.screen==='run')||(n.id==='evidence'&&s.screen==='comment'))?'background:linear-gradient(135deg,rgba(139,92,246,.22),rgba(99,102,241,.12));color:#fff;box-shadow:inset 0 0 0 1px rgba(139,92,246,.28)':'background:transparent;color:#a0a0b2')}));
+    const navItems=this.navDefs.map(n=>({label:n.label,badge:n.badge,icon:this.ic(n.icon),go:()=>this.navigate(n.id), style:'display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;transition:background .15s;'+((s.screen===n.id||(n.id==='tickets'&&s.screen==='ticket')||(n.id==='projects'&&s.screen==='project')||(n.id==='runs'&&s.screen==='run')||(n.id==='evidence'&&s.screen==='comment'))?'background:linear-gradient(135deg,rgba(139,92,246,.22),rgba(99,102,241,.12));color:#fff;box-shadow:inset 0 0 0 1px rgba(139,92,246,.28)':'background:transparent;color:#a0a0b2')}));
 
     const stats=[
       {label:'Active runs',value:'1',trend:'RUN-204 in review',trendColor:'#fbbf24',color:'#a78bfa',icon:this.ic('<rect x="3" y="4" width="18" height="4" rx="1.2"/><rect x="3" y="10" width="18" height="4" rx="1.2"/><rect x="3" y="16" width="12" height="4" rx="1.2"/>')},
@@ -804,11 +947,23 @@ class Component extends DCLogic {
     const recentRuns=[{name:'RUN-204 · Sprint 24 regression',meta:'3 tickets · 21 cases',rate:'Review',color:'#f59e0b',ago:'now'},...this.runsHistory.map(r=>({name:r.id+' · '+r.name,meta:r.meta,rate:r.rate,color:r.color,ago:r.ago}))];
 
     // projects
-    const projectsView=[
-      {name:'Surency Platform',provider:'Azure DevOps',provGlyph:'A',provColor:'#0078d4',glyphColor:'#fff',tickets:42,runs:1,rate:'94%',active:true},
-      {name:'Surency Mobile',provider:'Azure DevOps',provGlyph:'A',provColor:'#0078d4',glyphColor:'#fff',tickets:28,runs:0,rate:'91%',active:false},
-      {name:'Claims Portal',provider:'Jira',provGlyph:'J',provColor:'#2684ff',glyphColor:'#fff',tickets:63,runs:0,rate:'97%',active:false},
-    ].map(p=>({...p,open:()=>this.openProject(p.name),border:p.active?'rgba(139,92,246,.3)':'rgba(255,255,255,.07)'}));
+    const statusMap={ready:['Ready','#6ee7b7','rgba(16,185,129,.14)','#10b981'],needs_refresh:['Needs refresh','#fbbf24','rgba(251,191,36,.13)','#f59e0b'],not_indexed:['Not indexed','#8b93a7','rgba(148,163,184,.13)','#6b7280']};
+    const projectsView=this.projectsData.map(p=>{ const st=this.effStatus(p.name); const sm=statusMap[st]; const indexed=st!=='not_indexed'; const mo=s.projectMeta[p.name]||{}; const conf=mo.confidence!=null?mo.confidence:p.confidence; const li=mo.lastIndexed||p.lastIndexed; return {name:p.name,provider:p.provider,provGlyph:p.provGlyph,provColor:p.provColor,glyphColor:p.glyphColor,tickets:p.tickets,runs:p.runs,rate:p.rate,active:p.active,framework:p.framework,repo:p.repo,lastIndexed:indexed?li:'Never',confidence:conf,indexed,notIndexed:!indexed,statusLabel:sm[0],statusColor:sm[1],statusBg:sm[2],statusDot:sm[3],open:()=>this.openProject(p.name),build:(e)=>{if(e&&e.stopPropagation)e.stopPropagation();this.buildKnowledge(p.name);},border:p.active?'rgba(139,92,246,.3)':'rgba(255,255,255,.07)',confColor:conf>=90?'#6ee7b7':conf>=60?'#fbbf24':'#8b93a7'}; });
+    // active project + knowledge
+    const proj0=this.projectsData.find(p=>p.name===s.activeProject)||this.projectsData[0];
+    const projMeta=s.projectMeta[proj0.name]||{};
+    const proj={...proj0,confidence:projMeta.confidence!=null?projMeta.confidence:proj0.confidence,lastIndexed:projMeta.lastIndexed||proj0.lastIndexed,version:projMeta.version||proj0.version};
+    const projStatus=this.effStatus(proj.name); const projSm=statusMap[projStatus]; const projIndexed=projStatus!=='not_indexed';
+    const kn=proj.knowledge||{branch:'—',stack:[],architecture:'—',assets:0,pageObjects:0,fixtures:0,locator:'—',domain:'—',utilities:[]};
+    const knowExp=s.knowledgeExpanded;
+    const knowledgeSections=[
+      {key:'arch',label:'Application architecture',icon:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>',summary:proj.knowledge?proj.knowledge.architecture:'—',body:proj.knowledge?proj.knowledge.architecture:'—'},
+      {key:'domain',label:'Business domain',icon:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/>',summary:proj.knowledge?proj.knowledge.domain:'—',body:proj.knowledge?proj.knowledge.domain:'—'},
+      {key:'locator',label:'Locator strategy',icon:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/>',summary:proj.knowledge?proj.knowledge.locator:'—',body:proj.knowledge?proj.knowledge.locator:'—'},
+    ].map(sec=>({...sec,open:!!knowExp[sec.key],toggle:()=>this.toggleKnowledge(sec.key),chev:'transition:transform .25s;'+(knowExp[sec.key]?'transform:rotate(90deg)':''),iconHtml:{__html:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+sec.icon+'</svg>'}}));
+    const stackChips=kn.stack; const utilChips=kn.utilities;
+    const buildSteps=this.knowledgeSteps.map((t,i)=>({text:t,done:i<s.knowledgeStep,active:i===s.knowledgeStep&&s.knowledgeBuilding,last:i===this.knowledgeSteps.length-1}));
+    const projTabs=[{id:'overview',label:'Overview'},{id:'knowledge',label:'Project Knowledge'},{id:'tickets',label:'Tickets'},{id:'runs',label:'Runs'},{id:'settings',label:'Settings'}].map(t=>({id:t.id,label:t.label,active:s.projectTab===t.id,go:()=>this.setProjectTab(t.id),style:'padding:9px 15px;border-radius:11px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap;'+(s.projectTab===t.id?'background:linear-gradient(135deg,rgba(139,92,246,.24),rgba(99,102,241,.12));color:#fff;box-shadow:inset 0 0 0 1px rgba(139,92,246,.3)':'background:rgba(255,255,255,.04);color:#a0a0b2')}));
 
     // tickets
     const provMap={ado:['A','#0078d4'],jira:['J','#2684ff']};
@@ -904,6 +1059,12 @@ class Component extends DCLogic {
       createRunOpen:s.createRunOpen,openCreateRun:this.openCreateRun,closeCreateRun:this.closeCreateRun,scopeOptions,frameworkOptions,envOptions,runWorkers:s.runWorkers,setWorkers:this.setWorkers,confirmCreateRun:this.confirmCreateRun,createSummary,
       isDashboard:s.screen==='dashboard',stats,activity,recentRuns,
       isProjects:s.screen==='projects',projectsView,
+      isProject:s.screen==='project',projTabs,projectTab:s.projectTab,projOverview:s.projectTab==='overview',projKnowledgeTab:s.projectTab==='knowledge',
+      proj,projStatusLabel:projSm[0],projStatusColor:projSm[1],projStatusBg:projSm[2],projStatusDot:projSm[3],projIndexed,projNotIndexed:!projIndexed,
+      kn,knStack:stackChips,knUtils:utilChips,knowledgeSections,knConfColor:proj.confidence>=90?'#6ee7b7':proj.confidence>=60?'#fbbf24':'#8b93a7',
+      buildKnowledge:()=>this.buildKnowledge(s.activeProject),reindexProject:()=>this.reindexProject(s.activeProject),
+      t_knowledge:()=>this.setProjectTab('knowledge'),projNeedsRefresh:projStatus==='needs_refresh',
+      knowledgeBuilding:s.knowledgeBuilding,buildSteps,buildProjectName:s.buildingProject,
       isTickets:s.screen==='tickets',ticketsView,selCount,ticketSearch:s.ticketSearch,onSearch:this.onSearch,filterChips,selectSprint:this.selectSprint,selectAssigned:this.selectAssigned,syncTickets:this.syncTickets,syncLabel,syncSpin,syncStatus,
       isTicket:s.screen==='ticket',activeId:activeTk.id,activeTitle:activeTk.title,acCount:activeTk.acCount,detail:this.detail,acList,
       isRun:s.screen==='run',run,processing,runTicketsView,
