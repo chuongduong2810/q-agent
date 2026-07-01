@@ -49,9 +49,12 @@ function Shell() {
   const closeCreateRun = useUI((s) => s.closeCreateRun);
   const { data: runs } = useRuns();
 
-  // Default the "active run" to the most recent run once runs load.
+  // Default the "active run" to the in-progress run (or the most recent) once runs load.
   useEffect(() => {
-    if (activeRunId == null && runs && runs.length) setActiveRun(runs[0].id);
+    if (activeRunId == null && runs && runs.length) {
+      const active = runs.find((r) => r.status !== "done") ?? runs[0];
+      setActiveRun(active.id);
+    }
   }, [runs, activeRunId, setActiveRun]);
 
   // Global keyboard: ⌘K / Ctrl-K toggles the palette; Escape closes overlays.
