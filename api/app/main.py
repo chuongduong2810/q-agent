@@ -13,6 +13,7 @@ from app.config import settings
 from app.db import init_db
 from app.logging import logger, setup_logging
 from app.routers import (
+    ai,
     automation,
     comments,
     evidence,
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
 
     # Feature routers (implemented by feature modules).
     app.include_router(health.router)
+    app.include_router(ai.router)
     app.include_router(providers.router)
     app.include_router(projects.router)
     app.include_router(tickets.router)
@@ -78,6 +80,16 @@ def create_app() -> FastAPI:
                 await websocket.receive_text()
         except WebSocketDisconnect:
             hub.disconnect(run_id, websocket)
+
+    @app.websocket("/ws/ai")
+    async def ai_activity_ws(websocket: WebSocket) -> None:
+        """Live Claude CLI activity (start/end events) for the UI indicator."""
+        await hub.connect("ai", websocket)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            hub.disconnect("ai", websocket)
 
     return app
 

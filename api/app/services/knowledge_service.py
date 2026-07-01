@@ -43,6 +43,7 @@ def build_knowledge_payload(name: str, provider: str, repo: str, framework: str)
         _build_prompt(name, provider, repo, framework),
         skill=PROJECT_BOOTSTRAP,
         include_template=True,
+        label=f"Build knowledge: {name}",
     )
     data = raw if isinstance(raw, dict) else {}
     confidence = int(data.get("confidence", 80) or 0)

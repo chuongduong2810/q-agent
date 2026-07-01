@@ -5,6 +5,7 @@
  */
 
 import type {
+  AiActivity,
   AnnotationShape,
   AutomationSpecOut,
   EvidenceGrouped,
@@ -82,8 +83,10 @@ function qs(params: Record<string, string | undefined>): string {
 }
 
 export const api = {
-  // health
+  // health / observability
   capabilities: () => get<{ claude: boolean; version: string }>("/capabilities"),
+  aiActivity: () => get<AiActivity>("/ai/activity"),
+  aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai`,
 
   // providers + settings
   listProviders: () => get<ProviderOut[]>("/providers"),

@@ -56,7 +56,10 @@ def _summarize_ticket(ticket_external_id: str, summary: dict, ai_failure_analysi
         + "Use short paragraphs or a small bullet list. Do not include a greeting or signature."
     )
     return claude_cli.run_prompt(
-        prompt, skill=TICKET_COMMENT_GENERATOR, include_template=True
+        prompt,
+        skill=TICKET_COMMENT_GENERATOR,
+        include_template=True,
+        label=f"Comment: {ticket_external_id}",
     ).strip()
 
 

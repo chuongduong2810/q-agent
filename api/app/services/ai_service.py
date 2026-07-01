@@ -91,7 +91,11 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             run.id, ticket.external_id, PHASE_BUSINESS_RULES, "Identifying business rules..."
         )
 
-        analysis = run_json(build_analysis_prompt(ticket), skill=REQUIREMENT_ANALYST)
+        analysis = run_json(
+            build_analysis_prompt(ticket),
+            skill=REQUIREMENT_ANALYST,
+            label=f"Analyze {ticket.external_id}",
+        )
         if not isinstance(analysis, dict):
             raise ClaudeError("Claude analysis response was not a JSON object")
 
@@ -102,7 +106,11 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
 
         _publish_phase(run.id, ticket.external_id, PHASE_GENERATING, "Generating test cases...")
 
-        cases = run_json(build_generation_prompt(ticket, analysis), skill=TEST_CASE_GENERATOR)
+        cases = run_json(
+            build_generation_prompt(ticket, analysis),
+            skill=TEST_CASE_GENERATOR,
+            label=f"Generate cases: {ticket.external_id}",
+        )
         if not isinstance(cases, list):
             raise ClaudeError("Claude generation response was not a JSON array")
 

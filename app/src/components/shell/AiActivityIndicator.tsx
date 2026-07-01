@@ -1,0 +1,135 @@
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Spinner } from "@/components/ui/misc";
+import { useAiActivity } from "@/hooks/useAiActivity";
+import type { AiCall } from "@/types/api";
+
+function elapsed(startedAt: string, now: number): string {
+  const s = Math.max(0, Math.round((now - new Date(startedAt).getTime()) / 1000));
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
+/**
+ * Top-bar indicator that shows when the Claude CLI is actively running (with a
+ * live elapsed timer), so long AI calls read as "working", not "hung". Clicking
+ * opens a dropdown of running + recent calls with durations.
+ */
+export function AiActivityIndicator() {
+  const { data } = useAiActivity();
+  const running = data?.running ?? [];
+  const recent = data?.recent ?? [];
+  const isRunning = running.length > 0;
+
+  const [open, setOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Tick every second while something is running so the elapsed timer advances.
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  // Close the dropdown on outside click.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const primary = running[0];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Claude CLI activity"
+        className="flex h-[38px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 text-[12.5px] font-semibold text-ink-soft hover:bg-white/[0.09]"
+        style={isRunning ? { borderColor: "rgba(139,92,246,.4)", background: "rgba(139,92,246,.14)" } : undefined}
+      >
+        {isRunning ? (
+          <>
+            <Spinner size={13} />
+            <span className="max-w-[180px] truncate text-violet">{primary.label}</span>
+            <span className="font-mono text-[11px] text-ink-dim">{elapsed(primary.startedAt, now)}</span>
+          </>
+        ) : (
+          <>
+            <Sparkles size={14} className="text-violet" />
+            <span>AI</span>
+          </>
+        )}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.16 }}
+            className="glass-strong absolute right-0 top-[46px] z-50 w-[340px] overflow-hidden rounded-2xl shadow-[0_30px_70px_-20px_rgba(0,0,0,.7)]"
+          >
+            <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-3">
+              <Sparkles size={15} className="text-violet" />
+              <span className="text-[13px] font-bold">Claude CLI activity</span>
+              <span className="ml-auto text-[11px] text-ink-dim">
+                {isRunning ? `${running.length} running` : "idle"}
+              </span>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-2">
+              {running.length === 0 && recent.length === 0 && (
+                <div className="px-3 py-6 text-center text-[12.5px] text-ink-dim">
+                  No Claude CLI calls yet.
+                </div>
+              )}
+              {running.map((c) => (
+                <Row key={`r-${c.id}`} call={c} now={now} />
+              ))}
+              {recent.map((c) => (
+                <Row key={`h-${c.id}`} call={c} now={now} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function Row({ call, now }: { call: AiCall; now: number }) {
+  const running = call.status === "running";
+  return (
+    <div className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-white/[0.04]">
+      <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+        {running ? (
+          <Spinner size={14} />
+        ) : call.status === "ok" ? (
+          <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-success">
+            <Check size={11} color="#fff" strokeWidth={3} />
+          </span>
+        ) : (
+          <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-danger">
+            <X size={11} color="#fff" strokeWidth={3} />
+          </span>
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12.5px] font-semibold">{call.label}</div>
+        {call.skill && <div className="truncate text-[11px] text-ink-dim">{call.skill}</div>}
+      </div>
+      <span className="shrink-0 font-mono text-[11px] text-ink-dim">
+        {running
+          ? elapsed(call.startedAt, now)
+          : call.durationMs != null
+            ? `${(call.durationMs / 1000).toFixed(1)}s`
+            : ""}
+      </span>
+    </div>
+  );
+}

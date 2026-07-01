@@ -63,7 +63,7 @@ def _ai_failure_analysis(failed: list[ExecutionResult]) -> str:
         "root cause(s), whether failures look related, and a suggested next step.\n\n"
         "Failures:\n" + "\n".join(lines)
     )
-    return claude_cli.run_prompt(prompt, skill=EXECUTION_ANALYZER).strip()
+    return claude_cli.run_prompt(prompt, skill=EXECUTION_ANALYZER, label="Failure analysis").strip()
 
 
 def build_report(db: Session, run_id: int) -> Report:

@@ -337,6 +337,21 @@ export interface EvidenceGrouped {
   byTicket: Record<string, ExecutionResultOut[]>;
 }
 
+/** Claude CLI activity (observability). */
+export interface AiCall {
+  id: number;
+  label: string;
+  skill?: string | null;
+  status: "running" | "ok" | "error";
+  startedAt: string;
+  durationMs?: number;
+  error?: string;
+}
+export interface AiActivity {
+  running: AiCall[];
+  recent: AiCall[];
+}
+
 /** WebSocket progress message shape. */
 export interface ProgressEvent {
   event: string;

@@ -1,4 +1,5 @@
 import { ChevronDown, Plus, Search } from "lucide-react";
+import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
 import { useRuns } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
 
@@ -39,6 +40,7 @@ export function TopBar() {
       </button>
 
       <div className="ml-auto flex items-center gap-2">
+        <AiActivityIndicator />
         {activeRun && (
           <button
             onClick={() => navigate("run")}

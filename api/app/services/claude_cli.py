@@ -64,6 +64,7 @@ def run_prompt(
     skill: str | None = None,
     include_template: bool = False,
     timeout: int | None = None,
+    label: str | None = None,
 ) -> str:
     """Run a single prompt through the Claude CLI and return its text result.
 
@@ -83,6 +84,10 @@ def run_prompt(
     if system:
         cmd += ["--append-system-prompt", system]
 
+    # Register the call so operators can observe it live (logs + /ai/activity + WS).
+    from app.services import activity
+
+    call_id = activity.start(label or skill or "Claude CLI", skill)
     logger.info("Claude CLI: {} chars prompt, model={}", len(prompt), settings.claude_model)
     try:
         proc = subprocess.run(  # noqa: S603
@@ -93,16 +98,23 @@ def run_prompt(
             encoding="utf-8",
         )
     except FileNotFoundError as exc:  # noqa: TRY003
+        activity.finish(call_id, ok=False, error="Claude CLI not found")
         raise ClaudeError(
             f"Claude CLI not found (looked for '{settings.claude_bin}'). Install it and "
             "authenticate with `claude login`."
         ) from exc
     except subprocess.TimeoutExpired as exc:  # noqa: TRY003
+        activity.finish(call_id, ok=False, error="timed out")
         raise ClaudeError(f"Claude CLI timed out after {timeout or settings.claude_timeout_s}s") from exc
+    except Exception as exc:  # noqa: BLE001
+        activity.finish(call_id, ok=False, error=str(exc)[:200])
+        raise
 
     if proc.returncode != 0:
+        activity.finish(call_id, ok=False, error=f"exit {proc.returncode}")
         raise ClaudeError(f"Claude CLI exited {proc.returncode}: {proc.stderr.strip()[:500]}")
 
+    activity.finish(call_id, ok=True)
     raw = proc.stdout.strip()
     # JSON envelope: {"type":"result","result":"...", ...}
     try:
@@ -121,6 +133,7 @@ def run_json(
     skill: str | None = None,
     include_template: bool = False,
     timeout: int | None = None,
+    label: str | None = None,
 ) -> Any:
     """Run a prompt expecting a JSON response and parse it.
 
@@ -137,6 +150,7 @@ def run_json(
         skill=skill,
         include_template=include_template,
         timeout=timeout,
+        label=label,
     )
     return _extract_json(text)
 

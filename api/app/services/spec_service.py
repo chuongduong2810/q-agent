@@ -81,7 +81,10 @@ def generate_spec_code(case: TestCase) -> str:
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
     raw = claude_cli.run_prompt(
-        _build_prompt(case), system=_SYSTEM_PROMPT, skill=AUTOMATION_GENERATOR
+        _build_prompt(case),
+        system=_SYSTEM_PROMPT,
+        skill=AUTOMATION_GENERATOR,
+        label=f"Spec: {case.ticket_external_id} {case.code}",
     )
     return _extract_code(raw)
 
