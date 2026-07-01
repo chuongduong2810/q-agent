@@ -86,6 +86,54 @@ def test_ado_fetch_tickets_normalizes_fields():
 
 
 @respx.mock
+def test_ado_fetch_tickets_retries_without_iteration_when_sprint_path_invalid():
+    """A WIQL 400 from a non-existent sprint path retries without the filter."""
+    import json as _json
+
+    adapter = AzureDevOpsAdapter(
+        config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
+        secrets={"pat": "secret-pat"},
+    )
+    wiql = respx.post("https://dev.azure.com/myorg/MyProj/_apis/wit/wiql").mock(
+        side_effect=[
+            httpx.Response(
+                400,
+                json={"message": "VS402371: The iteration path 'MyProj\\Nope' does not exist."},
+            ),
+            httpx.Response(200, json={"workItems": [{"id": 7}]}),
+        ]
+    )
+    respx.get("https://dev.azure.com/myorg/_apis/wit/workitems").mock(
+        return_value=httpx.Response(
+            200, json={"value": [{"id": 7, "fields": {"System.Title": "T"}, "relations": []}]}
+        )
+    )
+    respx.get("https://dev.azure.com/myorg/_apis/wit/workItems/7/comments").mock(
+        return_value=httpx.Response(200, json={"comments": []})
+    )
+
+    tickets = adapter.fetch_tickets(mode="sprint", sprint="Nope")
+    assert len(tickets) == 1 and tickets[0]["external_id"] == "7"
+    assert wiql.call_count == 2
+    first = _json.loads(wiql.calls[0].request.content)["query"]
+    second = _json.loads(wiql.calls[1].request.content)["query"]
+    assert "IterationPath" in first and "IterationPath" not in second
+
+
+@respx.mock
+def test_ado_fetch_tickets_raises_provider_error_on_non_sprint_wiql_400():
+    adapter = AzureDevOpsAdapter(
+        config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
+        secrets={"pat": "secret-pat"},
+    )
+    respx.post("https://dev.azure.com/myorg/MyProj/_apis/wit/wiql").mock(
+        return_value=httpx.Response(400, json={"message": "Bad query"})
+    )
+    with pytest.raises(ProviderError):
+        adapter.fetch_tickets(mode="assigned")
+
+
+@respx.mock
 def test_ado_publish_comment_uses_basic_auth():
     adapter = AzureDevOpsAdapter(
         config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},

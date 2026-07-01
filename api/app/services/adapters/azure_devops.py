@@ -14,13 +14,36 @@ from __future__ import annotations
 import base64
 import re
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
+from app.logging import logger
 from app.services.adapters import register
 from app.services.adapters.base import NormalizedTicket, ProviderAdapter, ProviderError
 
 API_VERSION = "7.1"
+
+# QA-relevant work item types across the common ADO process templates (Agile,
+# Scrum, Basic). Unknown values in a WIQL IN() list simply don't match — they do
+# not cause a 400 — so listing a superset is safe.
+_WORK_ITEM_TYPES = (
+    "User Story",
+    "Product Backlog Item",
+    "Bug",
+    "Task",
+    "Feature",
+    "Issue",
+)
+
+
+def _wiql_literal(value: str) -> str:
+    """Escape a value for use inside a single-quoted WIQL string literal."""
+    return value.replace("'", "''")
+
+
+class _WiqlError(RuntimeError):
+    """A 400 from the WIQL endpoint, carrying ADO's validation message."""
 
 
 def _strip_html(html: str) -> str:
@@ -128,12 +151,35 @@ class AzureDevOpsAdapter(ProviderAdapter):
         if mode == "selected" and ticket_ids:
             return [int(tid) for tid in ticket_ids if str(tid).isdigit()]
 
-        conditions = [f"[System.TeamProject] = '{project}'"]
+        types = ", ".join(f"'{t}'" for t in _WORK_ITEM_TYPES)
+        base_conditions = [
+            f"[System.TeamProject] = '{_wiql_literal(project)}'",
+            f"[System.WorkItemType] IN ({types})",
+            "[System.State] <> 'Removed'",
+        ]
+        conditions = list(base_conditions)
         if mode == "sprint" and sprint:
-            conditions.append(f"[System.IterationPath] UNDER '{project}\\{sprint}'")
+            conditions.append(
+                f"[System.IterationPath] UNDER '{_wiql_literal(project)}\\{_wiql_literal(sprint)}'"
+            )
         elif mode == "assigned":
             conditions.append("[System.AssignedTo] = @Me")
 
+        try:
+            return self._run_wiql(client, project, conditions)
+        except _WiqlError as exc:
+            # The most common WIQL 400 is an iteration/area path that does not
+            # exist in this project (e.g. a placeholder sprint name). Retry once
+            # without the iteration filter so sync still returns the project's
+            # work items; otherwise surface ADO's own error message.
+            if mode == "sprint" and sprint:
+                logger.warning(
+                    "ADO WIQL rejected iteration filter ({}); retrying without sprint scope", exc
+                )
+                return self._run_wiql(client, project, base_conditions)
+            raise ProviderError(f"Azure DevOps WIQL query failed: {exc}") from exc
+
+    def _run_wiql(self, client: httpx.Client, project: str, conditions: list[str]) -> list[int]:
         wiql = {
             "query": (
                 "SELECT [System.Id] FROM WorkItems WHERE "
@@ -142,9 +188,15 @@ class AzureDevOpsAdapter(ProviderAdapter):
             )
         }
         resp = client.post(
-            f"/{project}/_apis/wit/wiql?api-version={API_VERSION}",
+            f"/{quote(project)}/_apis/wit/wiql?api-version={API_VERSION}",
             json=wiql,
         )
+        if resp.status_code == 400:
+            try:
+                message = resp.json().get("message") or resp.text
+            except ValueError:
+                message = resp.text
+            raise _WiqlError(message.strip())
         resp.raise_for_status()
         data = resp.json()
         return [wi["id"] for wi in data.get("workItems", [])]
