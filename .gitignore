@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+app/node_modules/
+
+# build output
+app/dist/
+dist/
+
+# vite / ts cache
+*.tsbuildinfo
+app/*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / os
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+
+# scratch / test artifacts
+scratch/
+*.local
+
+# python / backend
+api/.venv/
+**/__pycache__/
+*.py[cod]
+api/workspace/
+*.db
+.env
+!.env.example
+.pytest_cache/
+.ruff_cache/

@@ -1,0 +1,72 @@
+"""Run model — the central QA-session entity, plus its per-ticket rows."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base, timestamp_column
+
+# Pipeline stages (also the Run.status state machine).
+RUN_STATUSES = (
+    "processing",  # AI analysis + test-case generation
+    "review",
+    "automation",
+    "executing",
+    "evidence",
+    "comment",
+    "done",
+)
+RUN_SCOPES = ("single", "selected", "assigned", "sprint")
+
+# Per-ticket generation status inside a run.
+GEN_STATUSES = ("queued", "analyzing", "generating", "done", "error")
+
+
+class Run(Base):
+    __tablename__ = "runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True)  # e.g. "RUN-205"
+    name: Mapped[str] = mapped_column(String(300))
+    scope: Mapped[str] = mapped_column(String(32), default="selected")
+    scope_label: Mapped[str] = mapped_column(String(120), default="Selected tickets")
+
+    framework: Mapped[str] = mapped_column(String(32), default="Playwright")
+    browser: Mapped[str] = mapped_column(String(32), default="chromium")
+    env: Mapped[str] = mapped_column(String(32), default="Staging")
+    workers: Mapped[int] = mapped_column(Integer, default=4)
+    retry_policy: Mapped[int] = mapped_column(Integer, default=2)  # retries on flaky
+
+    status: Mapped[str] = mapped_column(String(32), default="processing", index=True)
+    created_at: Mapped[datetime] = timestamp_column()
+
+    run_tickets: Mapped[list["RunTicket"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="RunTicket.position"
+    )
+
+    @property
+    def ticket_ids(self) -> list[str]:
+        return [rt.ticket_external_id for rt in self.run_tickets]
+
+
+class RunTicket(Base):
+    """Association of a ticket to a run, carrying per-ticket AI analysis + status."""
+
+    __tablename__ = "run_tickets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    ticket_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ticket_external_id: Mapped[str] = mapped_column(String(64), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+    gen_status: Mapped[str] = mapped_column(String(16), default="queued")
+    # AI analysis output: {businessRules, functionalRequirements, validationRules,
+    # risks, edgeCases, missingInformation, suggestedScope}
+    analysis: Mapped[dict] = mapped_column(JSON, default=dict)
+    analysis_error: Mapped[str] = mapped_column(Text, default="")
+
+    run: Mapped["Run"] = relationship(back_populates="run_tickets")
