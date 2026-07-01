@@ -1,28 +1,29 @@
 import { motion } from "framer-motion";
-import { ArrowRight, Sparkles } from "lucide-react";
-import { useMemo } from "react";
+import { ArrowRight, FolderKanban, RefreshCw, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { providerGlyph } from "@/components/ui/badges";
-import {
-  SAMPLE_PROJECTS,
-  confidenceColor,
-  knowledgeStatusStyle,
-  type SampleProject,
-} from "@/data/projects";
-import { useKnowledgeList } from "@/hooks/queries";
+import { EmptyState, Spinner } from "@/components/ui/misc";
+import { confidenceColor, knowledgeStatusStyle, providerLabel } from "@/data/projects";
+import { useKnowledgeList, useProjects, useProviders, useRefreshProjects } from "@/hooks/queries";
 import { useKnowledgeBuilder } from "@/hooks/useKnowledgeBuilder";
 import { useUI } from "@/store/ui";
-import type { ProjectKnowledgeOut } from "@/types/api";
+import type { ProjectKnowledgeOut, ProjectOut } from "@/types/api";
 
 /**
- * Projects grid. Q-Agent learns each project (Project Knowledge) before testing:
- * cards show knowledge status and either a "Build Project Knowledge" CTA or open
- * the project detail. Knowledge status is merged live from the backend by name.
+ * Projects grid — real connected projects pulled from providers (GET /projects,
+ * refreshed from provider adapters). Knowledge status is merged in live by name.
+ * No mock data: an empty list prompts the user to connect a provider in Settings.
  */
 export function Projects() {
   const openProject = useUI((s) => s.openProject);
-  const { data: knowledgeList } = useKnowledgeList();
+  const navigate = useUI((s) => s.navigate);
   const build = useKnowledgeBuilder();
+
+  const { data: projects, isLoading } = useProjects();
+  const { data: providers } = useProviders();
+  const { data: knowledgeList } = useKnowledgeList();
+  const refresh = useRefreshProjects();
 
   const byName = useMemo(() => {
     const m = new Map<string, ProjectKnowledgeOut>();
@@ -30,27 +31,83 @@ export function Projects() {
     return m;
   }, [knowledgeList]);
 
+  const connectedCount = (providers ?? []).filter((p) => p.connected).length;
+
+  // Auto-pull projects from connected providers once, if none are cached yet.
+  const triedRefresh = useRef(false);
+  useEffect(() => {
+    if (
+      !triedRefresh.current &&
+      !isLoading &&
+      (projects?.length ?? 0) === 0 &&
+      connectedCount > 0 &&
+      !refresh.isPending
+    ) {
+      triedRefresh.current = true;
+      refresh.mutate();
+    }
+  }, [isLoading, projects, connectedCount, refresh]);
+
   return (
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
-      <div className="mb-5">
-        <div className="mb-[5px] text-[13px] font-medium text-muted">
-          Across connected providers &middot; Q&#8209;Agent learns each project before it tests
+      <div className="mb-5 flex items-end justify-between">
+        <div>
+          <div className="mb-[5px] text-[13px] font-medium text-muted">
+            Across {connectedCount} connected provider{connectedCount === 1 ? "" : "s"} &middot;
+            Q&#8209;Agent learns each project before it tests
+          </div>
+          <h1 className="m-0 text-[28px] font-black tracking-tight">Projects</h1>
         </div>
-        <h1 className="m-0 text-[28px] font-black tracking-tight">Projects</h1>
+        <Button variant="glass" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+          {refresh.isPending ? <Spinner size={14} /> : <RefreshCw size={15} strokeWidth={2.2} />}
+          Refresh
+        </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3.5">
-        {SAMPLE_PROJECTS.map((p, i) => (
-          <ProjectCard
-            key={p.name}
-            project={p}
-            knowledge={byName.get(p.name)}
-            index={i}
-            onOpen={() => openProject(p.name)}
-            onBuild={() => build(p)}
-          />
-        ))}
-      </div>
+      {isLoading || refresh.isPending ? (
+        <div className="grid grid-cols-3 gap-3.5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="glass h-[240px] animate-pulse rounded-[20px]" />
+          ))}
+        </div>
+      ) : !projects?.length ? (
+        <EmptyState
+          icon={<FolderKanban size={28} className="text-muted" />}
+          title="No connected projects"
+          body="Connect Azure DevOps, Jira or GitHub in Settings, then refresh to pull your projects in."
+          action={
+            <div className="flex gap-2.5">
+              <Button variant="primary" onClick={() => navigate("settings")}>
+                Open Settings
+              </Button>
+              <Button variant="glass" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+                <RefreshCw size={15} strokeWidth={2.2} /> Refresh
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-3 gap-3.5">
+          {projects.map((p, i) => (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              knowledge={byName.get(p.name)}
+              index={i}
+              onOpen={() => openProject(p.name)}
+              onBuild={() => {
+                const k = byName.get(p.name);
+                build({
+                  name: p.name,
+                  provider: providerLabel[p.providerKind],
+                  repo: k?.repo || p.externalId,
+                  framework: k?.framework || "Playwright",
+                });
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -62,7 +119,7 @@ function ProjectCard({
   onOpen,
   onBuild,
 }: {
-  project: SampleProject;
+  project: ProjectOut;
   knowledge: ProjectKnowledgeOut | undefined;
   index: number;
   onOpen: () => void;
@@ -74,9 +131,10 @@ function ProjectCard({
   const [statusLabel, statusColor, statusBg, statusDot] = knowledgeStatusStyle(status);
   const [glyph, glyphBg] = providerGlyph[project.providerKind] ?? ["?", "#6b7280"];
   const glyphColor = project.providerKind === "github" ? "#12121a" : "#fff";
-  const lastIndexed = indexed && knowledge?.lastIndexed
-    ? new Date(knowledge.lastIndexed).toLocaleDateString()
-    : "Never";
+  const repo = knowledge?.repo || "";
+  const framework = knowledge?.framework || "Playwright";
+  const lastIndexed =
+    indexed && knowledge?.lastIndexed ? new Date(knowledge.lastIndexed).toLocaleDateString() : "Never";
 
   return (
     <motion.div
@@ -97,7 +155,7 @@ function ProjectCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-bold">{project.name}</div>
-          <div className="truncate font-mono text-[11px] text-[#8b8b9e]">{project.repo}</div>
+          {repo && <div className="truncate font-mono text-[11px] text-[#8b8b9e]">{repo}</div>}
         </div>
         {project.active && (
           <span
@@ -122,16 +180,13 @@ function ProjectCard({
       <div className="mb-4 grid grid-cols-2 gap-x-3 gap-y-2.5">
         <Field label="Last indexed" value={lastIndexed} />
         <Field label="Confidence" value={`${confidence}%`} valueColor={confidenceColor(confidence)} />
-        <Field label="Framework" value={project.framework} />
-        <Field label="Provider" value={project.provider} />
+        <Field label="Framework" value={framework} />
+        <Field label="Provider" value={providerLabel[project.providerKind]} />
       </div>
 
       {indexed ? (
         <div className="mt-auto flex items-center justify-between border-t border-white/[0.06] pt-3">
-          <span className="text-[11.5px] text-[#8b8b9e]">
-            <b className="text-ink-soft">{project.tickets}</b> tickets &middot;{" "}
-            <b className="text-ink-soft">{project.runs}</b> runs
-          </span>
+          <span className="text-[11.5px] text-[#8b8b9e]">Knowledge base ready</span>
           <span className="flex items-center gap-[5px] text-[12px] font-bold text-violet">
             Open <ArrowRight size={13} strokeWidth={2.4} />
           </span>

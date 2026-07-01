@@ -1,27 +1,11 @@
 import type { ProviderKind } from "@/types/api";
 
-/**
- * Showcase project set (from the approved design). Used as the Projects grid /
- * detail fallback until real provider projects populate; knowledge status for
- * each is merged in live from the backend by project name (= knowledge key).
- */
-export interface SampleProject {
-  name: string;
-  provider: string;
-  providerKind: ProviderKind;
-  repo: string;
-  framework: string;
-  tickets: number;
-  runs: number;
-  rate: string;
-  active: boolean;
-}
-
-export const SAMPLE_PROJECTS: SampleProject[] = [
-  { name: "Surency Platform", provider: "Azure DevOps", providerKind: "ado", repo: "surency-eng/surency-web", framework: "Playwright", tickets: 42, runs: 1, rate: "94%", active: true },
-  { name: "Surency Mobile", provider: "Azure DevOps", providerKind: "ado", repo: "surency-eng/surency-mobile", framework: "Playwright", tickets: 28, runs: 0, rate: "91%", active: false },
-  { name: "Claims Portal", provider: "Jira", providerKind: "jira", repo: "surency-eng/claims-portal", framework: "Playwright", tickets: 63, runs: 0, rate: "97%", active: false },
-];
+/** Human label for a provider kind. */
+export const providerLabel: Record<ProviderKind, string> = {
+  ado: "Azure DevOps",
+  jira: "Jira",
+  github: "GitHub",
+};
 
 /** Cosmetic build steps shown in the AI knowledge-build overlay. */
 export const KNOWLEDGE_STEPS = [

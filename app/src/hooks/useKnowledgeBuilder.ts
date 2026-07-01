@@ -1,7 +1,13 @@
 import { toast } from "sonner";
 import { useBuildKnowledge } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
-import type { SampleProject } from "@/data/projects";
+
+export interface BuildTarget {
+  name: string;
+  provider: string;
+  repo: string;
+  framework: string;
+}
 
 /**
  * Kicks off a real Project Knowledge build (Claude project-bootstrap) while the
@@ -10,7 +16,7 @@ import type { SampleProject } from "@/data/projects";
  */
 export function useKnowledgeBuilder() {
   const build = useBuildKnowledge();
-  return (project: Pick<SampleProject, "name" | "provider" | "repo" | "framework">) => {
+  return (project: BuildTarget) => {
     const ui = useUI.getState();
     ui.startKnowledgeBuild(project.name);
     build.mutate(

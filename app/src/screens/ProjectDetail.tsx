@@ -4,10 +4,22 @@ import { useState } from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { providerGlyph } from "@/components/ui/badges";
-import { SAMPLE_PROJECTS, confidenceColor, knowledgeStatusStyle } from "@/data/projects";
-import { useProjectKnowledge } from "@/hooks/queries";
+import { confidenceColor, knowledgeStatusStyle, providerLabel } from "@/data/projects";
+import { useProjectKnowledge, useProjects, useRuns, useTickets } from "@/hooks/queries";
 import { useKnowledgeBuilder } from "@/hooks/useKnowledgeBuilder";
 import { useUI, type ProjectTab } from "@/store/ui";
+import type { ProviderKind } from "@/types/api";
+
+interface ProjectMeta {
+  name: string;
+  repo: string;
+  framework: string;
+  provider: string;
+  providerKind: ProviderKind;
+  tickets: number;
+  runs: number;
+  rate: string;
+}
 
 const TABS: { id: ProjectTab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -24,8 +36,23 @@ export function ProjectDetail() {
   const navigate = useUI((s) => s.navigate);
   const build = useKnowledgeBuilder();
 
-  const meta = SAMPLE_PROJECTS.find((p) => p.name === key) ?? SAMPLE_PROJECTS[0];
+  const { data: projects } = useProjects();
   const { data: knowledge } = useProjectKnowledge(key);
+  const { data: tickets } = useTickets();
+  const { data: runs } = useRuns();
+
+  const project = projects?.find((p) => p.name === key);
+  const providerKind: ProviderKind = project?.providerKind ?? "ado";
+  const meta: ProjectMeta = {
+    name: key,
+    repo: knowledge?.repo || "",
+    framework: knowledge?.framework || "Playwright",
+    provider: providerLabel[providerKind],
+    providerKind,
+    tickets: (tickets ?? []).filter((t) => t.providerKind === providerKind).length,
+    runs: (runs ?? []).filter((r) => r.status !== "done").length,
+    rate: "—",
+  };
 
   const status = knowledge?.status ?? "not_indexed";
   const indexed = status === "indexed";
@@ -58,7 +85,8 @@ export function ProjectDetail() {
         <div className="flex-1">
           <h1 className="m-0 text-[26px] font-black tracking-tight">{meta.name}</h1>
           <div className="font-mono text-[12.5px] text-ink-dim">
-            {meta.repo} &middot; {meta.provider}
+            {meta.repo ? `${meta.repo} · ` : ""}
+            {meta.provider}
           </div>
         </div>
         <div
@@ -130,7 +158,7 @@ function Overview({
   confidence,
   onView,
 }: {
-  meta: (typeof SAMPLE_PROJECTS)[number];
+  meta: ProjectMeta;
   confidence: number;
   onView: () => void;
 }) {
