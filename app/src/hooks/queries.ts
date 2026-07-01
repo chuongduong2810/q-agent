@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 import type {
   AnnotationShape,
+  AutomationSpecOut,
   ProviderFieldsIn,
   ProviderKind,
   RunCreate,
@@ -162,7 +163,7 @@ export const useCaseMutations = (runId: number | string) => {
 
 // -------------------------------------------------------------- automation
 export const useSpecs = (runId: number | string | null) =>
-  useQuery({
+  useQuery<AutomationSpecOut[]>({
     queryKey: queryKeys.specs(runId ?? 0),
     queryFn: () => api.listSpecs(runId as number),
     enabled: runId != null,
