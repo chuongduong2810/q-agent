@@ -34,3 +34,6 @@ api/workspace/
 !.env.example
 .pytest_cache/
 .ruff_cache/
+
+# agent worktrees
+.claude/
