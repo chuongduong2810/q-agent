@@ -13,9 +13,16 @@ from sqlalchemy.orm import Session
 
 from app import crypto
 from app.db import get_db, utcnow
+from app.models.linked import LinkedTestCase
 from app.models.provider import Provider
 from app.models.ticket import Ticket
-from app.schemas import SyncRequest, SyncResult, TicketDetailOut, TicketOut
+from app.schemas import (
+    LinkedTestCaseOut,
+    SyncRequest,
+    SyncResult,
+    TicketDetailOut,
+    TicketOut,
+)
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
 
@@ -65,6 +72,17 @@ def get_ticket(external_id: str, db: Session = Depends(get_db)) -> TicketDetailO
                 db.rollback()
 
     return TicketDetailOut.model_validate(ticket)
+
+
+@router.get("/{external_id}/linked-cases", response_model=list[LinkedTestCaseOut])
+def linked_cases(external_id: str, db: Session = Depends(get_db)) -> list[LinkedTestCase]:
+    """Test cases created in the provider and linked to this work item."""
+    return (
+        db.query(LinkedTestCase)
+        .filter(LinkedTestCase.ticket_external_id == external_id)
+        .order_by(LinkedTestCase.id.desc())
+        .all()
+    )
 
 
 @router.post("/sync", response_model=SyncResult)

@@ -20,7 +20,15 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.run import Run
 from app.models.testcase import TestCase
-from app.schemas import ApprovalUpdate, TestCaseCreate, TestCaseOut, TestCaseUpdate
+from app.schemas import (
+    ApprovalUpdate,
+    CreateLinkRequest,
+    LinkStatusOut,
+    TestCaseCreate,
+    TestCaseOut,
+    TestCaseUpdate,
+)
+from app.services import link_service
 from app.services.ai_service import next_case_code, regenerate_case
 from app.services.claude_cli import ClaudeError
 
@@ -111,6 +119,33 @@ def regenerate_single_case(case_id: int, db: Session = Depends(get_db)) -> TestC
         return regenerate_case(db, case)
     except ClaudeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/runs/{run_id}/testcases/create-link", response_model=LinkStatusOut)
+def create_and_link(
+    run_id: int, body: CreateLinkRequest, db: Session = Depends(get_db)
+) -> LinkStatusOut:
+    """Create approved test cases in the provider (+link to work items when link=true).
+
+    Runs in the background; poll GET /runs/{id}/linked or subscribe to the run WS
+    (sync.progress / sync.done) for results.
+    """
+    _get_run_or_404(db, run_id)
+    approved = (
+        db.query(TestCase)
+        .filter(TestCase.run_id == run_id, TestCase.approval == "approved")
+        .count()
+    )
+    if not approved:
+        raise HTTPException(status_code=400, detail="No approved test cases to create")
+    link_service.start_create_link(run_id, body.link, body.ticket_ids)
+    return LinkStatusOut(**link_service.link_status(db, run_id))
+
+
+@router.get("/runs/{run_id}/linked", response_model=LinkStatusOut)
+def linked_status(run_id: int, db: Session = Depends(get_db)) -> LinkStatusOut:
+    _get_run_or_404(db, run_id)
+    return LinkStatusOut(**link_service.link_status(db, run_id))
 
 
 @router.post("/runs/{run_id}/approve-all", response_model=list[TestCaseOut])

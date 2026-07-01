@@ -55,6 +55,18 @@ def _split_ac(text: str) -> list[str]:
     return [ln for ln in lines if ln]
 
 
+def _text_to_adf(text: str) -> dict:
+    """Wrap plain text into a minimal Atlassian Document Format doc."""
+    lines = text.split("\n") if text else [""]
+    return {
+        "type": "doc",
+        "version": 1,
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": ln or " "}]} for ln in lines
+        ],
+    }
+
+
 class JiraAdapter(ProviderAdapter):
     kind = "jira"
 
@@ -300,6 +312,65 @@ class JiraAdapter(ProviderAdapter):
             )
             resp.raise_for_status()
             return str(resp.json().get("id", ""))
+
+    def create_test_case(
+        self,
+        ticket_external_id: str,
+        *,
+        title: str,
+        precondition: str = "",
+        steps: list[dict[str, Any]] | None = None,
+        priority: str = "Medium",
+        link: bool = True,
+    ) -> dict[str, Any]:
+        """Create a Jira issue for the test case and link it to the ticket ('Relates')."""
+        if not self.project:
+            raise ProviderError("Jira project is not configured")
+        body_lines = []
+        if precondition:
+            body_lines.append(f"Precondition: {precondition}")
+        for i, st in enumerate(steps or [], start=1):
+            body_lines.append(f"{i}. {st.get('a', '')} -> {st.get('e', '')}")
+        description = _text_to_adf("\n".join(body_lines) or title)
+
+        with self._client() as client:
+            def _create(issuetype: str) -> httpx.Response:
+                return client.post(
+                    f"{API_PREFIX}/issue",
+                    json={
+                        "fields": {
+                            "project": {"key": self.project},
+                            "summary": title[:250],
+                            "description": description,
+                            "issuetype": {"name": issuetype},
+                        }
+                    },
+                )
+
+            resp = _create("Test")
+            if resp.status_code >= 400:
+                resp = _create("Task")  # not all instances have a 'Test' issue type
+            if resp.status_code >= 400:
+                raise ProviderError(f"Jira create issue failed ({resp.status_code}): {resp.text[:300]}")
+            key = resp.json().get("key", "")
+
+            linked = False
+            if link and key:
+                lr = client.post(
+                    f"{API_PREFIX}/issueLink",
+                    json={
+                        "type": {"name": "Relates"},
+                        "inwardIssue": {"key": key},
+                        "outwardIssue": {"key": ticket_external_id},
+                    },
+                )
+                linked = lr.status_code < 400
+        return {
+            "external_id": key,
+            "url": f"{self.base_url}/browse/{key}" if key else "",
+            "status": "To Do",
+            "linked": linked,
+        }
 
     def update_status(self, ticket_external_id: str, target_status: str) -> None:
         with self._client() as client:

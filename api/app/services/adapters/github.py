@@ -120,6 +120,41 @@ class GitHubAdapter(ProviderAdapter):
                 for c in resp.json()
             ]
 
+    def create_test_case(
+        self,
+        ticket_external_id: str,
+        *,
+        title: str,
+        precondition: str = "",
+        steps: list[dict[str, Any]] | None = None,
+        priority: str = "Medium",
+        link: bool = True,
+    ) -> dict[str, Any]:
+        """Create a GitHub issue for the test case, referencing the source issue."""
+        if not self.org or not self.repo:
+            raise ProviderError("GitHub org/repo is not configured")
+        lines = [f"**Priority:** {priority}"]
+        if precondition:
+            lines.append(f"**Precondition:** {precondition}")
+        for i, st in enumerate(steps or [], start=1):
+            lines.append(f"{i}. {st.get('a', '')} — _{st.get('e', '')}_")
+        if link:
+            lines.append(f"\nTest case for #{ticket_external_id}")
+        with self._client() as client:
+            resp = client.post(
+                f"/repos/{self.org}/{self.repo}/issues",
+                json={"title": f"[Test] {title}", "body": "\n".join(lines), "labels": ["qa", "test-case"]},
+            )
+            if resp.status_code >= 400:
+                raise ProviderError(f"GitHub create issue failed ({resp.status_code}): {resp.text[:300]}")
+            issue = resp.json()
+        return {
+            "external_id": str(issue.get("number", "")),
+            "url": issue.get("html_url", ""),
+            "status": "Open",
+            "linked": bool(link),
+        }
+
     def _current_login(self, client: httpx.Client) -> str:
         resp = client.get("/user")
         resp.raise_for_status()

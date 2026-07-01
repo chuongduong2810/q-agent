@@ -12,6 +12,7 @@ Secret fields: ``pat`` (Personal Access Token).
 from __future__ import annotations
 
 import base64
+import json
 import re
 from typing import Any
 from urllib.parse import quote
@@ -40,6 +41,38 @@ _WORK_ITEM_TYPES = (
 def _wiql_literal(value: str) -> str:
     """Escape a value for use inside a single-quoted WIQL string literal."""
     return value.replace("'", "''")
+
+
+def _xml_escape(value: str) -> str:
+    return (
+        (value or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _steps_xml(steps: list[dict[str, Any]]) -> str:
+    """Serialize steps into the Azure DevOps TCM Steps XML format."""
+    if not steps:
+        return '<steps id="0" last="1"></steps>'
+    parts = []
+    for i, st in enumerate(steps, start=2):
+        action = _xml_escape(st.get("a", ""))
+        expected = _xml_escape(st.get("e", ""))
+        parts.append(
+            f'<step id="{i}" type="ActionStep">'
+            f'<parameterizedString isformatted="true">{action}</parameterizedString>'
+            f'<parameterizedString isformatted="true">{expected}</parameterizedString>'
+            f"<description/></step>"
+        )
+    return f'<steps id="0" last="{len(steps) + 1}">{"".join(parts)}</steps>'
+
+
+def _json_bytes(value: Any) -> bytes:
+    """Serialize a JSON-patch body to bytes (so the json-patch content-type header sticks)."""
+    return json.dumps(value).encode("utf-8")
 
 
 class _WiqlError(RuntimeError):
@@ -395,6 +428,65 @@ class AzureDevOpsAdapter(ProviderAdapter):
                 json=[{"op": "add", "path": "/fields/System.State", "value": target_status}],
             )
             resp.raise_for_status()
+
+    def create_test_case(
+        self,
+        ticket_external_id: str,
+        *,
+        title: str,
+        precondition: str = "",
+        steps: list[dict[str, Any]] | None = None,
+        priority: str = "Medium",
+        link: bool = True,
+    ) -> dict[str, Any]:
+        """Create an ADO 'Test Case' work item (with TCM steps) and relate it to the ticket."""
+        if not self.project:
+            raise ProviderError("Azure DevOps project is not configured")
+        prio = {"High": 1, "Medium": 2, "Low": 3}.get(priority, 2)
+        patch: list[dict[str, Any]] = [
+            {"op": "add", "path": "/fields/System.Title", "value": title},
+            {"op": "add", "path": "/fields/Microsoft.VSTS.Common.Priority", "value": prio},
+            {"op": "add", "path": "/fields/Microsoft.VSTS.TCM.Steps", "value": _steps_xml(steps or [])},
+        ]
+        if precondition:
+            patch.append(
+                {"op": "add", "path": "/fields/System.Description", "value": _xml_escape(precondition)}
+            )
+        with self._client() as client:
+            resp = client.post(
+                f"/{quote(self.project)}/_apis/wit/workitems/$Test%20Case",
+                params={"api-version": API_VERSION},
+                headers={"Content-Type": "application/json-patch+json"},
+                content=_json_bytes(patch),
+            )
+            if resp.status_code >= 400:
+                raise ProviderError(f"ADO create test case failed ({resp.status_code}): {resp.text[:300]}")
+            created = resp.json()
+            tc_id = created["id"]
+            web_url = (created.get("_links", {}).get("html", {}) or {}).get("href", "")
+
+            linked = False
+            if link:
+                ticket_url = f"{self.org_url}/_apis/wit/workItems/{ticket_external_id}"
+                rel = client.patch(
+                    f"/_apis/wit/workitems/{tc_id}?api-version={API_VERSION}",
+                    headers={"Content-Type": "application/json-patch+json"},
+                    content=_json_bytes(
+                        [
+                            {
+                                "op": "add",
+                                "path": "/relations/-",
+                                "value": {
+                                    "rel": "System.LinkTypes.Related",
+                                    "url": ticket_url,
+                                    "attributes": {"comment": "Q-Agent generated test case"},
+                                },
+                            }
+                        ]
+                    ),
+                )
+                linked = rel.status_code < 400
+        return {"external_id": str(tc_id), "url": web_url, "status": "Design", "linked": linked}
 
 
 register("ado", AzureDevOpsAdapter)

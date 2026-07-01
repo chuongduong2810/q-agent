@@ -13,6 +13,7 @@ from app.db import Base, timestamp_column
 RUN_STATUSES = (
     "processing",  # AI analysis + test-case generation
     "review",
+    "sync",  # create approved cases in the provider + link to work items
     "automation",
     "executing",
     "evidence",

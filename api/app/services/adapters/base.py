@@ -91,3 +91,20 @@ class ProviderAdapter(ABC):
     def update_status(self, ticket_external_id: str, target_status: str) -> None:
         """Transition the work item's status (optional; override if supported)."""
         return None
+
+    def create_test_case(
+        self,
+        ticket_external_id: str,
+        *,
+        title: str,
+        precondition: str = "",
+        steps: list[dict[str, Any]] | None = None,
+        priority: str = "Medium",
+        link: bool = True,
+    ) -> dict[str, Any]:
+        """Create a test case in the provider and (optionally) link it to the work item.
+
+        Returns ``{external_id, url, status, linked}``. Override per provider;
+        default raises since not every provider supports test cases.
+        """
+        raise ProviderError("Creating test cases is not supported for this provider")

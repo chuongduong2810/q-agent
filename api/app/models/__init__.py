@@ -9,6 +9,7 @@ from app.models.execution import Evidence, Execution, ExecutionResult
 from app.models.report import Report
 from app.models.comment import TicketComment
 from app.models.knowledge import ProjectKnowledge
+from app.models.linked import LinkedTestCase
 
 __all__ = [
     "Provider",
@@ -24,4 +25,5 @@ __all__ = [
     "Report",
     "TicketComment",
     "ProjectKnowledge",
+    "LinkedTestCase",
 ]

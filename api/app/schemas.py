@@ -207,6 +207,40 @@ class ApprovalUpdate(ApiModel):
     approval: str  # approved | rejected | pending
 
 
+# ---------------------------------------------------------------- Linked test cases
+class LinkedTestCaseOut(ApiModel):
+    id: int
+    ticket_external_id: str
+    provider_kind: str
+    external_id: str
+    title: str
+    status: str = "Design"
+    url: str = ""
+    linked: bool = False
+    updated_at: datetime | None = None
+
+
+class CreateLinkRequest(ApiModel):
+    """Create approved test cases in the provider; link them when ``link`` is true."""
+
+    link: bool = True
+    ticket_ids: list[str] = Field(default_factory=list)  # empty = all tickets in the run
+
+
+class LinkTicketResult(ApiModel):
+    ticket_external_id: str
+    provider_kind: str
+    count: int = 0
+    created: bool = False
+    linked: bool = False
+    error: str = ""
+
+
+class LinkStatusOut(ApiModel):
+    status: str = "idle"  # idle | running | done
+    results: list[LinkTicketResult] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------- Runs
 class RunTicketOut(ApiModel):
     ticket_external_id: str
