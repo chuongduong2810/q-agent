@@ -45,8 +45,32 @@ def _extract_json(text: str) -> Any:
         raise ClaudeError(f"Claude returned non-JSON output: {exc}") from exc
 
 
-def run_prompt(prompt: str, *, system: str | None = None, timeout: int | None = None) -> str:
-    """Run a single prompt through the Claude CLI and return its text result."""
+def _compose_system(system: str | None, skill: str | None, include_template: bool) -> str | None:
+    """Merge an explicit system prompt with a dedicated skill's SKILL.md."""
+    if not skill:
+        return system
+    from app.services.skills import load_skill  # local import avoids any load-order coupling
+
+    skill_text = load_skill(skill, include_template=include_template)
+    if not skill_text:
+        return system
+    return f"{skill_text}\n\n{system}" if system else skill_text
+
+
+def run_prompt(
+    prompt: str,
+    *,
+    system: str | None = None,
+    skill: str | None = None,
+    include_template: bool = False,
+    timeout: int | None = None,
+) -> str:
+    """Run a single prompt through the Claude CLI and return its text result.
+
+    If ``skill`` is given, that dedicated Q-Agent skill's SKILL.md is injected as
+    the system prompt so the action follows the skill's methodology.
+    """
+    system = _compose_system(system, skill, include_template)
     cmd = [
         settings.claude_bin,
         "-p",
@@ -90,13 +114,30 @@ def run_prompt(prompt: str, *, system: str | None = None, timeout: int | None = 
     return raw
 
 
-def run_json(prompt: str, *, system: str | None = None, timeout: int | None = None) -> Any:
-    """Run a prompt expecting a JSON response and parse it."""
+def run_json(
+    prompt: str,
+    *,
+    system: str | None = None,
+    skill: str | None = None,
+    include_template: bool = False,
+    timeout: int | None = None,
+) -> Any:
+    """Run a prompt expecting a JSON response and parse it.
+
+    ``skill`` injects a dedicated Q-Agent skill; the JSON-only instruction still
+    pins the machine-parseable output shape the backend consumes.
+    """
     instruction = (
         "\n\nRespond with ONLY a single valid JSON value (object or array). "
         "Do not include prose or markdown fences."
     )
-    text = run_prompt(prompt + instruction, system=system, timeout=timeout)
+    text = run_prompt(
+        prompt + instruction,
+        system=system,
+        skill=skill,
+        include_template=include_template,
+        timeout=timeout,
+    )
     return _extract_json(text)
 
 

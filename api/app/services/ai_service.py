@@ -22,6 +22,7 @@ from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
 from app.services.claude_cli import ClaudeError, run_json
+from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR
 from app.services.prompts import (
     build_analysis_prompt,
     build_case_regenerate_prompt,
@@ -90,7 +91,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             run.id, ticket.external_id, PHASE_BUSINESS_RULES, "Identifying business rules..."
         )
 
-        analysis = run_json(build_analysis_prompt(ticket))
+        analysis = run_json(build_analysis_prompt(ticket), skill=REQUIREMENT_ANALYST)
         if not isinstance(analysis, dict):
             raise ClaudeError("Claude analysis response was not a JSON object")
 
@@ -101,7 +102,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
 
         _publish_phase(run.id, ticket.external_id, PHASE_GENERATING, "Generating test cases...")
 
-        cases = run_json(build_generation_prompt(ticket, analysis))
+        cases = run_json(build_generation_prompt(ticket, analysis), skill=TEST_CASE_GENERATOR)
         if not isinstance(cases, list):
             raise ClaudeError("Claude generation response was not a JSON array")
 
@@ -226,7 +227,9 @@ def regenerate_case(db: Session, test_case: TestCase) -> TestCase:
         "platform": test_case.platform,
     }
 
-    result = run_json(build_case_regenerate_prompt(ticket, analysis, existing_case))
+    result = run_json(
+        build_case_regenerate_prompt(ticket, analysis, existing_case), skill=TEST_CASE_GENERATOR
+    )
     if not isinstance(result, dict):
         raise ClaudeError("Claude case-regenerate response was not a JSON object")
 

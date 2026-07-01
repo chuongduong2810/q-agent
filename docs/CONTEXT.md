@@ -47,6 +47,25 @@ every run-scoped screen) and of the backend `Run.status` state machine.
 - **UI source of truth:** `design/Q-Agent app design/Q-Agent.dc.html` — the frontend
   reproduces it faithfully, then wires it to the live backend.
 
+## Dedicated AI skills
+
+Every Claude CLI action is guided by a dedicated skill under `skills/<name>/SKILL.md`
+(methodology + quality rules + output templates). The backend injects the matching
+skill's `SKILL.md` as the Claude **system prompt** for that action (via
+`app/services/skills.py`), while the caller's prompt still pins the exact JSON/text
+shape the backend parses. Configurable via `QAGENT_SKILLS_DIR` (default `skills/`).
+
+| Backend action | Skill |
+|---|---|
+| Ticket requirement analysis | `requirement-analyst` |
+| Test-case generation / regeneration | `test-case-generator` |
+| Playwright spec generation | `automation-generator` |
+| AI failure analysis (reports) | `execution-analyzer` |
+| Ticket result comment | `ticket-comment-generator` |
+
+Other skills ship for future/adjacent use: `test-case-reviewer`, `automation-reviewer`,
+`report-generator`, `screenshot-annotator`, `project-bootstrap`.
+
 ## Personas
 
 - **QA Engineer / QA Lead** (e.g. "Maya Kaur" in the seed data): the primary user.

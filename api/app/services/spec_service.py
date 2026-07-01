@@ -13,6 +13,7 @@ from pathlib import Path
 from app.config import settings
 from app.models.testcase import TestCase
 from app.services import claude_cli
+from app.services.skills import AUTOMATION_GENERATOR
 
 _FENCE_RE = re.compile(r"```(?:ts|typescript)?\s*(.*?)```", re.DOTALL)
 
@@ -79,7 +80,9 @@ def generate_spec_code(case: TestCase) -> str:
     Raises:
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
-    raw = claude_cli.run_prompt(_build_prompt(case), system=_SYSTEM_PROMPT)
+    raw = claude_cli.run_prompt(
+        _build_prompt(case), system=_SYSTEM_PROMPT, skill=AUTOMATION_GENERATOR
+    )
     return _extract_code(raw)
 
 

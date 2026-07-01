@@ -14,6 +14,7 @@ from app.models.execution import Execution, ExecutionResult
 from app.models.report import Report
 from app.services import claude_cli
 from app.services.claude_cli import ClaudeError
+from app.services.skills import EXECUTION_ANALYZER
 
 
 def _latest_execution(db: Session, run_id: int) -> Execution | None:
@@ -62,7 +63,7 @@ def _ai_failure_analysis(failed: list[ExecutionResult]) -> str:
         "root cause(s), whether failures look related, and a suggested next step.\n\n"
         "Failures:\n" + "\n".join(lines)
     )
-    return claude_cli.run_prompt(prompt).strip()
+    return claude_cli.run_prompt(prompt, skill=EXECUTION_ANALYZER).strip()
 
 
 def build_report(db: Session, run_id: int) -> Report:

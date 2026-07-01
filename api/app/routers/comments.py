@@ -23,6 +23,7 @@ from app.schemas import CommentEdit, PublishRequest, TicketCommentOut
 from app.services import claude_cli
 from app.services.claude_cli import ClaudeError
 from app.services.publish_service import publish_one
+from app.services.skills import TICKET_COMMENT_GENERATOR
 
 router = APIRouter(tags=["comments"])
 
@@ -54,7 +55,9 @@ def _summarize_ticket(ticket_external_id: str, summary: dict, ai_failure_analysi
         + (f"Failure analysis context: {ai_failure_analysis}\n" if failed and ai_failure_analysis else "")
         + "Use short paragraphs or a small bullet list. Do not include a greeting or signature."
     )
-    return claude_cli.run_prompt(prompt).strip()
+    return claude_cli.run_prompt(
+        prompt, skill=TICKET_COMMENT_GENERATOR, include_template=True
+    ).strip()
 
 
 @router.post("/runs/{run_id}/comments/prepare", response_model=list[TicketCommentOut])

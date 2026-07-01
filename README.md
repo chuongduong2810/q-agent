@@ -76,6 +76,13 @@ Credentials are **encrypted at rest** (Fernet key derived from `QAGENT_SECRET_KE
 in `api/.env` — change it before real use) and are never returned in plaintext.
 Use **Test connection** to verify, then **Sync** on the Tickets page.
 
+Each AI action is driven by a **dedicated skill** in `skills/` (e.g.
+`requirement-analyst`, `test-case-generator`, `automation-generator`,
+`execution-analyzer`, `ticket-comment-generator`) — the backend injects the
+skill's `SKILL.md` as the Claude system prompt for that action (see
+`docs/CONTEXT.md` → *Dedicated AI skills*; override the location with
+`QAGENT_SKILLS_DIR`).
+
 The Claude CLI must be authenticated (`claude login`) for AI analysis, test-case
 generation, spec generation, and comment summaries. Playwright must have browsers
 installed (`npx playwright install`) for execution.

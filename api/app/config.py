@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-5"
     claude_timeout_s: int = 300
 
+    # Dedicated Q-Agent skills (SKILL.md methodology injected per Claude action).
+    skills_dir: Path = REPO_ROOT / "skills"
+
     # Playwright
     playwright_bin: str = "npx"  # invoked as: npx playwright test ...
     exec_timeout_s: int = 600
