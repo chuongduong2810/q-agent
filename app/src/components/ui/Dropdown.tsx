@@ -63,7 +63,7 @@ function DropdownShell({
       </button>
       {open && (
         <div
-          className="glass-strong absolute left-0 top-[42px] z-50 max-h-[320px] overflow-y-auto rounded-[14px] p-1.5 shadow-[0_30px_70px_-20px_rgba(0,0,0,.7)]"
+          className="popover absolute left-0 top-[42px] z-[60] max-h-[320px] overflow-y-auto rounded-[14px] p-1.5 shadow-[0_30px_70px_-20px_rgba(0,0,0,.8)]"
           style={{ minWidth }}
         >
           {children(() => setOpen(false))}

@@ -73,7 +73,7 @@ export function AiActivityIndicator() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.16 }}
-            className="glass-strong absolute right-0 top-[46px] z-50 w-[340px] overflow-hidden rounded-2xl shadow-[0_30px_70px_-20px_rgba(0,0,0,.7)]"
+            className="popover absolute right-0 top-[46px] z-[60] w-[340px] overflow-hidden rounded-2xl shadow-[0_30px_70px_-20px_rgba(0,0,0,.8)]"
           >
             <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-3">
               <Sparkles size={15} className="text-violet" />
