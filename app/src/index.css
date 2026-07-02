@@ -149,11 +149,3 @@ body {
 @utility accent-gradient {
   background: linear-gradient(135deg, #8b5cf6, #6366f1);
 }
-/* Near-solid surface for floating popovers/menus that overlay busy content —
- * opaque enough that the neural background never bleeds through. */
-@utility popover {
-  background: rgba(18, 18, 26, 0.98);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}

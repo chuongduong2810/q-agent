@@ -1,5 +1,6 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 
 export interface Option {
@@ -23,20 +24,44 @@ function DropdownShell({
   minWidth?: number;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Anchor the (portalled) panel to the trigger in viewport coordinates. Clamp
+  // to the right edge so a trigger near the window border doesn't overflow.
+  const place = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const width = Math.max(minWidth, r.width);
+    setPos({ top: r.bottom + 6, left: Math.min(r.left, window.innerWidth - width - 12), width });
+  };
 
   useEffect(() => {
     if (!open) return;
+    place();
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
+    const reposition = () => place();
     window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="flex h-9 cursor-pointer items-center gap-2 rounded-[11px] border px-[13px] text-[12.5px] font-semibold transition-colors"
@@ -61,14 +86,18 @@ function DropdownShell({
           <ChevronDown size={14} className="text-ink-dim" />
         )}
       </button>
-      {open && (
-        <div
-          className="popover absolute left-0 top-[42px] z-[60] max-h-[320px] overflow-y-auto rounded-[14px] p-1.5 shadow-[0_30px_70px_-20px_rgba(0,0,0,.8)]"
-          style={{ minWidth }}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className="fixed z-[1000] max-h-[320px] overflow-y-auto rounded-[14px] border border-white/[0.12] p-1.5 shadow-[0_30px_70px_-20px_rgba(0,0,0,.8)]"
+            style={{ top: pos.top, left: pos.left, minWidth: pos.width, background: "rgb(24,24,32)" }}
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

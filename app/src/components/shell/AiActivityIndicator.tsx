@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Spinner } from "@/components/ui/misc";
 import { useAiActivity } from "@/hooks/useAiActivity";
 import type { AiCall } from "@/types/api";
@@ -23,7 +24,9 @@ export function AiActivityIndicator() {
 
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Tick every second while something is running so the elapsed timer advances.
   useEffect(() => {
@@ -32,21 +35,41 @@ export function AiActivityIndicator() {
     return () => clearInterval(id);
   }, [isRunning]);
 
-  // Close the dropdown on outside click.
+  // Anchor the (portalled) panel to the trigger, right-aligned, in viewport coords.
+  const place = () => {
+    const el = triggerRef.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
+    }
+  };
+
+  // Close on outside click; reposition on scroll/resize.
   useEffect(() => {
     if (!open) return;
+    place();
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
+    const reposition = () => place();
     window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
   }, [open]);
 
   const primary = running[0];
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         onClick={() => setOpen((o) => !o)}
         title="Claude CLI activity"
         className="flex h-[38px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 text-[12.5px] font-semibold text-ink-soft hover:bg-white/[0.09]"
@@ -66,38 +89,43 @@ export function AiActivityIndicator() {
         )}
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.16 }}
-            className="popover absolute right-0 top-[46px] z-[60] w-[340px] overflow-hidden rounded-2xl shadow-[0_30px_70px_-20px_rgba(0,0,0,.8)]"
-          >
-            <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-3">
-              <Sparkles size={15} className="text-violet" />
-              <span className="text-[13px] font-bold">Claude CLI activity</span>
-              <span className="ml-auto text-[11px] text-ink-dim">
-                {isRunning ? `${running.length} running` : "idle"}
-              </span>
-            </div>
-            <div className="max-h-[360px] overflow-y-auto p-2">
-              {running.length === 0 && recent.length === 0 && (
-                <div className="px-3 py-6 text-center text-[12.5px] text-ink-dim">
-                  No Claude CLI calls yet.
-                </div>
-              )}
-              {running.map((c) => (
-                <Row key={`r-${c.id}`} call={c} now={now} />
-              ))}
-              {recent.map((c) => (
-                <Row key={`h-${c.id}`} call={c} now={now} />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
+          {open && pos && (
+            <motion.div
+              ref={panelRef}
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              transition={{ duration: 0.16 }}
+              className="fixed z-[1000] w-[340px] overflow-hidden rounded-2xl border border-white/[0.12] shadow-[0_30px_70px_-20px_rgba(0,0,0,.8)]"
+              style={{ top: pos.top, right: pos.right, background: "rgb(24,24,32)" }}
+            >
+              <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-3">
+                <Sparkles size={15} className="text-violet" />
+                <span className="text-[13px] font-bold">Claude CLI activity</span>
+                <span className="ml-auto text-[11px] text-ink-dim">
+                  {isRunning ? `${running.length} running` : "idle"}
+                </span>
+              </div>
+              <div className="max-h-[360px] overflow-y-auto p-2">
+                {running.length === 0 && recent.length === 0 && (
+                  <div className="px-3 py-6 text-center text-[12.5px] text-ink-dim">
+                    No Claude CLI calls yet.
+                  </div>
+                )}
+                {running.map((c) => (
+                  <Row key={`r-${c.id}`} call={c} now={now} />
+                ))}
+                {recent.map((c) => (
+                  <Row key={`h-${c.id}`} call={c} now={now} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }
