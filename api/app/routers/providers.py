@@ -29,6 +29,7 @@ from app.schemas import (
     SettingsUpdate,
     SprintOut,
     TestConnectionResult,
+    WorkItemMetadataOut,
 )
 from app.services import settings_store
 from app.services.adapters import get_adapter
@@ -141,6 +142,26 @@ def list_provider_sprints(kind: str, db: Session = Depends(get_db)) -> list[Spri
         logger.warning("Sprint list for '{}' failed: {}", kind, exc)
         return []
     return [SprintOut.model_validate(s) for s in sprints]
+
+
+@router.get("/providers/{kind}/work-item-metadata", response_model=WorkItemMetadataOut)
+def work_item_metadata(kind: str, db: Session = Depends(get_db)) -> WorkItemMetadataOut:
+    """Filter options (area paths, work item types, states) for the ticket query.
+
+    Resilient: unconfigured/unsupported providers yield empty lists.
+    """
+    _validate_kind(kind)
+    provider = db.query(Provider).filter(Provider.kind == kind).first()
+    if not provider:
+        return WorkItemMetadataOut()
+    decrypted = {key: crypto.decrypt(value) for key, value in (provider.secrets or {}).items()}
+    try:
+        adapter = get_adapter(kind, provider.config or {}, decrypted)
+        meta = adapter.list_work_item_metadata()
+    except Exception as exc:  # noqa: BLE001 - never error the filter UI
+        logger.warning("Work-item metadata for '{}' unavailable: {}", kind, exc)
+        return WorkItemMetadataOut()
+    return WorkItemMetadataOut.model_validate(meta)
 
 
 @router.get("/settings", response_model=SettingsOut, tags=["settings"])

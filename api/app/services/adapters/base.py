@@ -52,6 +52,9 @@ class ProviderAdapter(ABC):
         mode: str = "sprint",
         sprint: str | None = None,
         sprint_path: str | None = None,
+        area_path: str | None = None,
+        states: list[str] | None = None,
+        work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,
     ) -> list[NormalizedTicket]:
@@ -76,6 +79,13 @@ class ProviderAdapter(ABC):
         Default: none (e.g. GitHub). Providers with iterations override this.
         """
         return []
+
+    def list_work_item_metadata(self) -> dict[str, Any]:
+        """Return filter options: {area_paths[], work_item_types[], states[]}.
+
+        Default: empty. Providers override with project-specific metadata.
+        """
+        return {"area_paths": [], "work_item_types": [], "states": []}
 
     # -- Write ------------------------------------------------------------
     @abstractmethod

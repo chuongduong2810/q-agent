@@ -57,12 +57,19 @@ interface UIState {
   ticketFilter: TicketFilter;
   /** The real sprint chosen in the picker (name + provider-native path/id). */
   selectedSprint: { name: string; path: string } | null;
+  /** Additional ADO query filters. */
+  areaPath: string | null;
+  states: string[];
+  workItemTypes: string[];
   toggleSelected: (id: string) => void;
   setSelected: (ids: string[]) => void;
   clearSelected: () => void;
   setTicketSearch: (q: string) => void;
   setTicketFilter: (f: TicketFilter) => void;
   setSelectedSprint: (s: { name: string; path: string } | null) => void;
+  setAreaPath: (p: string | null) => void;
+  setStates: (s: string[]) => void;
+  setWorkItemTypes: (t: string[]) => void;
 
   // create-run modal
   createRunOpen: boolean;
@@ -144,12 +151,18 @@ export const useUI = create<UIState>((set) => ({
   ticketSearch: "",
   ticketFilter: "all",
   selectedSprint: null,
+  areaPath: null,
+  states: [],
+  workItemTypes: [],
   toggleSelected: (id) => set((s) => ({ selected: { ...s.selected, [id]: !s.selected[id] } })),
   setSelected: (ids) => set({ selected: Object.fromEntries(ids.map((id) => [id, true])) }),
   clearSelected: () => set({ selected: {} }),
   setTicketSearch: (q) => set({ ticketSearch: q }),
   setTicketFilter: (f) => set({ ticketFilter: f }),
   setSelectedSprint: (s) => set({ selectedSprint: s }),
+  setAreaPath: (p) => set({ areaPath: p }),
+  setStates: (s) => set({ states: s }),
+  setWorkItemTypes: (t) => set({ workItemTypes: t }),
 
   createRunOpen: false,
   runScope: "selected",

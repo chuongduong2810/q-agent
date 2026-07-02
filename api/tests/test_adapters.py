@@ -202,6 +202,41 @@ def test_ado_list_test_cases_returns_titles():
 
 
 @respx.mock
+def test_ado_work_item_metadata():
+    adapter = AzureDevOpsAdapter(
+        config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
+        secrets={"pat": "secret-pat"},
+    )
+    respx.get("https://dev.azure.com/myorg/MyProj/_apis/wit/classificationnodes/areas").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "MyProj",
+                "path": "\\MyProj\\Area",
+                "children": [
+                    {"name": "Brokers", "identifier": "a1", "path": "\\MyProj\\Area\\Brokers"}
+                ],
+            },
+        )
+    )
+    respx.get("https://dev.azure.com/myorg/MyProj/_apis/wit/workitemtypes").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "value": [
+                    {"name": "Bug", "states": [{"name": "New"}, {"name": "Active"}]},
+                    {"name": "User Story", "states": [{"name": "New"}, {"name": "Ready for QA"}]},
+                ]
+            },
+        )
+    )
+    meta = adapter.list_work_item_metadata()
+    assert meta["area_paths"][0]["path"] == "MyProj\\Brokers"
+    assert set(meta["work_item_types"]) == {"Bug", "User Story"}
+    assert "Ready for QA" in meta["states"] and "Active" in meta["states"]
+
+
+@respx.mock
 def test_ado_publish_comment_uses_basic_auth():
     adapter = AzureDevOpsAdapter(
         config={"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},

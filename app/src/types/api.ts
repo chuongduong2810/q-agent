@@ -101,8 +101,20 @@ export interface TicketOut {
   priority: string;
   assignee: string;
   sprint: string;
+  areaPath: string;
   labels: string[];
   acCount: number;
+}
+
+export interface AreaPathOut {
+  id: string;
+  name: string;
+  path: string;
+}
+export interface WorkItemMetadataOut {
+  areaPaths: AreaPathOut[];
+  workItemTypes: string[];
+  states: string[];
 }
 
 export interface TicketDetailOut extends TicketOut {
@@ -128,7 +140,20 @@ export interface SyncRequest {
   mode?: string;
   sprint?: string | null;
   sprintPath?: string | null;
+  areaPath?: string | null;
+  states?: string[];
+  workItemTypes?: string[];
   ticketIds?: string[];
+}
+
+export interface TicketFilters {
+  status?: string;
+  assignee?: string;
+  sprint?: string;
+  areaPath?: string;
+  states?: string;
+  workItemTypes?: string;
+  q?: string;
 }
 export interface SyncResult {
   synced: number;

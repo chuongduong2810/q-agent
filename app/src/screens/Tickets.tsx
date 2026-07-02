@@ -3,34 +3,23 @@ import { Plus, RefreshCw, Search } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
+import { MultiSelect, Select } from "@/components/ui/Dropdown";
 import { StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
-import { useProviders, useSprints, useSyncTickets, useTickets } from "@/hooks/queries";
+import {
+  useProviders,
+  useSprints,
+  useSyncTickets,
+  useTickets,
+  useWorkItemMetadata,
+} from "@/hooks/queries";
 import { useUI, type TicketFilter } from "@/store/ui";
-import type { ProviderKind, TicketOut } from "@/types/api";
+import type { ProviderKind, TicketFilters, TicketOut } from "@/types/api";
 
 const FILTERS: { id: TicketFilter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "ready", label: "Ready for QA" },
   { id: "mine", label: "My tickets" },
 ];
-
-/** Maps the store's ticket filter to the query params `useTickets` expects. */
-function filterToParams(
-  filter: TicketFilter,
-  sprintName: string | undefined,
-): { status?: string; assignee?: string; sprint?: string } {
-  switch (filter) {
-    case "ready":
-      return { status: "Ready for QA" };
-    case "mine":
-      return { assignee: "Maya Kaur" };
-    case "sprint":
-      return sprintName ? { sprint: sprintName } : {};
-    default:
-      return {};
-  }
-}
 
 function initials(name: string): string {
   return name
@@ -54,8 +43,14 @@ export function Tickets() {
   const openCreateRun = useUI((s) => s.openCreateRun);
   const selectedSprint = useUI((s) => s.selectedSprint);
   const setSelectedSprint = useUI((s) => s.setSelectedSprint);
+  const areaPath = useUI((s) => s.areaPath);
+  const setAreaPath = useUI((s) => s.setAreaPath);
+  const states = useUI((s) => s.states);
+  const setStates = useUI((s) => s.setStates);
+  const workItemTypes = useUI((s) => s.workItemTypes);
+  const setWorkItemTypes = useUI((s) => s.setWorkItemTypes);
 
-  // Pick the connected provider that supports sprints (ADO preferred, then Jira).
+  // Pick the connected provider (ADO preferred, then Jira) for metadata + sync.
   const { data: providers } = useProviders();
   const providerKind: ProviderKind = useMemo(() => {
     const connected = (providers ?? []).filter((p) => p.connected);
@@ -66,49 +61,53 @@ export function Tickets() {
     );
   }, [providers]);
   const { data: sprints } = useSprints(providerKind);
+  const { data: metadata } = useWorkItemMetadata(providerKind);
 
-  const filters = { ...filterToParams(ticketFilter, selectedSprint?.name), q: ticketSearch || undefined };
+  // Combine every active filter into the ticket query.
+  const filters: TicketFilters = {
+    assignee: ticketFilter === "mine" ? "Maya Kaur" : undefined,
+    sprint: selectedSprint?.name,
+    areaPath: areaPath || undefined,
+    states: states.length ? states.join(",") : undefined,
+    workItemTypes: workItemTypes.length ? workItemTypes.join(",") : undefined,
+    q: ticketSearch || undefined,
+  };
   const { data: tickets, isLoading } = useTickets(filters);
   const syncTickets = useSyncTickets();
 
   const selCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
 
-  const onPickSprint = (path: string) => {
-    const sprint = (sprints ?? []).find((s) => s.path === path);
-    if (!sprint) {
-      setSelectedSprint(null);
-      if (ticketFilter === "sprint") setTicketFilter("all");
-      return;
-    }
-    setSelectedSprint({ name: sprint.name, path: sprint.path });
-    setTicketFilter("sprint");
+  const sprintOptions = (sprints ?? []).map((s) => ({ value: s.path, label: s.name }));
+  const areaOptions = (metadata?.areaPaths ?? []).map((a) => ({ value: a.path, label: a.name, hint: a.path }));
+  const stateOptions = (metadata?.states ?? []).map((s) => ({ value: s, label: s }));
+  const typeOptions = (metadata?.workItemTypes ?? []).map((t) => ({ value: t, label: t }));
+
+  const onPickSprint = (path: string | null) => {
+    const sprint = path ? (sprints ?? []).find((s) => s.path === path) : null;
+    setSelectedSprint(sprint ? { name: sprint.name, path: sprint.path } : null);
   };
 
-  const selectSprintTickets = () => {
-    if (!selectedSprint) return;
-    const ids = (tickets ?? [])
-      .filter((t) => t.sprint === selectedSprint.name)
-      .map((t) => t.externalId);
-    setSelected(ids);
-  };
   const selectAssigned = () => {
     const ids = (tickets ?? []).filter((t) => t.assignee === "Maya Kaur").map((t) => t.externalId);
     setSelected(ids);
   };
 
   const handleSync = () => {
-    const body = selectedSprint
-      ? {
-          providerKind,
-          mode: "sprint" as const,
-          sprint: selectedSprint.name,
-          sprintPath: selectedSprint.path,
-        }
-      : { providerKind, mode: "assigned" as const };
-    syncTickets.mutate(body, {
-      onSuccess: (res) => toast.success(`Synced ${res.synced} ticket${res.synced === 1 ? "" : "s"}`),
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Sync failed"),
-    });
+    syncTickets.mutate(
+      {
+        providerKind,
+        mode: selectedSprint ? "sprint" : "all",
+        sprint: selectedSprint?.name,
+        sprintPath: selectedSprint?.path,
+        areaPath: areaPath || undefined,
+        states,
+        workItemTypes,
+      },
+      {
+        onSuccess: (res) => toast.success(`Synced ${res.synced} ticket${res.synced === 1 ? "" : "s"}`),
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Sync failed"),
+      },
+    );
   };
 
   return (
@@ -151,33 +150,32 @@ export function Tickets() {
           );
         })}
 
-        <select
-          value={selectedSprint?.path ?? ""}
-          onChange={(e) => onPickSprint(e.target.value)}
-          className="cursor-pointer rounded-[11px] border px-[13px] py-2 text-[12.5px] font-semibold outline-none"
-          style={{
-            background: selectedSprint ? "rgba(139,92,246,.2)" : "rgba(255,255,255,.05)",
-            borderColor: selectedSprint ? "rgba(139,92,246,.35)" : "rgba(255,255,255,.09)",
-            color: selectedSprint ? "#fff" : "#dcdce4",
-          }}
-        >
-          <option value="" style={{ background: "#14141c" }}>
-            {sprints?.length ? "All sprints" : "No sprints"}
-          </option>
-          {(sprints ?? []).map((s) => (
-            <option key={s.id || s.path} value={s.path} style={{ background: "#14141c" }}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        {selectedSprint && (
-          <button
-            onClick={selectSprintTickets}
-            className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
-          >
-            Select in {selectedSprint.name}
-          </button>
-        )}
+        <Select
+          value={selectedSprint?.path ?? null}
+          options={sprintOptions}
+          placeholder="Sprint"
+          onChange={onPickSprint}
+          emptyLabel="No sprints found"
+        />
+        <Select
+          value={areaPath}
+          options={areaOptions}
+          placeholder="Area path"
+          onChange={setAreaPath}
+          emptyLabel="No area paths"
+        />
+        <MultiSelect
+          values={states}
+          options={stateOptions}
+          placeholder="States"
+          onChange={setStates}
+        />
+        <MultiSelect
+          values={workItemTypes}
+          options={typeOptions}
+          placeholder="Work item types"
+          onChange={setWorkItemTypes}
+        />
         <button
           onClick={selectAssigned}
           className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"

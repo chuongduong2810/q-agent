@@ -82,6 +82,9 @@ class GitHubAdapter(ProviderAdapter):
         mode: str = "sprint",
         sprint: str | None = None,
         sprint_path: str | None = None,
+        area_path: str | None = None,
+        states: list[str] | None = None,
+        work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,
     ) -> list[NormalizedTicket]:

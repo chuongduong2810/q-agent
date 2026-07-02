@@ -160,16 +160,42 @@ class JiraAdapter(ProviderAdapter):
             return list(sprints.values())
         return list(sprints.values())
 
+    def list_work_item_metadata(self) -> dict[str, Any]:
+        """Jira has no area paths; return issue types + statuses (best-effort)."""
+        types: list[str] = []
+        states: list[str] = []
+        try:
+            with self._client() as client:
+                it = client.get(f"{API_PREFIX}/issuetype")
+                if it.status_code < 400:
+                    types = sorted({t.get("name", "") for t in it.json() if t.get("name")})
+                st = client.get(f"{API_PREFIX}/status")
+                if st.status_code < 400:
+                    states = sorted({s.get("name", "") for s in st.json() if s.get("name")})
+        except httpx.HTTPError:
+            pass
+        return {"area_paths": [], "work_item_types": types, "states": states}
+
     def fetch_tickets(
         self,
         *,
         mode: str = "sprint",
         sprint: str | None = None,
         sprint_path: str | None = None,
+        area_path: str | None = None,  # ADO-only; unused for Jira
+        states: list[str] | None = None,
+        work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,  # Jira returns comments inline; flag unused
     ) -> list[NormalizedTicket]:
-        jql = self._build_jql(mode=mode, sprint=sprint, sprint_path=sprint_path, ticket_ids=ticket_ids)
+        jql = self._build_jql(
+            mode=mode,
+            sprint=sprint,
+            sprint_path=sprint_path,
+            states=states,
+            work_item_types=work_item_types,
+            ticket_ids=ticket_ids,
+        )
         with self._client() as client:
             resp = client.post(
                 f"{API_PREFIX}/search/jql",
@@ -201,6 +227,8 @@ class JiraAdapter(ProviderAdapter):
         mode: str,
         sprint: str | None,
         sprint_path: str | None = None,
+        states: list[str] | None = None,
+        work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
     ) -> str:
         if mode == "selected" and ticket_ids:
@@ -218,6 +246,10 @@ class JiraAdapter(ProviderAdapter):
                 conditions.append(f"sprint = '{(sprint or sprint_path)}'")
         elif mode == "assigned":
             conditions.append("assignee = currentUser()")
+        if states:
+            conditions.append("status IN (" + ", ".join(f'"{s}"' for s in states) + ")")
+        if work_item_types:
+            conditions.append("issuetype IN (" + ", ".join(f'"{t}"' for t in work_item_types) + ")")
 
         return " AND ".join(conditions) if conditions else "order by created DESC"
 

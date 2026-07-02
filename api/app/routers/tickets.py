@@ -34,6 +34,9 @@ def list_tickets(
     status: str | None = None,
     assignee: str | None = None,
     sprint: str | None = None,
+    area_path: str | None = None,
+    states: str | None = None,  # comma-separated
+    work_item_types: str | None = None,  # comma-separated
     q: str | None = None,
     db: Session = Depends(get_db),
 ) -> list[TicketOut]:
@@ -44,6 +47,15 @@ def list_tickets(
         query = query.filter(Ticket.assignee == assignee)
     if sprint:
         query = query.filter(Ticket.sprint == sprint)
+    if area_path:
+        # UNDER semantics: the selected area path and its children.
+        query = query.filter(Ticket.area_path.like(f"{area_path}%"))
+    state_list = [s for s in (states or "").split(",") if s]
+    if state_list:
+        query = query.filter(Ticket.status.in_(state_list))
+    type_list = [t for t in (work_item_types or "").split(",") if t]
+    if type_list:
+        query = query.filter(Ticket.work_item_type.in_(type_list))
     if q:
         like = f"%{q}%"
         query = query.filter((Ticket.title.ilike(like)) | (Ticket.external_id.ilike(like)))
@@ -124,6 +136,9 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
             mode=body.mode,
             sprint=body.sprint,
             sprint_path=body.sprint_path,
+            area_path=body.area_path,
+            states=body.states,
+            work_item_types=body.work_item_types,
             ticket_ids=body.ticket_ids,
         )
     except ProviderError as exc:
@@ -149,6 +164,7 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
         ticket.priority = item.get("priority", "Medium")
         ticket.assignee = item.get("assignee", "")
         ticket.sprint = item.get("sprint", "")
+        ticket.area_path = item.get("area_path", "")
         ticket.description = item.get("description", "")
         ticket.note = item.get("note", "")
         ticket.labels = item.get("labels", [])

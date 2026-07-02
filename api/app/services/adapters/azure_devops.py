@@ -80,13 +80,13 @@ class _WiqlError(RuntimeError):
 
 
 def _classification_path_to_iteration(node_path: str) -> str:
-    """Convert a classification-node path to a System.IterationPath value.
+    """Convert a classification-node path to a System.IterationPath/AreaPath value.
 
     ``\\Surency\\Iteration\\Release 1\\Sprint 3`` -> ``Surency\\Release 1\\Sprint 3``
-    (strip the leading separator and the structural ``Iteration`` segment).
+    (strip the leading separator and the structural ``Iteration``/``Area`` segment).
     """
     parts = [p for p in node_path.split("\\") if p]
-    if len(parts) >= 2 and parts[1] == "Iteration":
+    if len(parts) >= 2 and parts[1] in ("Iteration", "Area"):
         parts = [parts[0]] + parts[2:]
     return "\\".join(parts)
 
@@ -203,6 +203,52 @@ class AzureDevOpsAdapter(ProviderAdapter):
         walk(root)
         return sprints
 
+    def list_work_item_metadata(self) -> dict[str, Any]:
+        """Area paths (classification nodes), work item types + their states."""
+        project = self.project
+        if not project:
+            return {"area_paths": [], "work_item_types": [], "states": []}
+        area_paths: list[dict[str, Any]] = []
+        types: list[str] = []
+        states: set[str] = set()
+        with self._client() as client:
+            areas = client.get(
+                f"/{quote(project)}/_apis/wit/classificationnodes/areas",
+                params={"$depth": 10, "api-version": API_VERSION},
+            )
+            if areas.status_code < 400:
+
+                def walk(node: dict[str, Any]) -> None:
+                    for child in node.get("children", []) or []:
+                        area_paths.append(
+                            {
+                                "id": str(child.get("identifier") or child.get("id", "")),
+                                "name": child.get("name", ""),
+                                "path": _classification_path_to_iteration(child.get("path", "")),
+                            }
+                        )
+                        walk(child)
+
+                walk(areas.json())
+
+            wits = client.get(
+                f"/{quote(project)}/_apis/wit/workitemtypes",
+                params={"api-version": API_VERSION},
+            )
+            if wits.status_code < 400:
+                for wit in wits.json().get("value", []):
+                    name = wit.get("name", "")
+                    if name:
+                        types.append(name)
+                    for st in wit.get("states", []) or []:
+                        if st.get("name"):
+                            states.add(st["name"])
+        return {
+            "area_paths": area_paths,
+            "work_item_types": types,
+            "states": sorted(states),
+        }
+
     # Max work items pulled in a single sync — keeps sync responsive on large sprints.
     MAX_SYNC_ITEMS = 200
 
@@ -212,6 +258,9 @@ class AzureDevOpsAdapter(ProviderAdapter):
         mode: str = "sprint",
         sprint: str | None = None,
         sprint_path: str | None = None,
+        area_path: str | None = None,
+        states: list[str] | None = None,
+        work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,
     ) -> list[NormalizedTicket]:
@@ -221,7 +270,15 @@ class AzureDevOpsAdapter(ProviderAdapter):
 
         with self._client() as client:
             ids = self._query_work_item_ids(
-                client, project, mode=mode, sprint=sprint, sprint_path=sprint_path, ticket_ids=ticket_ids
+                client,
+                project,
+                mode=mode,
+                sprint=sprint,
+                sprint_path=sprint_path,
+                area_path=area_path,
+                states=states,
+                work_item_types=work_item_types,
+                ticket_ids=ticket_ids,
             )
             if not ids:
                 return []
@@ -249,17 +306,31 @@ class AzureDevOpsAdapter(ProviderAdapter):
         mode: str,
         sprint: str | None,
         sprint_path: str | None,
+        area_path: str | None = None,
+        states: list[str] | None = None,
+        work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None,
     ) -> list[int]:
         if mode == "selected" and ticket_ids:
             return [int(tid) for tid in ticket_ids if str(tid).isdigit()]
 
-        types = ", ".join(f"'{t}'" for t in _WORK_ITEM_TYPES)
+        # Selected work-item types (or the default QA-relevant superset).
+        type_list = work_item_types or list(_WORK_ITEM_TYPES)
+        types = ", ".join(f"'{_wiql_literal(t)}'" for t in type_list)
         base_conditions = [
             f"[System.TeamProject] = '{_wiql_literal(project)}'",
             f"[System.WorkItemType] IN ({types})",
-            "[System.State] <> 'Removed'",
         ]
+        # State filter: selected states, else exclude Removed.
+        if states:
+            state_list = ", ".join(f"'{_wiql_literal(s)}'" for s in states)
+            base_conditions.append(f"[System.State] IN ({state_list})")
+        else:
+            base_conditions.append("[System.State] <> 'Removed'")
+        # Area path filter (applies in every mode).
+        if area_path:
+            base_conditions.append(f"[System.AreaPath] UNDER '{_wiql_literal(area_path)}'")
+
         conditions = list(base_conditions)
         # Prefer the native iteration path from list_sprints; fall back to project\name.
         iteration = sprint_path or (f"{project}\\{sprint}" if sprint else None)
@@ -347,6 +418,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
             priority=self._map_priority(fields.get("Microsoft.VSTS.Common.Priority")),
             assignee=assignee,
             sprint=(fields.get("System.IterationPath") or "").split("\\")[-1],
+            area_path=fields.get("System.AreaPath") or "",
             description=_strip_html(fields.get("System.Description", "")),
             note="",
             labels=labels,

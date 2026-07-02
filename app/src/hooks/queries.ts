@@ -22,6 +22,7 @@ import type {
   SyncRequest,
   TestCaseCreate,
   TestCaseUpdate,
+  TicketFilters,
 } from "@/types/api";
 
 // -------------------------------------------------------------- health
@@ -53,6 +54,14 @@ export const useSprints = (kind: ProviderKind | null) =>
   useQuery({
     queryKey: queryKeys.sprints(kind ?? ""),
     queryFn: () => api.listSprints(kind as ProviderKind),
+    enabled: !!kind,
+    staleTime: 60_000,
+  });
+
+export const useWorkItemMetadata = (kind: ProviderKind | null) =>
+  useQuery({
+    queryKey: queryKeys.workItemMetadata(kind ?? ""),
+    queryFn: () => api.workItemMetadata(kind as ProviderKind),
     enabled: !!kind,
     staleTime: 60_000,
   });
@@ -104,8 +113,11 @@ export const useBuildKnowledge = () => {
 };
 
 // -------------------------------------------------------------- tickets
-export const useTickets = (filters: { status?: string; assignee?: string; sprint?: string; q?: string } = {}) =>
-  useQuery({ queryKey: queryKeys.tickets(filters), queryFn: () => api.listTickets(filters) });
+export const useTickets = (filters: TicketFilters = {}) =>
+  useQuery({
+    queryKey: queryKeys.tickets(filters as Record<string, string | undefined>),
+    queryFn: () => api.listTickets(filters),
+  });
 
 export const useTicket = (externalId: string | null) =>
   useQuery({

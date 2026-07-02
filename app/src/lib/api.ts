@@ -35,7 +35,9 @@ import type {
   TestConnectionResult,
   TicketCommentOut,
   TicketDetailOut,
+  TicketFilters,
   TicketOut,
+  WorkItemMetadataOut,
 } from "@/types/api";
 
 export const API_BASE: string =
@@ -98,6 +100,8 @@ export const api = {
     put<ProviderOut>(`/providers/${kind}`, body),
   testConnection: (kind: ProviderKind) => post<TestConnectionResult>(`/providers/${kind}/test`),
   listSprints: (kind: ProviderKind) => get<SprintOut[]>(`/providers/${kind}/sprints`),
+  workItemMetadata: (kind: ProviderKind) =>
+    get<WorkItemMetadataOut>(`/providers/${kind}/work-item-metadata`),
   getSettings: () => get<SettingsOut>("/settings"),
   updateSettings: (body: SettingsUpdate) => put<SettingsOut>("/settings", body),
 
@@ -113,8 +117,8 @@ export const api = {
     post<ProjectKnowledgeOut>(`/projects/${encodeURIComponent(key)}/knowledge/build`, body),
 
   // tickets
-  listTickets: (params: { status?: string; assignee?: string; sprint?: string; q?: string } = {}) =>
-    get<TicketOut[]>("/tickets" + qs(params)),
+  listTickets: (params: TicketFilters = {}) =>
+    get<TicketOut[]>("/tickets" + qs(params as Record<string, string | undefined>)),
   getTicket: (externalId: string) => get<TicketDetailOut>(`/tickets/${externalId}`),
   linkedCases: (externalId: string) =>
     get<LinkedTestCaseOut[]>(`/tickets/${encodeURIComponent(externalId)}/linked-cases`),

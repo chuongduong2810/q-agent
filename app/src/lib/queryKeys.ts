@@ -5,6 +5,7 @@ export const queryKeys = {
   providers: ["providers"] as const,
   provider: (kind: string) => ["providers", kind] as const,
   sprints: (kind: string) => ["providers", kind, "sprints"] as const,
+  workItemMetadata: (kind: string) => ["providers", kind, "work-item-metadata"] as const,
   settings: ["settings"] as const,
   projects: ["projects"] as const,
   knowledgeList: ["projects", "knowledge"] as const,

@@ -125,6 +125,7 @@ class TicketOut(ApiModel):
     priority: str
     assignee: str = ""
     sprint: str = ""
+    area_path: str = ""
     labels: list[str] = Field(default_factory=list)
     ac_count: int = 0
 
@@ -152,7 +153,24 @@ class SyncRequest(ApiModel):
     mode: str = "sprint"  # sprint | assigned | selected | all
     sprint: str | None = None
     sprint_path: str | None = None
+    area_path: str | None = None
+    states: list[str] = Field(default_factory=list)
+    work_item_types: list[str] = Field(default_factory=list)
     ticket_ids: list[str] = Field(default_factory=list)
+
+
+class AreaPathOut(ApiModel):
+    id: str
+    name: str
+    path: str
+
+
+class WorkItemMetadataOut(ApiModel):
+    """Filter options for a provider's project (populates the query dropdowns)."""
+
+    area_paths: list[AreaPathOut] = Field(default_factory=list)
+    work_item_types: list[str] = Field(default_factory=list)
+    states: list[str] = Field(default_factory=list)
 
 
 class SyncResult(ApiModel):
