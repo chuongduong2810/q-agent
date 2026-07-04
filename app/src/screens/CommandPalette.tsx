@@ -14,8 +14,9 @@ import {
   Ticket,
 } from "lucide-react";
 import { type ComponentType, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useResolvedRunId } from "@/hooks/useResolvedRunId";
 import { useUI } from "@/store/ui";
-import type { Screen } from "@/types";
 
 interface PaletteCommand {
   id: string;
@@ -32,8 +33,9 @@ export function CommandPalette() {
   const query = useUI((s) => s.paletteQuery);
   const setQuery = useUI((s) => s.setPaletteQuery);
   const closePalette = useUI((s) => s.closePalette);
-  const navigate = useUI((s) => s.navigate);
   const openCreateRun = useUI((s) => s.openCreateRun);
+  const navigate = useNavigate();
+  const runId = useResolvedRunId();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,21 +44,23 @@ export function CommandPalette() {
 
   if (!open) return null;
 
-  const go = (screen: Screen) => () => {
-    navigate(screen);
+  const go = (path: string) => () => {
+    navigate(path);
     closePalette();
   };
+  // Run-scoped commands target the resolved run, else fall back to the runs list.
+  const runPath = (seg: string) => (runId != null ? `/runs/${runId}/${seg}` : "/runs");
 
   const commands: PaletteCommand[] = [
-    { id: "dashboard", label: "Go to Dashboard", section: "Navigate", icon: LayoutDashboard, run: go("dashboard") },
-    { id: "tickets", label: "Go to Tickets", section: "Navigate", icon: Ticket, run: go("tickets") },
-    { id: "runs", label: "Go to Runs", section: "Navigate", icon: SquareStack, run: go("runs") },
-    { id: "review", label: "Go to Review Center", section: "Navigate", icon: CheckSquare, run: go("review") },
-    { id: "automation", label: "Go to Automation", section: "Navigate", icon: Terminal, run: go("automation") },
-    { id: "console", label: "Go to Execution", section: "Navigate", icon: ListChecks, run: go("console") },
-    { id: "evidence", label: "Go to Evidence", section: "Navigate", icon: Image, run: go("evidence") },
-    { id: "reports", label: "Go to Reports", section: "Navigate", icon: BarChart3, run: go("reports") },
-    { id: "settings", label: "Go to Settings", section: "Navigate", icon: SettingsIcon, run: go("settings") },
+    { id: "dashboard", label: "Go to Dashboard", section: "Navigate", icon: LayoutDashboard, run: go("/") },
+    { id: "tickets", label: "Go to Tickets", section: "Navigate", icon: Ticket, run: go("/tickets") },
+    { id: "runs", label: "Go to Runs", section: "Navigate", icon: SquareStack, run: go("/runs") },
+    { id: "review", label: "Go to Review Center", section: "Navigate", icon: CheckSquare, run: go(runPath("review")) },
+    { id: "automation", label: "Go to Automation", section: "Navigate", icon: Terminal, run: go(runPath("automation")) },
+    { id: "console", label: "Go to Execution", section: "Navigate", icon: ListChecks, run: go(runPath("execution")) },
+    { id: "evidence", label: "Go to Evidence", section: "Navigate", icon: Image, run: go(runPath("evidence")) },
+    { id: "reports", label: "Go to Reports", section: "Navigate", icon: BarChart3, run: go("/reports") },
+    { id: "settings", label: "Go to Settings", section: "Navigate", icon: SettingsIcon, run: go("/settings") },
     {
       id: "create-run",
       label: "Create a Run",
@@ -67,7 +71,7 @@ export function CommandPalette() {
         closePalette();
       },
     },
-    { id: "run-execution", label: "Run execution", section: "Action", icon: Terminal, run: go("console") },
+    { id: "run-execution", label: "Run execution", section: "Action", icon: Terminal, run: go(runPath("execution")) },
   ];
 
   // Also route "Projects" — not in the design's default list but keeps

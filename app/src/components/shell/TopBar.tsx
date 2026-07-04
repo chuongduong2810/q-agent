@@ -1,23 +1,33 @@
 import { ChevronDown, Plus, Search } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
-import { useRuns } from "@/hooks/queries";
+import { useProjects, useRuns } from "@/hooks/queries";
+import { useResolvedRunId } from "@/hooks/useResolvedRunId";
 import { useUI } from "@/store/ui";
 
 export function TopBar() {
-  const activeProject = useUI((s) => s.activeProject);
-  const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const openPalette = useUI((s) => s.openPalette);
   const openCreateRun = useUI((s) => s.openCreateRun);
   const { data: runs } = useRuns();
+  const { data: projects } = useProjects();
+  const resolvedRunId = useResolvedRunId();
 
-  const activeRun = runs?.find((r) => r.id === activeRunId) ?? runs?.[0];
+  // Project label: the project from the URL when on a project route, else the
+  // first project from the query.
+  const projMatch = pathname.match(/^\/projects\/([^/]+)/);
+  const activeProject = projMatch
+    ? decodeURIComponent(projMatch[1])
+    : (projects?.[0]?.name ?? "");
+
+  const activeRun = runs?.find((r) => r.id === resolvedRunId) ?? runs?.[0];
   const isLive = activeRun && activeRun.status !== "done";
 
   return (
     <header className="glass-strong flex h-[56px] shrink-0 items-center gap-3.5 rounded-[18px] px-[18px]">
       <button
-        onClick={() => navigate("projects")}
+        onClick={() => navigate("/projects")}
         className="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-[7px] hover:bg-white/[0.09]"
       >
         <div
@@ -43,7 +53,7 @@ export function TopBar() {
         <AiActivityIndicator />
         {activeRun && (
           <button
-            onClick={() => navigate("run")}
+            onClick={() => navigate(`/runs/${resolvedRunId}`)}
             className="flex h-[38px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 text-[13px] font-semibold text-ink-soft hover:bg-white/[0.09]"
           >
             {isLive && (

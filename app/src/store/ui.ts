@@ -5,8 +5,41 @@
  */
 
 import { create } from "zustand";
+import { routerNavigate } from "@/lib/navigation";
 import type { Screen } from "@/types";
 import type { TestStep } from "@/types/api";
+
+/** Run-scoped screens → their path segment under `/runs/:runId` (index = ""). */
+const RUN_SEGMENT: Partial<Record<Screen, string>> = {
+  run: "",
+  review: "review",
+  sync: "sync",
+  automation: "automation",
+  console: "execution",
+  evidence: "evidence",
+  comment: "comment",
+};
+
+/** Global screens → their absolute path. */
+const GLOBAL_PATH: Partial<Record<Screen, string>> = {
+  dashboard: "/",
+  projects: "/projects",
+  tickets: "/tickets",
+  runs: "/runs",
+  reports: "/reports",
+  audit: "/audit",
+  settings: "/settings",
+};
+
+/** Map a legacy Screen to a router path, using the active run for run-scoped screens. */
+function screenToPath(screen: Screen, runId: number | null): string {
+  const seg = RUN_SEGMENT[screen];
+  if (seg !== undefined) {
+    if (runId == null) return "/runs";
+    return seg ? `/runs/${runId}/${seg}` : `/runs/${runId}`;
+  }
+  return GLOBAL_PATH[screen] ?? "/";
+}
 
 /** Sidebar nav → screen mapping; screens not in the nav (ticket/run/comment) are pushed programmatically. */
 export type TicketFilter = "all" | "ready" | "mine" | "sprint";
@@ -119,18 +152,33 @@ interface RunFormFields {
   runRetry: number;
 }
 
-export const useUI = create<UIState>((set) => ({
+export const useUI = create<UIState>((set, get) => ({
   screen: "dashboard",
   activeProject: "Surency Platform",
   activeTicket: null,
   activeRunId: null,
-  navigate: (screen) => set({ screen, paletteOpen: false }),
-  openTicket: (externalId) => set({ activeTicket: externalId, screen: "ticket" }),
-  openProject: (name) => set({ activeProject: name, screen: "project", projectTab: "overview" }),
+  // Nav actions are thin adapters over the data router (temporary bridge, ADR
+  // 0003): they drive navigation via `routerNavigate` and keep setting the
+  // legacy fields so unmigrated screens read fresh values without a flash.
+  navigate: (screen) => {
+    routerNavigate(screenToPath(screen, get().activeRunId));
+    set({ screen, paletteOpen: false });
+  },
+  openTicket: (externalId) => {
+    routerNavigate(`/tickets/${encodeURIComponent(externalId)}`);
+    set({ activeTicket: externalId, screen: "ticket" });
+  },
+  openProject: (name) => {
+    routerNavigate(`/projects/${encodeURIComponent(name)}`);
+    set({ activeProject: name, screen: "project", projectTab: "overview" });
+  },
   setActiveRun: (runId) => set({ activeRunId: runId }),
 
   projectTab: "overview",
-  setProjectTab: (t) => set({ projectTab: t }),
+  setProjectTab: (t) => {
+    routerNavigate(`/projects/${encodeURIComponent(get().activeProject)}?tab=${t}`);
+    set({ projectTab: t });
+  },
 
   knowledgeBuilding: false,
   buildProjectName: "",
