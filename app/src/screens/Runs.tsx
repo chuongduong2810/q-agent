@@ -4,7 +4,6 @@ import { Plus, ArrowRight, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/misc";
 import { useRuns } from "@/hooks/queries";
-import { useResolvedRunId } from "@/hooks/useResolvedRunId";
 import { useUI } from "@/store/ui";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import type { RunOut } from "@/types/api";
@@ -23,14 +22,11 @@ const RUN_STATUS_LABEL: Record<string, string> = {
 /** Runs list: the one active (non-done) run as a hero card, plus a history of done runs. */
 export function Runs() {
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const resolvedRunId = useResolvedRunId();
   const navigate = useNavigate();
 
   const { data: runs, isLoading } = useRuns();
 
-  const activeRun =
-    runs?.find((r) => r.status !== "done") ??
-    (resolvedRunId != null ? runs?.find((r) => r.id === resolvedRunId) : undefined);
+  const activeRun = runs?.find((r) => r.status !== "done");
   const history = (runs ?? []).filter((r) => r.status === "done");
 
   const goRun = (run: RunOut) => navigate(`/runs/${run.id}`);
