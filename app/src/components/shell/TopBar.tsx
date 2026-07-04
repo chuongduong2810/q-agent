@@ -1,8 +1,9 @@
 import { ChevronDown, Plus, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
-import { useProjects, useRuns } from "@/hooks/queries";
-import { useResolvedRunId } from "@/hooks/useResolvedRunId";
+import { RunContextHeader } from "@/components/shell/RunContextHeader";
+import { useProjects } from "@/hooks/queries";
+import { useRunRouteId } from "@/hooks/useRunRouteId";
 import { useUI } from "@/store/ui";
 
 export function TopBar() {
@@ -10,9 +11,11 @@ export function TopBar() {
   const { pathname } = useLocation();
   const openPalette = useUI((s) => s.openPalette);
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const { data: runs } = useRuns();
   const { data: projects } = useProjects();
-  const resolvedRunId = useResolvedRunId();
+  const runId = useRunRouteId();
+
+  // On a run-scoped screen the global bar is replaced by the run-context header.
+  if (runId != null) return <RunContextHeader runId={runId} />;
 
   // Project label: the project from the URL when on a project route, else the
   // first project from the query.
@@ -20,9 +23,6 @@ export function TopBar() {
   const activeProject = projMatch
     ? decodeURIComponent(projMatch[1])
     : (projects?.[0]?.name ?? "");
-
-  const activeRun = runs?.find((r) => r.id === resolvedRunId) ?? runs?.[0];
-  const isLive = activeRun && activeRun.status !== "done";
 
   return (
     <header className="glass-strong flex h-[56px] shrink-0 items-center gap-3.5 rounded-[18px] px-[18px]">
@@ -51,20 +51,6 @@ export function TopBar() {
 
       <div className="ml-auto flex items-center gap-2">
         <AiActivityIndicator />
-        {activeRun && (
-          <button
-            onClick={() => navigate(`/runs/${resolvedRunId}`)}
-            className="flex h-[38px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 text-[13px] font-semibold text-ink-soft hover:bg-white/[0.09]"
-          >
-            {isLive && (
-              <span
-                className="h-[7px] w-[7px] rounded-full"
-                style={{ background: "#f59e0b", animation: "pulseDot 1.6s infinite" }}
-              />
-            )}
-            {activeRun.code}
-          </button>
-        )}
         <button
           onClick={openCreateRun}
           className="accent-gradient flex h-[38px] items-center gap-2 rounded-xl px-4 text-[13px] font-semibold text-white shadow-[0_8px_22px_-8px_rgba(139,92,246,.8)] hover:brightness-110"
