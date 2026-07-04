@@ -158,6 +158,23 @@ export function Settings() {
           </>
         )}
       </GlassCard>
+
+      <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">INTERFACE</div>
+      <GlassCard className="p-[22px]">
+        {settingsLoading || !settings ? (
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        ) : (
+          <ToggleRow
+            title="3D background"
+            description="Animated neural-constellation backdrop. Turn off for a flat background (lighter on the GPU)."
+            checked={settings.neuralBackground}
+            onChange={(v) => updateSettings.mutate({ neuralBackground: v })}
+            bordered={false}
+          />
+        )}
+      </GlassCard>
     </div>
   );
 }

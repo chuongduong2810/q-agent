@@ -36,6 +36,11 @@ interface UIState {
   togglePalette: () => void;
   setPaletteQuery: (q: string) => void;
 
+  // run switcher dropdown
+  runSwitcherOpen: boolean;
+  openRunSwitcher: () => void;
+  closeRunSwitcher: () => void;
+
   // tickets page
   selected: Record<string, boolean>;
   ticketSearch: string;
@@ -111,6 +116,10 @@ export const useUI = create<UIState>((set) => ({
   closePalette: () => set({ paletteOpen: false }),
   togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen, paletteQuery: "" })),
   setPaletteQuery: (q) => set({ paletteQuery: q }),
+
+  runSwitcherOpen: false,
+  openRunSwitcher: () => set({ runSwitcherOpen: true }),
+  closeRunSwitcher: () => set({ runSwitcherOpen: false }),
 
   selected: {},
   ticketSearch: "",

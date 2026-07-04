@@ -7,7 +7,6 @@ import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
 import { runColor, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
 import { useAuditEvents, useReports, useRunCases, useRuns, useSettings } from "@/hooks/queries";
-import { useResolvedRunId } from "@/hooks/useResolvedRunId";
 import { useUI } from "@/store/ui";
 
 const initials = (name: string) =>
@@ -27,10 +26,14 @@ const ACTOR_FG: Record<string, string> = {
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const resolvedRunId = useResolvedRunId();
   const { data: runs, isLoading: runsLoading } = useRuns();
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const { data: activeRunCases } = useRunCases(resolvedRunId);
+  // Runs sorted newest-first; the hero card displays the most recent run.
+  const recentRuns = [...(runs ?? [])].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const heroRun = recentRuns[0] ?? null;
+  const { data: activeRunCases } = useRunCases(heroRun?.id ?? null);
   const { data: reports } = useReports();
   const { data: activity } = useAuditEvents({});
   const { data: settings } = useSettings();
@@ -56,11 +59,6 @@ export function Dashboard() {
   const activeRuns = runs?.filter((r) => r.status !== "done") ?? [];
   const reviewRuns = runs?.filter((r) => r.status === "review") ?? [];
   const casesInReview = activeRunCases?.filter((c) => c.approval === "pending").length ?? 0;
-  const recentRuns = [...(runs ?? [])].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-  // The run the hero card highlights: the active run, else the most recent.
-  const heroRun = runs?.find((r) => r.id === resolvedRunId) ?? recentRuns[0] ?? null;
 
   const stats = [
     {
@@ -73,8 +71,8 @@ export function Dashboard() {
     },
     {
       label: "Cases in review",
-      value: resolvedRunId ? String(casesInReview) : "—",
-      trend: resolvedRunId ? "in the active run" : "no active run",
+      value: heroRun ? String(casesInReview) : "—",
+      trend: heroRun ? `in ${heroRun.code}` : "no runs yet",
       trendColor: "#6ee7b7",
       color: "#22d3ee",
       icon: <CheckCircle2 size={17} strokeWidth={2} />,
@@ -203,7 +201,7 @@ export function Dashboard() {
               <Button
                 variant="glass"
                 size="lg"
-                onClick={() => navigate(resolvedRunId ? `/runs/${resolvedRunId}/review` : "/runs")}
+                onClick={() => navigate(heroRun ? `/runs/${heroRun.id}/review` : "/runs")}
               >
                 Review Center
               </Button>
