@@ -572,6 +572,7 @@ class SettingsOut(ApiModel):
     user_name: str = ""
     user_role: str = ""
     auto_annotate: bool = True
+    neural_background: bool = True
 
 
 class SettingsUpdate(ApiModel):
@@ -584,3 +585,4 @@ class SettingsUpdate(ApiModel):
     user_name: str | None = None
     user_role: str | None = None
     auto_annotate: bool | None = None
+    neural_background: bool | None = None

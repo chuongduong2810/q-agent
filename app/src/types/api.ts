@@ -554,6 +554,7 @@ export interface SettingsOut {
   userName: string;
   userRole: string;
   autoAnnotate: boolean;
+  neuralBackground: boolean;
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 

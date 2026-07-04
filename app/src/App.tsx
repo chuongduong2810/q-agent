@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Toaster } from "sonner";
-import { NeuralBackground } from "@/components/background/NeuralBackground";
+import { AppBackground } from "@/components/background/AppBackground";
 import { AppLayout } from "@/components/shell/AppLayout";
 import { QueryProvider } from "@/app/QueryProvider";
 import { useUI } from "@/store/ui";
@@ -37,7 +37,7 @@ export default function App() {
 
   return (
     <QueryProvider>
-      <NeuralBackground />
+      <AppBackground />
       <AppLayout />
       <CommandPalette />
       <CreateRunModal />
