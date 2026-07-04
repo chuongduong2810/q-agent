@@ -29,9 +29,8 @@ export function Dashboard() {
   const navigate = useNavigate();
   const resolvedRunId = useResolvedRunId();
   const { data: runs, isLoading: runsLoading } = useRuns();
-  const activeRunId = useUI((s) => s.activeRunId);
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const { data: activeRunCases } = useRunCases(activeRunId);
+  const { data: activeRunCases } = useRunCases(resolvedRunId);
   const { data: reports } = useReports();
   const { data: activity } = useAuditEvents({});
   const { data: settings } = useSettings();
@@ -61,7 +60,7 @@ export function Dashboard() {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
   // The run the hero card highlights: the active run, else the most recent.
-  const heroRun = runs?.find((r) => r.id === activeRunId) ?? recentRuns[0] ?? null;
+  const heroRun = runs?.find((r) => r.id === resolvedRunId) ?? recentRuns[0] ?? null;
 
   const stats = [
     {
@@ -74,8 +73,8 @@ export function Dashboard() {
     },
     {
       label: "Cases in review",
-      value: activeRunId ? String(casesInReview) : "—",
-      trend: activeRunId ? "in the active run" : "no active run",
+      value: resolvedRunId ? String(casesInReview) : "—",
+      trend: resolvedRunId ? "in the active run" : "no active run",
       trendColor: "#6ee7b7",
       color: "#22d3ee",
       icon: <CheckCircle2 size={17} strokeWidth={2} />,

@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { NeuralBackground } from "@/components/background/NeuralBackground";
 import { AppLayout } from "@/components/shell/AppLayout";
-import { UrlStoreSync } from "@/components/shell/UrlStoreSync";
 import { QueryProvider } from "@/app/QueryProvider";
 import { useUI } from "@/store/ui";
 
@@ -13,7 +12,7 @@ import { CreateRunModal } from "@/screens/CreateRunModal";
 /**
  * Root layout element for the data router (see router.tsx). Wraps the app in the
  * query provider and background, mounts the shell (`AppLayout` renders the
- * matched route via `<Outlet/>`), the URL→store bridge, and global overlays.
+ * matched route via `<Outlet/>`), and global overlays.
  */
 export default function App() {
   const togglePalette = useUI((s) => s.togglePalette);
@@ -39,7 +38,6 @@ export default function App() {
   return (
     <QueryProvider>
       <NeuralBackground />
-      <UrlStoreSync />
       <AppLayout />
       <CommandPalette />
       <CreateRunModal />

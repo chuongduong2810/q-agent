@@ -1,47 +1,13 @@
 /**
- * UI-only client state (Zustand). Server state lives in TanStack Query — this
- * store holds navigation, selections, modal/panel open-state, search/filter and
- * in-progress edit drafts. Mirrors the interaction model of the design prototype.
+ * UI-only client state (Zustand). Server state lives in TanStack Query and
+ * navigation lives in the URL (react-router, see ADR 0003) — this store holds
+ * only ephemeral UI state: modal/panel open-state, selections, search/filter and
+ * in-progress edit drafts.
  */
 
 import { create } from "zustand";
-import { routerNavigate } from "@/lib/navigation";
-import type { Screen } from "@/types";
 import type { TestStep } from "@/types/api";
 
-/** Run-scoped screens → their path segment under `/runs/:runId` (index = ""). */
-const RUN_SEGMENT: Partial<Record<Screen, string>> = {
-  run: "",
-  review: "review",
-  sync: "sync",
-  automation: "automation",
-  console: "execution",
-  evidence: "evidence",
-  comment: "comment",
-};
-
-/** Global screens → their absolute path. */
-const GLOBAL_PATH: Partial<Record<Screen, string>> = {
-  dashboard: "/",
-  projects: "/projects",
-  tickets: "/tickets",
-  runs: "/runs",
-  reports: "/reports",
-  audit: "/audit",
-  settings: "/settings",
-};
-
-/** Map a legacy Screen to a router path, using the active run for run-scoped screens. */
-function screenToPath(screen: Screen, runId: number | null): string {
-  const seg = RUN_SEGMENT[screen];
-  if (seg !== undefined) {
-    if (runId == null) return "/runs";
-    return seg ? `/runs/${runId}/${seg}` : `/runs/${runId}`;
-  }
-  return GLOBAL_PATH[screen] ?? "/";
-}
-
-/** Sidebar nav → screen mapping; screens not in the nav (ticket/run/comment) are pushed programmatically. */
 export type TicketFilter = "all" | "ready" | "mine" | "sprint";
 export type ProjectTab = "overview" | "knowledge" | "tickets" | "runs" | "settings";
 export type EvidenceTab = "screenshot" | "video" | "trace" | "console" | "network";
@@ -54,20 +20,6 @@ export interface CaseDraft {
 }
 
 interface UIState {
-  // navigation
-  screen: Screen;
-  activeProject: string;
-  activeTicket: string | null;
-  activeRunId: number | null;
-  navigate: (screen: Screen) => void;
-  openTicket: (externalId: string) => void;
-  openProject: (name: string) => void;
-  setActiveRun: (runId: number | null) => void;
-
-  // project detail
-  projectTab: ProjectTab;
-  setProjectTab: (t: ProjectTab) => void;
-
   // Project Knowledge build overlay (cosmetic step animation over the real build)
   knowledgeBuilding: boolean;
   buildProjectName: string;
@@ -117,28 +69,20 @@ interface UIState {
   setRunField: <K extends keyof RunFormFields>(key: K, value: RunFormFields[K]) => void;
 
   // review
-  reviewOpenTicket: string | null;
   expandedCase: number | null;
   editingCase: number | null;
   draft: CaseDraft | null;
   reviewSel: Record<number, boolean>;
   toggleReviewSel: (caseId: number) => void;
   clearReviewSel: () => void;
-  toggleReviewTicket: (tid: string) => void;
   toggleCase: (caseId: number) => void;
   startEdit: (caseId: number, draft: CaseDraft) => void;
   updateDraft: (patch: Partial<CaseDraft>) => void;
   cancelEdit: () => void;
 
-  // automation
-  selectedSpecCaseId: number | null;
-  selectSpec: (caseId: number) => void;
-
   // evidence
-  evidenceTicket: string | null;
   evidenceTab: EvidenceTab;
   tool: AnnotationTool;
-  setEvidenceTicket: (tid: string) => void;
   setEvidenceTab: (t: EvidenceTab) => void;
   setTool: (t: AnnotationTool) => void;
 }
@@ -152,34 +96,7 @@ interface RunFormFields {
   runRetry: number;
 }
 
-export const useUI = create<UIState>((set, get) => ({
-  screen: "dashboard",
-  activeProject: "Surency Platform",
-  activeTicket: null,
-  activeRunId: null,
-  // Nav actions are thin adapters over the data router (temporary bridge, ADR
-  // 0003): they drive navigation via `routerNavigate` and keep setting the
-  // legacy fields so unmigrated screens read fresh values without a flash.
-  navigate: (screen) => {
-    routerNavigate(screenToPath(screen, get().activeRunId));
-    set({ screen, paletteOpen: false });
-  },
-  openTicket: (externalId) => {
-    routerNavigate(`/tickets/${encodeURIComponent(externalId)}`);
-    set({ activeTicket: externalId, screen: "ticket" });
-  },
-  openProject: (name) => {
-    routerNavigate(`/projects/${encodeURIComponent(name)}`);
-    set({ activeProject: name, screen: "project", projectTab: "overview" });
-  },
-  setActiveRun: (runId) => set({ activeRunId: runId }),
-
-  projectTab: "overview",
-  setProjectTab: (t) => {
-    routerNavigate(`/projects/${encodeURIComponent(get().activeProject)}?tab=${t}`);
-    set({ projectTab: t });
-  },
-
+export const useUI = create<UIState>((set) => ({
   knowledgeBuilding: false,
   buildProjectName: "",
   knowledgeStep: 0,
@@ -223,7 +140,6 @@ export const useUI = create<UIState>((set, get) => ({
   closeCreateRun: () => set({ createRunOpen: false }),
   setRunField: (key, value) => set({ [key]: value } as Partial<UIState>),
 
-  reviewOpenTicket: null,
   expandedCase: null,
   editingCase: null,
   draft: null,
@@ -231,20 +147,13 @@ export const useUI = create<UIState>((set, get) => ({
   toggleReviewSel: (caseId) =>
     set((s) => ({ reviewSel: { ...s.reviewSel, [caseId]: !s.reviewSel[caseId] } })),
   clearReviewSel: () => set({ reviewSel: {} }),
-  toggleReviewTicket: (tid) =>
-    set((s) => ({ reviewOpenTicket: s.reviewOpenTicket === tid ? null : tid })),
   toggleCase: (caseId) => set((s) => ({ expandedCase: s.expandedCase === caseId ? null : caseId })),
   startEdit: (caseId, draft) => set({ editingCase: caseId, expandedCase: caseId, draft }),
   updateDraft: (patch) => set((s) => (s.draft ? { draft: { ...s.draft, ...patch } } : {})),
   cancelEdit: () => set({ editingCase: null, draft: null }),
 
-  selectedSpecCaseId: null,
-  selectSpec: (caseId) => set({ selectedSpecCaseId: caseId }),
-
-  evidenceTicket: null,
   evidenceTab: "screenshot",
   tool: "cursor",
-  setEvidenceTicket: (tid) => set({ evidenceTicket: tid }),
   setEvidenceTab: (t) => set({ evidenceTab: t }),
   setTool: (t) => set({ tool: t }),
 }));
