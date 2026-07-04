@@ -50,7 +50,7 @@ export function CreateLinkSync() {
       "ado") as ProviderKind;
 
   return (
-    <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
+    <div className="px-1 pb-10 pt-0.5">
       <div className="mb-3.5 flex items-end justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">

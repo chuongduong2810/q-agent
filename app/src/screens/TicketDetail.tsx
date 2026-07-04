@@ -106,7 +106,7 @@ export function TicketDetail() {
 
   if (isLoading || !detail) {
     return (
-      <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
+      <div className="px-1 pb-10 pt-0.5">
         <BackButton onClick={goTickets} />
         {isLoading ? (
           <div className="grid grid-cols-[1.55fr_1fr] items-start gap-4">
@@ -127,7 +127,7 @@ export function TicketDetail() {
   const [glyph, glyphColor] = providerGlyph[detail.providerKind] ?? ["?", "#8b8b9e"];
 
   return (
-    <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
+    <div className="px-1 pb-10 pt-0.5">
       <BackButton onClick={goTickets} />
 
       <div className="grid grid-cols-[1.55fr_1fr] items-start gap-4">

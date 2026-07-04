@@ -18,7 +18,7 @@ export function Settings() {
   );
 
   return (
-    <div className="animate-[fadeInUp_.5s_ease_both] max-w-[900px] px-1 pb-10 pt-0.5">
+    <div className="max-w-[900px] px-1 pb-10 pt-0.5">
       <div className="mb-[22px]">
         <div className="mb-[5px] text-[13px] font-medium text-muted">Workspace · Surency</div>
         <h1 className="m-0 text-[28px] font-black tracking-tight">Settings</h1>
