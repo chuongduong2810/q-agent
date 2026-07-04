@@ -24,7 +24,9 @@ export const KNOWLEDGE_STEPS = [
 /** [label, color, bg, dot] for a knowledge status pill. */
 export function knowledgeStatusStyle(status: string): [string, string, string, string] {
   if (status === "indexed") return ["Indexed", "#6ee7b7", "rgba(16,185,129,.12)", "#10b981"];
+  if (status === "indexing") return ["Building…", "#a78bfa", "rgba(139,92,246,.12)", "#8b5cf6"];
   if (status === "stale") return ["Needs refresh", "#fbbf24", "rgba(251,191,36,.1)", "#f59e0b"];
+  if (status === "error") return ["Build failed", "#fb7185", "rgba(244,63,94,.12)", "#f43f5e"];
   return ["Not indexed", "#8b93a7", "rgba(148,163,184,.12)", "#6b7280"];
 }
 

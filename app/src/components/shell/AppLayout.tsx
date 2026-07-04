@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
+import { CursorLight } from "@/components/effects/CursorLight";
+import { ClickRipples } from "@/components/effects/ClickRipples";
 
 /** The persistent frame: sidebar + top bar + a scrollable content region. */
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -11,6 +13,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <TopBar />
         <main className="min-h-0 flex-1 overflow-y-auto rounded-[20px]">{children}</main>
       </div>
+      <CursorLight />
+      <ClickRipples />
     </div>
   );
 }

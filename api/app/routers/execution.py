@@ -91,6 +91,53 @@ def start_execution(
     return _execution_out(db, execution)
 
 
+@router.post("/cases/{case_id}/spec/run")
+def run_single_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
+    """Execute just one test case's spec (the "run this test" action).
+
+    Creates an Execution with a single pending ExecutionResult and runs only that
+    spec (run_execution runs one file when the execution has one result). 404 if
+    the case/spec/run is missing; 400 if the case isn't automatable.
+    """
+    case = db.get(TestCase, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Test case not found")
+    if case.approval != "approved" or case.automation == "Manual":
+        raise HTTPException(status_code=400, detail="Case is not an approved, automatable test")
+    run = db.get(Run, case.run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    execution = Execution(
+        run_id=run.id,
+        status="running",
+        env=run.env,
+        browser=run.browser,
+        workers=1,
+        total=1,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(execution)
+    db.flush()
+    db.add(
+        ExecutionResult(
+            execution_id=execution.id,
+            test_case_id=case.id,
+            ticket_external_id=case.ticket_external_id,
+            case_code=case.code,
+            title=case.title,
+            status="pending",
+        )
+    )
+    run.status = "executing"
+    db.commit()
+    db.refresh(execution)
+
+    hub.publish(str(run.id), "run.status", {"status": run.status})
+    threading.Thread(target=run_execution, args=(execution.id,), daemon=True).start()
+    return _execution_out(db, execution)
+
+
 @router.get("/runs/{run_id}/execution")
 def get_latest_execution(run_id: int, db: Session = Depends(get_db)) -> dict:
     """Return the most recent Execution for a run, with its results."""
@@ -132,6 +179,7 @@ def _execution_out(db: Session, execution: Execution) -> dict:
         "passed": execution.passed,
         "failed": execution.failed,
         "progress": execution.progress,
+        "log": execution.log,
         "startedAt": execution.started_at,
         "finishedAt": execution.finished_at,
         "results": [_result_out(db, r) for r in results],

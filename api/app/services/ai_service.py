@@ -24,7 +24,7 @@ from app.models.provider import Provider
 from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
-from app.services import settings_store
+from app.services import audit_service, project_config_service, settings_store
 from app.services.adapters import get_adapter
 from app.services.claude_cli import ClaudeError, run_json
 from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR
@@ -90,6 +90,29 @@ def provider_case_offset(db: Session, ticket: Ticket) -> int:
     return max_n
 
 
+def _validated_repo_guess(analysis: dict, context: dict) -> str:
+    """Resolve a work item's target repo from Claude's guess and the project repos.
+
+    Uses ``analysis['suggestedRepo']`` when it matches a configured repo name;
+    otherwise falls back to the project's default repo name, else "".
+
+    Args:
+        analysis: The requirement-analysis JSON returned by Claude.
+        context: The project context (provides ``repoOptions`` and the resolved
+            default in ``repo``).
+
+    Returns:
+        A validated repo name, or "" when the project has no repos.
+    """
+    options = context.get("repoOptions") or []
+    names = {opt.get("name", "") for opt in options}
+    suggested = str(analysis.get("suggestedRepo", "") or "").strip()
+    if suggested and suggested in names:
+        return suggested
+    default_name = next((opt["name"] for opt in options if opt.get("default")), "")
+    return default_name or context.get("repo", "") or ""
+
+
 def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
     """Analyze + generate test cases for a single RunTicket. Commits as it goes."""
     ticket = db.query(Ticket).filter(Ticket.external_id == run_ticket.ticket_external_id).first()
@@ -114,6 +137,10 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         db.add(run_ticket)
         db.commit()
 
+        # Resolve the full Project Knowledge Base + config so analysis and
+        # generation reuse real domain terms, routes and account roles.
+        context = project_config_service.context_for_ticket(db, ticket, env=run.env)
+
         _publish_phase(run.id, ticket.external_id, PHASE_READING, "Reading ticket details...")
         _publish_phase(
             run.id, ticket.external_id, PHASE_UNDERSTANDING_AC, "Understanding acceptance criteria..."
@@ -123,7 +150,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         )
 
         analysis = run_json(
-            build_analysis_prompt(ticket),
+            build_analysis_prompt(ticket, context),
             skill=REQUIREMENT_ANALYST,
             label=f"Analyze {ticket.external_id}",
         )
@@ -131,6 +158,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             raise ClaudeError("Claude analysis response was not a JSON object")
 
         run_ticket.analysis = analysis
+        run_ticket.repo = _validated_repo_guess(analysis, context)
         run_ticket.gen_status = "generating"
         db.add(run_ticket)
         db.commit()
@@ -142,7 +170,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         offset = provider_case_offset(db, ticket)
 
         cases = run_json(
-            build_generation_prompt(ticket, analysis, max_cases=max_cases),
+            build_generation_prompt(ticket, analysis, max_cases=max_cases, context=context),
             skill=TEST_CASE_GENERATOR,
             label=f"Generate cases: {ticket.external_id}",
         )
@@ -219,6 +247,13 @@ def _run_pipeline(run_id: int) -> None:
         db.add(run)
         db.commit()
         hub.publish(str(run.id), "run.status", {"status": run.status})
+
+        case_total = db.query(TestCase).filter(TestCase.run_id == run.id).count()
+        audit_service.record(
+            category="ai", actor_type="ai", action="Generated test cases",
+            target=f"{run.code} · {case_total} cases",
+            meta=f"{len(run_tickets)} tickets analyzed",
+        )
     finally:
         db.close()
 

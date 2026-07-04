@@ -55,6 +55,8 @@ class AutomationSpec(Base):
     framework: Mapped[str] = mapped_column(String(32), default="Playwright")
     code: Mapped[str] = mapped_column(Text, default="")
     path: Mapped[str] = mapped_column(String(500), default="")  # on-disk spec path
+    # Last self-heal run: JSON {finalStatus, maxAttempts, healedAt, attempts:[...]}.
+    heal_report: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = timestamp_column()
 
     test_case: Mapped["TestCase"] = relationship(back_populates="spec")

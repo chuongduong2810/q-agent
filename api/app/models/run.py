@@ -65,6 +65,9 @@ class RunTicket(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
 
     gen_status: Mapped[str] = mapped_column(String(16), default="queued")
+    # Target repository NAME for this work item ("" = use the project default repo).
+    # Claude guesses it during analysis; the user can override it.
+    repo: Mapped[str] = mapped_column(String(300), default="")
     # AI analysis output: {businessRules, functionalRequirements, validationRules,
     # risks, edgeCases, missingInformation, suggestedScope}
     analysis: Mapped[dict] = mapped_column(JSON, default=dict)

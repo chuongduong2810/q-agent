@@ -7,16 +7,27 @@
 import type {
   AiActivity,
   AnnotationShape,
+  AuditEventOut,
+  AuditStats,
+  AuthState,
   AutomationSpecOut,
+  AutomationStatus,
+  BackendLogOut,
+  BackendLogStats,
   CreateLinkRequest,
   LinkedTestCaseOut,
   LinkStatusOut,
   EvidenceGrouped,
   EvidenceOut,
   ExecutionOut,
+  HealReport,
+  AvailableReposOut,
   KnowledgeBuildRequest,
+  ProjectConfigOut,
+  ProjectConfigUpdate,
   ProjectKnowledgeOut,
   ProjectOut,
+  RepoKnowledgeOut,
   ProviderFieldsIn,
   ProviderKind,
   ProviderOut,
@@ -24,6 +35,8 @@ import type {
   RunCreate,
   RunDetailOut,
   RunOut,
+  RunRepoOption,
+  RunTicketOut,
   SettingsOut,
   SettingsUpdate,
   SprintOut,
@@ -80,6 +93,7 @@ const put = <T>(p: string, body?: unknown) =>
   request<T>(p, { method: "PUT", body: JSON.stringify(body ?? {}) });
 const patch = <T>(p: string, body?: unknown) =>
   request<T>(p, { method: "PATCH", body: JSON.stringify(body ?? {}) });
+const del = <T>(p: string) => request<T>(p, { method: "DELETE" });
 
 function qs(params: Record<string, string | undefined>): string {
   const entries = Object.entries(params).filter(([, v]) => v != null && v !== "");
@@ -116,6 +130,33 @@ export const api = {
   buildKnowledge: (key: string, body: KnowledgeBuildRequest) =>
     post<ProjectKnowledgeOut>(`/projects/${encodeURIComponent(key)}/knowledge/build`, body),
 
+  // project config (test account, base URL, environments, repos)
+  getProjectConfig: (key: string) =>
+    get<ProjectConfigOut>(`/projects/${encodeURIComponent(key)}/config`),
+  saveProjectConfig: (key: string, body: ProjectConfigUpdate) =>
+    put<ProjectConfigOut>(`/projects/${encodeURIComponent(key)}/config`, body),
+
+  // project manual-login (saved browser session)
+  getProjectAuth: (key: string) => get<AuthState>(`/projects/${encodeURIComponent(key)}/auth`),
+  clearProjectAuth: (key: string) => del<AuthState>(`/projects/${encodeURIComponent(key)}/auth`),
+  captureProjectAuth: (key: string) =>
+    post<AuthState>(`/projects/${encodeURIComponent(key)}/auth/capture`),
+
+  // project repos + per-repo knowledge
+  availableRepos: (key: string) =>
+    get<AvailableReposOut>(`/projects/${encodeURIComponent(key)}/repos/available`),
+  listProjectRepos: (key: string) =>
+    get<RepoKnowledgeOut[]>(`/projects/${encodeURIComponent(key)}/repos`),
+  getRepoKnowledge: (key: string, repo: string) =>
+    get<ProjectKnowledgeOut>(
+      `/projects/${encodeURIComponent(key)}/repos/${encodeURIComponent(repo)}/knowledge`,
+    ),
+  buildRepoKnowledge: (key: string, repo: string, body: KnowledgeBuildRequest) =>
+    post<ProjectKnowledgeOut>(
+      `/projects/${encodeURIComponent(key)}/repos/${encodeURIComponent(repo)}/knowledge/build`,
+      body,
+    ),
+
   // tickets
   listTickets: (params: TicketFilters = {}) =>
     get<TicketOut[]>("/tickets" + qs(params as Record<string, string | undefined>)),
@@ -129,6 +170,9 @@ export const api = {
   createRun: (body: RunCreate) => post<RunDetailOut>("/runs", body),
   getRun: (runId: number | string) => get<RunDetailOut>(`/runs/${runId}`),
   regenerateRun: (runId: number | string) => post<RunDetailOut>(`/runs/${runId}/regenerate`),
+  runRepos: (runId: number | string) => get<RunRepoOption[]>(`/runs/${runId}/repos`),
+  setRunTicketRepo: (runId: number | string, tid: string, repo: string) =>
+    post<RunTicketOut>(`/runs/${runId}/tickets/${encodeURIComponent(tid)}/repo`, { repo }),
 
   // review
   listCases: (runId: number | string) => get<TestCaseOut[]>(`/runs/${runId}/cases`),
@@ -146,11 +190,25 @@ export const api = {
   linkStatus: (runId: number | string) => get<LinkStatusOut>(`/runs/${runId}/linked`),
 
   // automation
-  generateAutomation: (runId: number | string) =>
-    post<AutomationSpecOut[]>(`/runs/${runId}/automation/generate`),
+  generateAutomation: (runId: number | string, force = false) =>
+    post<AutomationSpecOut[]>(
+      `/runs/${runId}/automation/generate${force ? "?force=true" : ""}`,
+    ),
+  automationStatus: (runId: number | string) =>
+    get<AutomationStatus>(`/runs/${runId}/automation/status`),
   listSpecs: (runId: number | string) => get<AutomationSpecOut[]>(`/runs/${runId}/automation`),
   getSpec: (caseId: number) => get<AutomationSpecOut>(`/cases/${caseId}/spec`),
   regenerateSpec: (caseId: number) => post<AutomationSpecOut>(`/cases/${caseId}/spec/regenerate`),
+  updateSpec: (caseId: number, code: string) => patch<AutomationSpecOut>(`/cases/${caseId}/spec`, { code }),
+  healSpec: (caseId: number) =>
+    post<{ started: boolean; maxAttempts: number }>(`/cases/${caseId}/spec/heal`),
+  healStatus: (caseId: number) =>
+    get<{ healing: boolean; attempt: number; maxAttempts: number }>(
+      `/cases/${caseId}/spec/heal/status`,
+    ),
+  healReport: (caseId: number) =>
+    get<HealReport | Record<string, never>>(`/cases/${caseId}/spec/heal/report`),
+  runSpec: (caseId: number) => post<ExecutionOut>(`/cases/${caseId}/spec/run`),
 
   // execution
   startExecution: (runId: number | string, body: { workers?: number; env?: string } = {}) =>
@@ -161,6 +219,8 @@ export const api = {
   getEvidence: (runId: number | string) => get<EvidenceGrouped>(`/runs/${runId}/evidence`),
   annotate: (evidenceId: number, shapes: AnnotationShape[]) =>
     post<EvidenceOut>(`/evidence/${evidenceId}/annotate`, { shapes }),
+  autoAnnotateEvidence: (evidenceId: number) =>
+    post<EvidenceOut>(`/evidence/${evidenceId}/auto-annotate`),
 
   // reports
   buildReport: (runId: number | string) => post<ReportOut>(`/runs/${runId}/report`),
@@ -177,6 +237,15 @@ export const api = {
   publishAll: (runId: number | string, ticketIds: string[] = []) =>
     post<TicketCommentOut[]>(`/runs/${runId}/comments/publish`, { ticketIds }),
   retryComments: (runId: number | string) => post<TicketCommentOut[]>(`/runs/${runId}/comments/retry`),
+
+  // audit log
+  auditEvents: (params: { category?: string; actor?: string; q?: string } = {}) =>
+    get<AuditEventOut[]>("/audit/events" + qs(params)),
+  auditStats: () => get<AuditStats>("/audit/stats"),
+  clearAuditEvents: () => del<{ deleted: number }>("/audit/events"),
+  backendLogs: (params: { level?: string; service?: string; q?: string } = {}) =>
+    get<BackendLogOut[]>("/audit/logs" + qs(params)),
+  backendLogStats: () => get<BackendLogStats>("/audit/logs/stats"),
 
   // artifacts
   artifactUrl: (path: string) => `${API_BASE}/artifacts/${path}`,

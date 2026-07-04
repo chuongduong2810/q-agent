@@ -58,6 +58,30 @@ requirement-analyst → test-case-generator → test-case-reviewer
 Annotation notes in Markdown, following `templates/annotation-notes.md`. The notes must be
 self-contained and pasteable into a defect ticket or QA report, and must reference the Test Case ID.
 
+## Automatic Annotation Mode (visual, per test case)
+
+Evidence is collected and annotated **per individual test case** (not per ticket). When a case
+fails, this skill also runs automatically to draw the problem directly on the failure screenshot:
+the app sends the screenshot + Playwright error and expects **compact JSON only** (the caller pins
+the shape; do not emit prose in this mode):
+
+```json
+{"diagnosis":"<=200 char plain-language likely root cause",
+ "shapes":[
+   {"tool":"rectangle","x":10,"y":20,"w":40,"h":12,"color":"#f43f5e"},
+   {"tool":"arrow","x":50,"y":60,"x2":40,"y2":28,"color":"#f43f5e"},
+   {"tool":"text","x":10,"y":6,"text":"short label","color":"#f43f5e"}
+ ]}
+```
+
+- All coordinates are **percent** of image width/height (0–100). `tool` ∈ rectangle / arrow /
+  highlight / circle / text. Keep to at most 4 shapes.
+- Draw a box around the element that is wrong / missing / unexpected; optionally an arrow to it and
+  a short label. If you cannot localise it, return `"shapes":[]` but still give a `diagnosis`.
+- The shapes are burned onto a copy of the screenshot (Pillow) and stored as the annotated
+  evidence for that test case; `diagnosis` is shown in the Evidence view and folded into the
+  consolidated ticket comment. Describe only what is visible (same quality rules as above).
+
 ## Quality Rules
 
 - Describe **only what is visible** in the screenshot/trace. Do not infer hidden state,

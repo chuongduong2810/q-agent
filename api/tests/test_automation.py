@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 CANNED_SPEC = """```typescript
 import { test, expect } from '@playwright/test';
 
@@ -20,6 +22,17 @@ test('Login works', async ({ page }) => {
 
 
 _run_counter = 0
+
+
+@pytest.fixture(autouse=True)
+def _clear_heal_state():
+    """Heal state (``playwright_runner._healing``) is module-global; fresh test
+    DBs reuse case id 1, so clear it between tests to prevent cross-test bleed."""
+    from app.services import playwright_runner
+
+    playwright_runner._healing.clear()
+    yield
+    playwright_runner._healing.clear()
 
 
 def _seed_run_and_case(db_session, *, automation="Playwright", approval="approved"):
@@ -137,9 +150,351 @@ def test_get_case_spec_and_regenerate(client, db_session, monkeypatch):
     assert resp2.json()["id"] == body["id"]
 
 
+def test_update_case_spec_persists_and_rewrites_file(client, db_session, monkeypatch):
+    from app.services import claude_cli
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+
+    run, case = _seed_run_and_case(db_session)
+
+    # Seed a spec via regenerate, then edit it.
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+
+    edited = "import { test } from '@playwright/test';\n\ntest('edited', async () => {});\n"
+    resp = client.patch(f"/cases/{case.id}/spec", json={"code": edited})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["testCaseId"] == case.id
+    assert body["code"] == edited
+
+    from app.config import settings
+
+    spec_path = settings.specs_dir / run.code / "1428-TC-01.spec.ts"
+    assert spec_path.exists()
+    assert spec_path.read_text(encoding="utf-8") == edited
+
+    from app.db import SessionLocal
+    from app.models.testcase import AutomationSpec
+
+    db = SessionLocal()
+    try:
+        row = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
+        assert row is not None
+        assert row.code == edited
+        assert row.path == str(spec_path)
+    finally:
+        db.close()
+
+
+def test_update_case_spec_missing_spec_returns_404(client, db_session):
+    run, case = _seed_run_and_case(db_session)
+    resp = client.patch(f"/cases/{case.id}/spec", json={"code": "x"})
+    assert resp.status_code == 404
+
+
 def test_generate_missing_run_returns_404(client, db_session):
     resp = client.post("/runs/9999/automation/generate")
     assert resp.status_code == 404
+
+
+def _add_case(db_session, run, *, code, ticket="SUR-2001"):
+    """Attach another approved, Playwright case to an existing run."""
+    from app.models.testcase import TestCase
+
+    case = TestCase(
+        run_id=run.id,
+        ticket_external_id=ticket,
+        code=code,
+        title="Second case",
+        precondition="",
+        steps=[{"a": "do", "e": "done"}],
+        approval="approved",
+        automation="Playwright",
+    )
+    db_session.add(case)
+    db_session.commit()
+    db_session.refresh(case)
+    return case
+
+
+def _wait_for_specs(client, run_id, count):
+    """Poll the run's spec list until it reaches ``count`` (background gen)."""
+    for _ in range(60):
+        specs = client.get(f"/runs/{run_id}/automation").json()
+        if len(specs) >= count:
+            return specs
+        time.sleep(0.05)
+    return client.get(f"/runs/{run_id}/automation").json()
+
+
+def test_generate_is_incremental_and_preserves_edits(client, db_session, monkeypatch):
+    """Re-generating after approving a new case leaves existing (edited) specs
+    untouched and only generates the newly approved case."""
+    from app.services import claude_cli
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+
+    run, case_a = _seed_run_and_case(db_session)
+
+    assert client.post(f"/runs/{run.id}/automation/generate").status_code == 200
+    _wait_for_specs(client, run.id, 1)
+
+    # Edit case A's spec — this is the work we must not clobber.
+    edited = "import { test } from '@playwright/test';\n\ntest('hand edited', async () => {});\n"
+    assert client.patch(f"/cases/{case_a.id}/spec", json={"code": edited}).status_code == 200
+
+    # Approve a second case, then generate again (incremental by default).
+    case_b = _add_case(db_session, run, code="TC-02")
+    assert client.post(f"/runs/{run.id}/automation/generate").status_code == 200
+    _wait_for_specs(client, run.id, 2)
+
+    # Case A keeps the manual edit; case B was generated fresh.
+    assert client.get(f"/cases/{case_a.id}/spec").json()["code"] == edited
+    assert "test('Login works'" in client.get(f"/cases/{case_b.id}/spec").json()["code"]
+
+
+def _seed_execution_result(db_session, run, case, *, status="fail"):
+    """Attach an Execution + one ExecutionResult for a case (what heal updates)."""
+    from app.models.execution import Execution, ExecutionResult
+
+    execution = Execution(run_id=run.id, status="done", total=1, passed=0, failed=1)
+    db_session.add(execution)
+    db_session.flush()
+    result = ExecutionResult(
+        execution_id=execution.id,
+        test_case_id=case.id,
+        ticket_external_id=case.ticket_external_id,
+        case_code=case.code,
+        title=case.title,
+        status=status,
+        error_message="Timed out",
+    )
+    db_session.add(result)
+    db_session.commit()
+    return execution, result
+
+
+def _wait_heal_done(client, case_id):
+    for _ in range(100):
+        if not client.get(f"/cases/{case_id}/spec/heal/status").json()["healing"]:
+            return
+        time.sleep(0.05)
+
+
+def test_heal_missing_spec_returns_404(client, db_session):
+    run, case = _seed_run_and_case(db_session)
+    resp = client.post(f"/cases/{case.id}/spec/heal")
+    assert resp.status_code == 404
+
+
+def test_heal_rejected_while_run_executing(client, db_session, monkeypatch):
+    from app.services import claude_cli
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+
+    # The endpoint reads via the shared db_session, so set status on it directly.
+    run.status = "executing"
+    db_session.commit()
+
+    assert client.post(f"/cases/{case.id}/spec/heal").status_code == 409
+
+
+def test_heal_passes_first_run_marks_result_pass(client, db_session, monkeypatch):
+    from app.services import claude_cli, playwright_runner
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_execution_result(db_session, run, case, status="fail")
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        report = {
+            "suites": [
+                {
+                    "file": "1428-TC-01.spec.ts",
+                    "specs": [
+                        {
+                            "title": "Login works",
+                            "file": "1428-TC-01.spec.ts",
+                            "tests": [{"results": [{"status": "passed", "duration": 42, "attachments": []}]}],
+                        }
+                    ],
+                    "suites": [],
+                }
+            ]
+        }
+        (spec_dir_arg / "report.json").write_text(__import__("json").dumps(report), encoding="utf-8")
+        return 0, "1 passed", ""
+
+    # generate_fixed_spec_code must NOT be called when it passes on attempt 1.
+    def boom_fix(*a, **k):
+        raise AssertionError("should not regenerate when the first run passes")
+
+    monkeypatch.setattr(playwright_runner, "_invoke_playwright", fake_invoke)
+    monkeypatch.setattr(playwright_runner.spec_service, "generate_fixed_spec_code", boom_fix)
+
+    assert client.post(f"/cases/{case.id}/spec/heal").json()["started"] is True
+    _wait_heal_done(client, case.id)
+
+    from app.db import SessionLocal
+    from app.models.execution import ExecutionResult
+
+    db = SessionLocal()
+    try:
+        result = (
+            db.query(ExecutionResult)
+            .filter(ExecutionResult.test_case_id == case.id)
+            .order_by(ExecutionResult.id.desc())
+            .first()
+        )
+        assert result.status == "pass"
+        assert result.error_message == ""
+    finally:
+        db.close()
+
+
+def test_heal_fixes_then_passes_updates_spec(client, db_session, monkeypatch):
+    from app.services import claude_cli, playwright_runner
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_execution_result(db_session, run, case, status="fail")
+
+    calls = {"invoke": 0, "fix": 0}
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        calls["invoke"] += 1
+        status = "failed" if calls["invoke"] == 1 else "passed"
+        entry_result = {"status": status, "duration": 10, "attachments": []}
+        if status == "failed":
+            entry_result["error"] = {"message": "selector not found"}
+        report = {
+            "suites": [
+                {
+                    "file": "1428-TC-01.spec.ts",
+                    "specs": [
+                        {
+                            "title": "Login works",
+                            "file": "1428-TC-01.spec.ts",
+                            "tests": [{"results": [entry_result]}],
+                        }
+                    ],
+                    "suites": [],
+                }
+            ]
+        }
+        (spec_dir_arg / "report.json").write_text(__import__("json").dumps(report), encoding="utf-8")
+        return (1 if status == "failed" else 0), status, ""
+
+    FIXED = "import { test, expect } from '@playwright/test';\n\ntest('Login works', async () => { /* fixed */ });\n"
+
+    def fake_fix(case_arg, current_code, error_message, run_output="", context=None):
+        calls["fix"] += 1
+        assert "selector not found" in error_message
+        return FIXED
+
+    monkeypatch.setattr(playwright_runner, "_invoke_playwright", fake_invoke)
+    monkeypatch.setattr(playwright_runner.spec_service, "generate_fixed_spec_code", fake_fix)
+
+    assert client.post(f"/cases/{case.id}/spec/heal").json()["started"] is True
+    _wait_heal_done(client, case.id)
+
+    assert calls["fix"] == 1  # fixed once after the first failure
+    assert calls["invoke"] == 2  # ran, failed, re-ran, passed
+
+    # The healed code is persisted to the spec.
+    assert client.get(f"/cases/{case.id}/spec").json()["code"] == FIXED
+
+    from app.db import SessionLocal
+    from app.models.execution import ExecutionResult
+
+    db = SessionLocal()
+    try:
+        result = (
+            db.query(ExecutionResult)
+            .filter(ExecutionResult.test_case_id == case.id)
+            .order_by(ExecutionResult.id.desc())
+            .first()
+        )
+        assert result.status == "pass"
+    finally:
+        db.close()
+
+
+def test_heal_report_captures_attempts_and_diff(client, db_session, monkeypatch):
+    """After a fix-then-pass heal, GET /cases/{id}/spec/heal/report returns the
+    per-attempt trail with the error and the unified diff of what changed."""
+    from app.services import claude_cli, playwright_runner
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_execution_result(db_session, run, case, status="fail")
+
+    calls = {"n": 0}
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        calls["n"] += 1
+        status = "failed" if calls["n"] == 1 else "passed"
+        res = {"status": status, "duration": 10, "attachments": []}
+        if status == "failed":
+            res["error"] = {"message": "locator resolved to 0 elements"}
+        report = {"suites": [{"file": "1428-TC-01.spec.ts", "specs": [
+            {"title": "Login works", "file": "1428-TC-01.spec.ts", "tests": [{"results": [res]}]}]}]}
+        (spec_dir_arg / "report.json").write_text(__import__("json").dumps(report), encoding="utf-8")
+        return (1 if status == "failed" else 0), status, ""
+
+    FIXED = "import { test, expect } from '@playwright/test';\n\ntest('Login works', async () => { /* healed */ });\n"
+    monkeypatch.setattr(playwright_runner, "_invoke_playwright", fake_invoke)
+    monkeypatch.setattr(playwright_runner.spec_service, "generate_fixed_spec_code",
+                        lambda *a, **k: FIXED)
+
+    assert client.post(f"/cases/{case.id}/spec/heal").json()["started"] is True
+    _wait_heal_done(client, case.id)
+
+    report = client.get(f"/cases/{case.id}/spec/heal/report").json()
+    assert report["finalStatus"] == "pass"
+    assert len(report["attempts"]) == 2
+    first, second = report["attempts"]
+    assert first["status"] == "fail"
+    assert "locator resolved to 0 elements" in first["error"]
+    assert first["fixed"] is True and "healed" in first["diff"]  # diff shows the change
+    assert second["status"] == "pass"
+
+
+def test_heal_report_empty_when_never_healed(client, db_session, monkeypatch):
+    from app.services import claude_cli
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    assert client.get(f"/cases/{case.id}/spec/heal/report").json() == {}
+
+
+def test_generate_force_regenerates_existing_specs(client, db_session, monkeypatch):
+    """force=true overwrites existing specs, including manual edits."""
+    from app.services import claude_cli
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+
+    run, case_a = _seed_run_and_case(db_session)
+    assert client.post(f"/runs/{run.id}/automation/generate").status_code == 200
+    _wait_for_specs(client, run.id, 1)
+
+    edited = "import { test } from '@playwright/test';\n\ntest('hand edited', async () => {});\n"
+    assert client.patch(f"/cases/{case_a.id}/spec", json={"code": edited}).status_code == 200
+
+    assert client.post(f"/runs/{run.id}/automation/generate?force=true").status_code == 200
+    for _ in range(60):
+        code = client.get(f"/cases/{case_a.id}/spec").json()["code"]
+        if "hand edited" not in code:
+            break
+        time.sleep(0.05)
+    assert "test('Login works'" in code
+    assert "hand edited" not in code
 
 
 def test_spec_service_generate_spec_code_extracts_fenced_typescript(monkeypatch):

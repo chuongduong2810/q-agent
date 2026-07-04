@@ -68,6 +68,21 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _sync_columns()
+    _backfill_audit()
+
+
+def _backfill_audit() -> None:
+    """Seed the audit_logs table from existing history on first run (best-effort)."""
+    try:
+        from app.services import audit_service
+
+        db = SessionLocal()
+        try:
+            audit_service.backfill_from_history(db)
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001 - never block startup on auditing
+        pass
 
 
 def _sync_columns() -> None:

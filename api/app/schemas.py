@@ -58,7 +58,19 @@ class ProjectOut(ApiModel):
 
 
 class KnowledgeBody(ApiModel):
-    """The learned knowledge base contents (what project-bootstrap produces)."""
+    """The learned knowledge base contents (what project-bootstrap produces).
+
+    ``model_config`` allows extra keys so the richer, discovered fields
+    (base_url, routes, selectors, auth, environments, business_entities, …)
+    survive round-trips without each needing an explicit field here.
+    """
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="allow",
+    )
 
     branch: str = "main"
     stack: list[str] = Field(default_factory=list)
@@ -69,10 +81,86 @@ class KnowledgeBody(ApiModel):
     page_objects: int = 0
     fixtures: int = 0
     utilities: list[str] = Field(default_factory=list)
+    base_url: str = ""
+    routes: list[dict] = Field(default_factory=list)
+    selectors: list[dict] = Field(default_factory=list)
+    auth: dict = Field(default_factory=dict)
+    environments: list[dict] = Field(default_factory=list)
+    business_entities: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------- Project config
+class TestAccountIn(ApiModel):
+    """A test account submitted from the Project Details page (password plaintext in)."""
+
+    role: str = ""
+    username: str = ""
+    password: str = ""  # blank preserves the stored secret
+    notes: str = ""
+
+
+class TestAccountOut(ApiModel):
+    """A test account returned to the UI — password is never included."""
+
+    role: str = ""
+    username: str = ""
+    notes: str = ""
+    has_password: bool = False
+
+
+class EnvironmentCfg(ApiModel):
+    name: str = ""
+    base_url: str = ""
+    notes: str = ""
+
+
+class ProjectRepo(ApiModel):
+    """A repository that belongs to a project (an ADO/GitHub project holds many)."""
+
+    name: str
+    repo_url: str = ""
+    default_branch: str = ""
+    local_repo_path: str = ""
+    default: bool = False  # the repo automation targets by default
+
+
+class ProjectConfigOut(ApiModel):
+    key: str
+    name: str = ""
+    base_url: str = ""
+    repos: list[ProjectRepo] = Field(default_factory=list)
+    # Legacy single-repo fields (kept for backward compatibility).
+    local_repo_path: str = ""
+    repo_url: str = ""
+    environments: list[EnvironmentCfg] = Field(default_factory=list)
+    test_accounts: list[TestAccountOut] = Field(default_factory=list)
+    extra: dict = Field(default_factory=dict)
+    # Capture a real (headed) browser login before running specs when no saved session exists.
+    manual_auth: bool = False
+
+
+class ProjectConfigUpdate(ApiModel):
+    base_url: str | None = None
+    repos: list[ProjectRepo] | None = None
+    local_repo_path: str | None = None
+    repo_url: str | None = None
+    environments: list[EnvironmentCfg] | None = None
+    test_accounts: list[TestAccountIn] | None = None
+    extra: dict | None = None
+    manual_auth: bool | None = None
+
+
+class AuthStateOut(ApiModel):
+    """State of a project's saved manual-login session (storageState.json)."""
+
+    exists: bool = False
+    captured_at: datetime | None = None
+    capturing: bool = False
 
 
 class ProjectKnowledgeOut(ApiModel):
     key: str
+    project_key: str = ""
     name: str
     provider: str = ""
     repo: str = ""
@@ -84,6 +172,7 @@ class ProjectKnowledgeOut(ApiModel):
     last_indexed: datetime | None = None
     knowledge: dict = Field(default_factory=dict)
     doc_path: str = ""
+    last_error: str = ""
 
 
 class KnowledgeBuildRequest(ApiModel):
@@ -91,6 +180,39 @@ class KnowledgeBuildRequest(ApiModel):
     provider: str | None = None
     repo: str | None = None
     framework: str | None = None
+
+
+# ------------------------------------------------------- Project repositories
+class AvailableRepoOut(ApiModel):
+    """A repo discovered from the project's provider (for the picker)."""
+
+    name: str
+    clone_url: str = ""
+    web_url: str = ""
+    default_branch: str = ""
+
+
+class AvailableReposOut(ApiModel):
+    provider: str = ""
+    repos: list[AvailableRepoOut] = Field(default_factory=list)
+    error: str = ""
+
+
+class RepoKnowledgeOut(ApiModel):
+    """A project's repo plus the status of its per-repo knowledge base."""
+
+    name: str
+    repo_url: str = ""
+    default_branch: str = ""
+    local_repo_path: str = ""
+    default: bool = False
+    status: str = "not_indexed"
+    confidence: int = 0
+    version: str = "v1"
+    needs_refresh: bool = False
+    last_indexed: datetime | None = None
+    doc_path: str = ""
+    last_error: str = ""
 
 
 # ---------------------------------------------------------------- Tickets
@@ -240,10 +362,16 @@ class LinkedTestCaseOut(ApiModel):
 
 
 class CreateLinkRequest(ApiModel):
-    """Create approved test cases in the provider; link them when ``link`` is true."""
+    """Create approved test cases in the provider; link them when ``link`` is true.
+
+    ``dry_run`` = local mode: create the LinkedTestCase rows locally with a
+    ``LOCAL-`` marker and DO NOT write anything to the provider (avoids polluting a
+    live project during local development).
+    """
 
     link: bool = True
     ticket_ids: list[str] = Field(default_factory=list)  # empty = all tickets in the run
+    dry_run: bool = False
 
 
 class LinkTicketResult(ApiModel):
@@ -252,6 +380,7 @@ class LinkTicketResult(ApiModel):
     count: int = 0
     created: bool = False
     linked: bool = False
+    local: bool = False  # created locally only — provider was not touched
     error: str = ""
 
 
@@ -265,7 +394,22 @@ class RunTicketOut(ApiModel):
     ticket_external_id: str
     position: int = 0
     gen_status: str = "queued"
+    repo: str = ""
     analysis: dict = Field(default_factory=dict)
+
+
+class RunRepoOptionOut(ApiModel):
+    """A project repo offered as a work item's target, with its knowledge status."""
+
+    name: str
+    default: bool = False
+    status: str = "not_indexed"
+
+
+class RunTicketRepoUpdate(ApiModel):
+    """Set a work item's target repo ("" resets it to the project default)."""
+
+    repo: str = ""
 
 
 class RunOut(ApiModel):
@@ -310,6 +454,12 @@ class AutomationSpecOut(ApiModel):
     code: str = ""
 
 
+class AutomationSpecUpdate(ApiModel):
+    """Manual edits to a generated spec's source code (persisted + written to disk)."""
+
+    code: str
+
+
 # ---------------------------------------------------------------- Execution
 class EvidenceOut(ApiModel):
     id: int
@@ -346,6 +496,7 @@ class ExecutionOut(ApiModel):
     passed: int
     failed: int
     progress: int
+    log: str = ""
     started_at: datetime | None = None
     finished_at: datetime | None = None
     results: list[ExecutionResultOut] = Field(default_factory=list)
@@ -417,6 +568,10 @@ class SettingsOut(ApiModel):
     screenshot_on_fail: bool = True
     video: bool = False
     max_cases_per_ticket: int = 8
+    headless: bool = True
+    user_name: str = ""
+    user_role: str = ""
+    auto_annotate: bool = True
 
 
 class SettingsUpdate(ApiModel):
@@ -425,3 +580,7 @@ class SettingsUpdate(ApiModel):
     screenshot_on_fail: bool | None = None
     video: bool | None = None
     max_cases_per_ticket: int | None = None
+    headless: bool | None = None
+    user_name: str | None = None
+    user_role: str | None = None
+    auto_annotate: bool | None = None

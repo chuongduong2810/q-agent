@@ -1,7 +1,7 @@
 ---
 name: test-case-generator
-description: Generate Azure DevOps-style manual test cases from a requirement analysis, plus a requirement coverage matrix and automation-candidate list. Use AFTER requirement-analyst, when the user says "generate test cases", "write test cases for NNN", or "turn this analysis into test cases". Consumes requirement-analysis.md + the Project Knowledge Base. Does NOT write automation code.
-version: 1.0.0
+description: Generate a lightweight Azure DevOps-style manual test case set from a completed requirement analysis. This stage focuses on validating the primary user flow (happy path) only. Detailed edge cases, negative scenarios, and exhaustive coverage are intentionally deferred to the Test Case Review stage.
+version: 2.0.0
 author: Andrew
 ---
 
@@ -9,86 +9,147 @@ author: Andrew
 
 ## Purpose
 
-Generate complete, review-ready **manual test cases** in Azure DevOps format from a
-Requirement Analysis. This skill never works from a ticket alone — it combines the requirement
-analysis, the Project Knowledge Base (domain terms, workflows, existing automation patterns) to
-produce comprehensive cases a QA engineer can approve with minimal edits.
+Generate a **simple, review-friendly baseline** set of manual Azure DevOps test cases from an approved Requirement Analysis.
 
-## Position in the QA Pipeline
+The goal of this stage is **not** to create a complete QA suite.
 
-```
+Instead, generate only the minimum set of high-value **happy path** test cases that prove the feature works end-to-end.
+
+These test cases become the starting point for the next stage (`test-case-reviewer`), where additional coverage such as edge cases, validation, permissions, regression risks, and negative scenarios will be added.
+
+---
+
+# Position in QA Pipeline
+
 project-bootstrap
-        ↓ knowledge.md + knowledge.json
+↓
+knowledge.md + knowledge.json
+
 requirement-analyst
-        ↓ requirement-analysis.md
-[test-case-generator]  ← you are here
-        ↓ ADO test cases + coverage matrix
-test-case-reviewer → automation-generator → automation-reviewer → execution-analyzer
-        → screenshot-annotator / ticket-comment-generator / report-generator
-```
+↓
+requirement-analysis.md
 
-## When to Use
+test-case-generator ← CURRENT STAGE
+↓
+Simple Happy Path Test Cases
 
-- A `requirement-analysis.md` exists (from `requirement-analyst`) and needs to become test cases.
-- The user asks to generate/write test cases for a ticket or feature.
+test-case-reviewer
+↓
+Expand Coverage
 
-Do **not** design requirements here (that is `requirement-analyst`) or write automation
-(that is `automation-generator`).
+automation-generator
 
-## Inputs / Prerequisites
+---
 
-- **`requirement-analysis.md`** from `requirement-analyst` (the primary source).
-- **`knowledge.md` / `knowledge.json`** from `project-bootstrap` for terminology, roles, workflows,
-  and existing automation patterns.
+# Inputs
 
-If either is missing, run `requirement-analyst` and/or `project-bootstrap` first.
+Required:
 
-## Workflow
+- requirement-analysis.md
+- knowledge.md / knowledge.json
 
-1. **Absorb the analysis** — business objective, functional requirements, business rules, edge
-   cases, risks, and the per-AC breakdown.
-2. **Plan coverage** — map every Acceptance Criterion to the scenarios needed to prove it, using
-   the Coverage Rules below. Track which AC each planned case satisfies.
-3. **Generate cases** — write each test case using `templates/ado-testcase.md`, reusing project
-   terminology from the Knowledge Base.
-4. **Build the coverage matrix** — map each AC → the Test Case IDs that cover it; flag any AC with
-   no coverage.
-5. **Mark automation candidates** — flag stable, high-value, deterministic cases as automation
-   candidates for `automation-generator`.
+If either is missing, stop and request it.
 
-## Coverage Rules
+---
 
-Generate cases across these dimensions (no duplicates, no overlapping scenarios):
+# Responsibilities
 
-- Happy paths
-- Negative paths / invalid inputs
-- Boundary values
-- Required and optional field validation
-- Permission / role-based access
-- Error handling
-- Empty states
+This skill should:
+
+- Read the completed Requirement Analysis.
+- Understand the business workflow.
+- Generate only the core user-flow test cases.
+- Keep the output intentionally small and easy to review.
+- Avoid generating exhaustive scenarios.
+
+This skill should NOT:
+
+- Generate every validation scenario.
+- Generate boundary tests.
+- Generate permission tests (unless explicitly required by an Acceptance Criterion).
+- Generate regression suites.
+- Generate automation scripts.
+
+---
+
+# Coverage Strategy
+
+Prioritize:
+
+- Primary happy path
+- Core business flow
+- Most common user behavior
+- One successful scenario per Acceptance Criterion whenever possible
+
+Do NOT proactively generate:
+
+- Invalid input cases
+- Boundary value cases
 - Duplicate data
-- Business-rule validation (from the analysis)
-- Regression risks
+- Empty states
+- Error handling
+- Network failures
+- Permission matrices
+- Cross-browser scenarios
+- Regression scenarios
 
-## Output
+Those belong to `test-case-reviewer`.
 
-1. **Azure DevOps test cases** — following `templates/ado-testcase.md` (ID, Title, Objective,
-   Preconditions, Test Data, numbered Steps with Action/Expected Result, Priority, Test Type,
-   Automation Candidate, Linked AC, Notes).
-2. **Requirement Coverage Matrix** — AC → Test Case IDs, with gaps flagged.
-3. **Automation Candidates** — the subset recommended for Playwright automation.
+---
 
-## Quality Rules
+# Workflow
 
-- Prefer **completeness over quantity**; every AC must be covered or its gap reported.
-- Every step's **Expected Result must be measurable** and objectively verifiable.
-- Reuse business terminology from the Knowledge Base; **never invent undocumented functionality**.
-- Clearly mark assumptions; do not silently fill gaps left by the analysis.
-- No duplicate or overlapping test cases.
+1. Read requirement-analysis.md.
+2. Map each Acceptance Criterion to its primary successful user flow.
+3. Merge similar flows where appropriate to avoid redundant cases.
+4. Generate concise Azure DevOps manual test cases.
+5. Produce a simple Requirement Coverage Matrix.
+6. Identify obvious automation candidates.
 
-## Handoff / Success Criteria
+---
 
-Output is directly importable into Azure DevOps and serves as the source for `test-case-reviewer`
-and later `automation-generator`. Success = a QA engineer approves the set with minimal edits and
-every Acceptance Criterion is traceable to at least one test case.
+# Output
+
+## 1. Azure DevOps Manual Test Cases
+
+Each test case should contain:
+
+- Title
+- Objective
+- Preconditions
+- Test Data (if needed)
+- Steps
+- Expected Result for every step
+- Priority
+- Test Type
+- Automation Candidate
+- Linked Acceptance Criteria
+
+Keep steps concise and focused.
+
+---
+
+## 2. Requirement Coverage Matrix
+
+| Acceptance Criterion | Covered By |
+|----------------------|------------|
+
+Flag any uncovered Acceptance Criteria.
+
+---
+
+## 3. Automation Candidates
+
+Recommend only deterministic, stable happy-path scenarios suitable for Playwright automation.
+
+---
+
+# Quality Rules
+
+- Favor clarity over completeness.
+- One measurable expected result per step.
+- Reuse terminology from the Knowledge Base.
+- Do not invent screens, routes, credentials, or business rules.
+- Keep the number of test cases as small as possible while still covering every Acceptance Criterion.
+- Merge duplicate user journeys whenever practical.
+- Clearly document assumptions instead of guessing.

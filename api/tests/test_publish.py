@@ -105,6 +105,90 @@ def test_prepare_comments_creates_drafts_with_status_mapping(client, db_session,
     assert all(c["body"] for c in comments)
 
 
+def test_prepare_comment_consolidates_all_cases(client, db_session, monkeypatch):
+    """The per-ticket comment aggregates every executed case + its diagnosis."""
+    from app.models.report import Report
+    from app.models.run import Run
+    from app.models.ticket import Ticket
+    from app.routers import comments as comments_router
+
+    db_session.add(Run(id=3, code="RUN-3", name="Run 3", status="comment"))
+    db_session.add(Ticket(external_id="SUR-7", provider_kind="ado", title="Broker list"))
+    db_session.add(
+        Report(
+            run_id=3, execution_id=1, overall_result="failed", pass_rate=50.0,
+            passed=1, failed=1, duration_s=8, env="Staging",
+            data={
+                "ticketSummary": [
+                    {
+                        "ticketExternalId": "SUR-7", "passed": 1, "failed": 1, "total": 2,
+                        "cases": [
+                            {"caseCode": "TC-01", "title": "loads", "status": "pass", "error": "", "diagnosis": ""},
+                            {"caseCode": "TC-02", "title": "activate menu", "status": "fail",
+                             "error": "timeout", "diagnosis": "Activate option is missing from the menu"},
+                        ],
+                    }
+                ],
+                "aiFailureAnalysis": "menu rendering issue",
+            },
+        )
+    )
+    db_session.commit()
+
+    captured = {}
+    monkeypatch.setattr(
+        comments_router.claude_cli, "run_prompt",
+        lambda prompt, **k: captured.setdefault("prompt", prompt) or "Consolidated QA summary",
+    )
+    from app.services import publish_service
+    monkeypatch.setattr(publish_service, "get_adapter", lambda kind, config, secrets: FakeAdapter(config, secrets))
+
+    resp = client.post("/runs/3/comments/prepare")
+    assert resp.status_code == 200
+    p = captured["prompt"]
+    # The prompt aggregates every case and folds in the failure's diagnosis.
+    assert "TC-01" in p and "TC-02" in p
+    assert "Activate option is missing" in p
+    assert "1/2 cases passed" in p and "consolidated" in p.lower()
+
+
+def test_prepare_auto_builds_report_when_missing(client, db_session, monkeypatch):
+    """Coming from Evidence without a report shouldn't 404 — prepare builds one."""
+    _patch_adapter_and_claude(monkeypatch)
+    from app.models.execution import Execution, ExecutionResult
+    from app.models.run import Run
+    from app.models.ticket import Ticket
+
+    db_session.add(Run(id=2, code="RUN-2", name="Run 2", status="evidence"))
+    db_session.add(Ticket(external_id="SUR-3", provider_kind="ado", title="Search works"))
+    execution = Execution(run_id=2, status="done", env="Staging")
+    db_session.add(execution)
+    db_session.flush()
+    db_session.add(
+        ExecutionResult(
+            execution_id=execution.id,
+            test_case_id=1,
+            ticket_external_id="SUR-3",
+            case_code="TC-01",
+            title="Search works",
+            status="pass",
+            duration_ms=1200,
+        )
+    )
+    db_session.commit()
+
+    # No Report seeded — prepare should build one on demand, not 404.
+    resp = client.post("/runs/2/comments/prepare")
+    assert resp.status_code == 200
+    comments = resp.json()
+    assert len(comments) == 1
+    assert comments[0]["ticketExternalId"] == "SUR-3"
+    assert comments[0]["targetStatus"] == "Passed"
+
+    # A report now exists for the run.
+    assert client.get("/runs/2/report").status_code == 200
+
+
 def test_list_comments(client, db_session, monkeypatch):
     _patch_adapter_and_claude(monkeypatch)
     _seed_report(db_session)

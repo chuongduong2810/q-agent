@@ -29,6 +29,8 @@ class Execution(Base):
     failed: Mapped[int] = mapped_column(Integer, default=0)
     progress: Mapped[int] = mapped_column(Integer, default=0)  # 0..100
 
+    log: Mapped[str] = mapped_column(Text, default="")  # combined Playwright stdout/stderr
+
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = timestamp_column()

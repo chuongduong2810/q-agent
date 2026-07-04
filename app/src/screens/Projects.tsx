@@ -6,9 +6,32 @@ import { providerGlyph } from "@/components/ui/badges";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { confidenceColor, knowledgeStatusStyle, providerLabel } from "@/data/projects";
 import { useKnowledgeList, useProjects, useProviders, useRefreshProjects } from "@/hooks/queries";
-import { useKnowledgeBuilder } from "@/hooks/useKnowledgeBuilder";
 import { useUI } from "@/store/ui";
-import type { ProjectKnowledgeOut, ProjectOut } from "@/types/api";
+import type { KnowledgeStatus, ProjectKnowledgeOut, ProjectOut } from "@/types/api";
+
+/** Aggregate a project's per-repo knowledge rows into a single card summary. */
+interface KnowledgeSummary {
+  status: KnowledgeStatus;
+  confidence: number;
+  lastIndexed: string | null;
+  framework: string;
+  repoLabel: string;
+}
+function summarize(rows: ProjectKnowledgeOut[]): KnowledgeSummary | undefined {
+  if (!rows.length) return undefined;
+  const indexed = rows.filter((r) => r.status === "indexed");
+  const lastIndexed =
+    indexed.map((r) => r.lastIndexed).filter(Boolean).sort().at(-1) ?? null;
+  return {
+    status: indexed.length ? "indexed" : "not_indexed",
+    confidence: indexed.length
+      ? Math.round(indexed.reduce((s, r) => s + r.confidence, 0) / indexed.length)
+      : 0,
+    lastIndexed,
+    framework: rows[0]?.framework || "Playwright",
+    repoLabel: `${indexed.length}/${rows.length} repos indexed`,
+  };
+}
 
 /**
  * Projects grid — real connected projects pulled from providers (GET /projects,
@@ -18,16 +41,26 @@ import type { ProjectKnowledgeOut, ProjectOut } from "@/types/api";
 export function Projects() {
   const openProject = useUI((s) => s.openProject);
   const navigate = useUI((s) => s.navigate);
-  const build = useKnowledgeBuilder();
 
   const { data: projects, isLoading } = useProjects();
   const { data: providers } = useProviders();
   const { data: knowledgeList } = useKnowledgeList();
   const refresh = useRefreshProjects();
 
-  const byName = useMemo(() => {
-    const m = new Map<string, ProjectKnowledgeOut>();
-    for (const k of knowledgeList ?? []) m.set(k.key, k);
+  // Group per-repo knowledge rows by their owning project and summarize each.
+  const byProject = useMemo(() => {
+    const groups = new Map<string, ProjectKnowledgeOut[]>();
+    for (const k of knowledgeList ?? []) {
+      const pk = k.projectKey || k.key;
+      const list = groups.get(pk) ?? [];
+      list.push(k);
+      groups.set(pk, list);
+    }
+    const m = new Map<string, KnowledgeSummary>();
+    for (const [pk, rows] of groups) {
+      const s = summarize(rows);
+      if (s) m.set(pk, s);
+    }
     return m;
   }, [knowledgeList]);
 
@@ -92,18 +125,9 @@ export function Projects() {
             <ProjectCard
               key={p.id}
               project={p}
-              knowledge={byName.get(p.name)}
+              summary={byProject.get(p.name)}
               index={i}
               onOpen={() => openProject(p.name)}
-              onBuild={() => {
-                const k = byName.get(p.name);
-                build({
-                  name: p.name,
-                  provider: providerLabel[p.providerKind],
-                  repo: k?.repo || p.externalId,
-                  framework: k?.framework || "Playwright",
-                });
-              }}
             />
           ))}
         </div>
@@ -114,27 +138,26 @@ export function Projects() {
 
 function ProjectCard({
   project,
-  knowledge,
+  summary,
   index,
   onOpen,
-  onBuild,
 }: {
   project: ProjectOut;
-  knowledge: ProjectKnowledgeOut | undefined;
+  summary: KnowledgeSummary | undefined;
   index: number;
   onOpen: () => void;
-  onBuild: () => void;
 }) {
-  const status = knowledge?.status ?? "not_indexed";
+  const status = summary?.status ?? "not_indexed";
   const indexed = status === "indexed";
-  const confidence = knowledge?.confidence ?? 0;
-  const [statusLabel, statusColor, statusBg, statusDot] = knowledgeStatusStyle(status);
+  const confidence = summary?.confidence ?? 0;
+  const baseLabel = knowledgeStatusStyle(status);
+  const [, statusColor, statusBg, statusDot] = baseLabel;
+  const statusLabel = summary?.repoLabel ?? baseLabel[0];
   const [glyph, glyphBg] = providerGlyph[project.providerKind] ?? ["?", "#6b7280"];
   const glyphColor = project.providerKind === "github" ? "#12121a" : "#fff";
-  const repo = knowledge?.repo || "";
-  const framework = knowledge?.framework || "Playwright";
+  const framework = summary?.framework || "Playwright";
   const lastIndexed =
-    indexed && knowledge?.lastIndexed ? new Date(knowledge.lastIndexed).toLocaleDateString() : "Never";
+    indexed && summary?.lastIndexed ? new Date(summary.lastIndexed).toLocaleDateString() : "Never";
 
   return (
     <motion.div
@@ -155,7 +178,6 @@ function ProjectCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-bold">{project.name}</div>
-          {repo && <div className="truncate font-mono text-[11px] text-[#8b8b9e]">{repo}</div>}
         </div>
         {project.active && (
           <span
@@ -197,10 +219,10 @@ function ProjectCard({
           className="mt-auto w-full"
           onClick={(e) => {
             e.stopPropagation();
-            onBuild();
+            onOpen();
           }}
         >
-          <Sparkles size={15} strokeWidth={2.2} /> Build Project Knowledge
+          <Sparkles size={15} strokeWidth={2.2} /> Set up repositories &amp; knowledge
         </Button>
       )}
     </motion.div>

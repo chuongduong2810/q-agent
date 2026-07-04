@@ -11,10 +11,11 @@ It is idempotent-ish: it wipes the demo Run/tickets it owns and re-inserts them.
 
 from __future__ import annotations
 
+from app import crypto
 from app.db import SessionLocal, init_db, utcnow
-from app.logging import logger, setup_logging
 from app.models import (
     LinkedTestCase,
+    ProjectConfig,
     ProjectKnowledge,
     Provider,
     Run,
@@ -22,6 +23,8 @@ from app.models import (
     TestCase,
     Ticket,
 )
+from app.models.knowledge import compose_key
+from app.logging import logger, setup_logging
 
 TICKETS = [
     dict(external_id="SUR-1428", provider_kind="ado", title="View list of all broker agencies", status="Ready for QA", priority="High", assignee="Maya Kaur", sprint="Sprint 24", labels=["broker-mgmt", "list-view"], work_item_type="User Story",
@@ -149,14 +152,17 @@ def seed() -> None:
                 )
             )
 
-        # Project Knowledge — one project pre-indexed so the detail view has content.
+        # Project Knowledge — the primary repo pre-indexed (per-repo knowledge base)
+        # so the detail view has content; a second repo is left un-indexed to demo
+        # the mixed state.
         db.query(ProjectKnowledge).delete()
         db.add(
             ProjectKnowledge(
-                key="Surency Platform",
+                key=compose_key("Surency Platform", "surency-web"),
+                project_key="Surency Platform",
                 name="Surency Platform",
                 provider="Azure DevOps",
-                repo="surency-eng/surency-web",
+                repo="surency-web",
                 framework="Playwright",
                 status="indexed",
                 confidence=93,
@@ -169,11 +175,60 @@ def seed() -> None:
                     "architecture": "Modular monolith — feature modules (Brokers, Claims, Members) over a REST API with a shared design system.",
                     "domain": "Broker & agency management, licensing, member onboarding and claims for a benefits administration platform.",
                     "locator": "Prefer getByRole + data-testid; fall back to accessible name.",
+                    "base_url": "https://staging.surency-web.test",
+                    "routes": [
+                        {"path": "/brokers", "description": "Broker Management (Agencies/Agents tabs)", "auth_required": True},
+                        {"path": "/brokers/agencies/:id", "description": "Broker agency detail", "auth_required": True},
+                        {"path": "/login", "description": "Sign-in", "auth_required": False},
+                    ],
+                    "selectors": [
+                        {"screen": "Broker Management", "element": "Agencies tab", "selector": "getByRole('tab', { name: 'Broker Agencies' })"},
+                        {"screen": "Broker Management", "element": "Agency search", "selector": "getByTestId('agency-search')"},
+                        {"screen": "Broker Management", "element": "Row actions menu", "selector": "getByTestId('agency-row-actions')"},
+                    ],
+                    "auth": {
+                        "login_flow": "Email + password form at /login; session cookie persisted via storageState.",
+                        "login_url": "https://staging.surency-web.test/login",
+                        "storage_state": "playwright/.auth/internal-admin.json",
+                    },
+                    "environments": [
+                        {"name": "Staging", "base_url": "https://staging.surency-web.test", "notes": "default QA target"},
+                    ],
+                    "business_entities": ["Broker Agency", "Broker Agent", "License", "Member", "Claim"],
                     "assets": 148,
                     "pageObjects": 32,
+                    "page_object_names": ["LoginPage", "BrokerManagementPage", "AgencyDetailPage"],
                     "fixtures": 12,
+                    "fixture_names": ["authenticatedPage", "seededAgency"],
                     "utilities": ["api-client.ts", "auth.setup.ts", "seed-data.ts", "test-users.ts"],
                 },
+            )
+        )
+
+        # Project Config — user-authored runtime settings for the demo project so
+        # the Project Details → Settings tab is populated and generated specs get
+        # a real base URL + credentials. Password is encrypted at rest.
+        db.query(ProjectConfig).delete()
+        db.add(
+            ProjectConfig(
+                key="Surency Platform",
+                name="Surency Platform",
+                base_url="https://staging.surency-web.test",
+                repos=[
+                    {"name": "surency-web", "repo_url": "https://dev.azure.com/surency/Surency%20Platform/_git/surency-web",
+                     "default_branch": "main", "local_repo_path": "", "default": True},
+                    {"name": "surency-api", "repo_url": "https://dev.azure.com/surency/Surency%20Platform/_git/surency-api",
+                     "default_branch": "main", "local_repo_path": "", "default": False},
+                ],
+                local_repo_path="",
+                environments=[
+                    {"name": "Staging", "base_url": "https://staging.surency-web.test", "notes": "default QA target"},
+                ],
+                test_accounts=[
+                    {"role": "Surency Internal Admin", "username": "qa.admin@surency.test",
+                     "password": crypto.encrypt("Demo-Passw0rd!"), "notes": "primary automation account"},
+                ],
+                extra={},
             )
         )
 

@@ -42,6 +42,10 @@ Required:
 - Linked Pull Requests (optional)
 - **Project Knowledge Base** — `knowledge.md` + `knowledge.json` from `project-bootstrap`
 
+> The analysis now receives the **enriched KB context** injected into the prompt — business
+> entities, domain, application routes, and base URL. Reuse that real terminology and those
+> entities/routes as-is; never reinterpret or invent them.
+>
 > If the Project Knowledge Base does not exist, run **project-bootstrap** first. Reuse its
 > business entities, roles, workflows, and glossary — never invent domain concepts.
 
@@ -57,8 +61,8 @@ Required:
    error and recovery scenarios.
 5. **Risks** — missing/contradictory requirements, technical, business, and regression risks;
    assign a risk level.
-6. **Domain mapping** — map the ticket to KB business entities, existing modules, and workflows,
-   reusing KB terminology.
+6. **Domain mapping** — map the ticket to the KB's business entities, routes, and workflows,
+   reusing KB terminology and the exact project terminology from the enriched context.
 7. **Test scope recommendation** — recommend which testing types apply (Functional, Regression,
    Validation, Permission, UI, API, Integration).
 8. **Requirement coverage plan** — map each AC to proposed testing areas; highlight covered vs

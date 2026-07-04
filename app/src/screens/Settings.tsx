@@ -35,6 +35,47 @@ export function Settings() {
         )}
       </div>
 
+      <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PROFILE</div>
+      <GlassCard className="mb-[26px] p-[22px]">
+        {settingsLoading || !settings ? (
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 text-[12px] text-muted">
+              Used for your sidebar profile and &ldquo;assigned to me&rdquo; filters.
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="flex flex-col gap-2">
+                <span className="text-[12px] font-semibold text-[#9494a6]">Your name</span>
+                <input
+                  defaultValue={settings.userName}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v !== settings.userName) updateSettings.mutate({ userName: v });
+                  }}
+                  placeholder="Your name"
+                  className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-[12px] font-semibold text-[#9494a6]">Your role</span>
+                <input
+                  defaultValue={settings.userRole}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v !== settings.userRole) updateSettings.mutate({ userRole: v });
+                  }}
+                  placeholder="Your role (e.g. QA Lead)"
+                  className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
+                />
+              </label>
+            </div>
+          </>
+        )}
+      </GlassCard>
+
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">DEFAULT EXECUTION</div>
       <GlassCard className="p-[22px]">
         {settingsLoading || !settings ? (
@@ -96,10 +137,22 @@ export function Settings() {
               onChange={(v) => updateSettings.mutate({ screenshotOnFail: v })}
             />
             <ToggleRow
+              title="Auto-annotate failure screenshots"
+              description="Runs a Claude vision analysis on each failed screenshot to draw the problem area — one AI call per failure"
+              checked={settings.autoAnnotate}
+              onChange={(v) => updateSettings.mutate({ autoAnnotate: v })}
+            />
+            <ToggleRow
               title="Record video"
               description="Save an MP4 of each run (uses more storage)"
               checked={settings.video}
               onChange={(v) => updateSettings.mutate({ video: v })}
+            />
+            <ToggleRow
+              title="Run browser headless"
+              description="Execute Playwright without a visible browser window (turn off to watch runs)"
+              checked={settings.headless}
+              onChange={(v) => updateSettings.mutate({ headless: v })}
               bordered={false}
             />
           </>

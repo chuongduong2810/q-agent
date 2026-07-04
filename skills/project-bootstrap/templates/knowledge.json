@@ -11,6 +11,12 @@
   "language": "TypeScript",
   "base_url": "",
   "locator_strategy": ["data-testid", "getByRole", "getByLabel", "css", "xpath"],
+  "selectors": [
+    { "screen": "", "element": "", "selector": "" }
+  ],
+  "test_accounts": [
+    { "role": "", "username": "", "notes": "" }
+  ],
   "page_objects": [
     { "name": "", "path": "", "purpose": "", "key_methods": [] }
   ],
@@ -20,7 +26,7 @@
   "helpers": [
     { "name": "", "path": "", "purpose": "" }
   ],
-  "auth": { "login_flow": "", "storage_state": "", "helpers": [] },
+  "auth": { "login_flow": "", "login_url": "", "storage_state": "", "helpers": [] },
   "routes": [
     { "path": "", "description": "", "auth_required": false }
   ],

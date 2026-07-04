@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { useCreateRun, useTickets } from "@/hooks/queries";
+import { useCreateRun, useSettings, useTickets } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
 
 const FRAMEWORKS = ["Playwright", "Selenium"];
@@ -29,6 +29,8 @@ export function CreateRunModal() {
   const selectedSprint = useUI((s) => s.selectedSprint);
 
   const { data: tickets } = useTickets();
+  const { data: settings } = useSettings();
+  const userName = (settings?.userName ?? "").trim();
   const createRun = useCreateRun();
 
   if (!open) return null;
@@ -36,8 +38,9 @@ export function CreateRunModal() {
   const selN = Object.values(selected).filter(Boolean).length;
   const sprintName = selectedSprint?.name;
   const sprintN = sprintName ? (tickets ?? []).filter((t) => t.sprint === sprintName).length : 0;
-  const assignedN = (tickets ?? []).filter((t) => t.assignee === "Maya Kaur").length;
+  const assignedN = userName ? (tickets ?? []).filter((t) => t.assignee === userName).length : 0;
 
+  // "My assigned tickets" is only offered once an identity is configured.
   const scopeOptions = [
     { id: "selected" as const, label: "Selected tickets", sub: "Only the tickets you picked on the Tickets page", count: `${selN} selected` },
     {
@@ -47,7 +50,7 @@ export function CreateRunModal() {
       count: `${sprintN} tickets`,
     },
     { id: "assigned" as const, label: "My assigned tickets", sub: "All tickets assigned to you", count: `${assignedN} tickets` },
-  ];
+  ].filter((o) => o.id !== "assigned" || !!userName);
 
   const createSummary =
     (runScope === "selected" ? `${selN} selected tickets` : runScope === "sprint" ? `${sprintN} sprint tickets` : `${assignedN} assigned tickets`) +

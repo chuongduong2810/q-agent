@@ -36,6 +36,16 @@ export interface ProjectOut {
   meta: Record<string, unknown>;
 }
 
+export interface KnowledgeRoute {
+  path: string;
+  description: string;
+  authRequired?: boolean;
+}
+export interface KnowledgeSelector {
+  screen: string;
+  element: string;
+  selector: string;
+}
 export interface KnowledgeBody {
   branch: string;
   stack: string[];
@@ -46,12 +56,103 @@ export interface KnowledgeBody {
   pageObjects: number;
   fixtures: number;
   utilities: string[];
+  // NOTE: these mirror the raw stored knowledge JSON keys (snake_case), which the
+  // API returns verbatim inside `knowledge`.
+  base_url?: string;
+  routes?: KnowledgeRoute[];
+  selectors?: KnowledgeSelector[];
+  auth?: { login_flow?: string; login_url?: string; storage_state?: string };
+  environments?: Array<{ name: string; base_url: string; notes: string }>;
+  business_entities?: string[];
+  page_object_names?: string[];
+  fixture_names?: string[];
 }
 
-export type KnowledgeStatus = "not_indexed" | "indexed" | "stale";
+// -------------------------------------------------------------- project config
+export interface TestAccountOut {
+  role: string;
+  username: string;
+  notes: string;
+  hasPassword: boolean;
+}
+export interface TestAccountIn {
+  role: string;
+  username: string;
+  password: string; // blank preserves the stored secret
+  notes: string;
+}
+export interface EnvironmentCfg {
+  name: string;
+  baseUrl: string;
+  notes: string;
+}
+export interface ProjectRepo {
+  name: string;
+  repoUrl: string;
+  defaultBranch: string;
+  localRepoPath: string;
+  default: boolean;
+}
+export interface AvailableRepo {
+  name: string;
+  cloneUrl: string;
+  webUrl: string;
+  defaultBranch: string;
+}
+export interface AvailableReposOut {
+  provider: string;
+  repos: AvailableRepo[];
+  error: string;
+}
+export interface RepoKnowledgeOut {
+  name: string;
+  repoUrl: string;
+  defaultBranch: string;
+  localRepoPath: string;
+  default: boolean;
+  status: KnowledgeStatus;
+  confidence: number;
+  version: string;
+  needsRefresh: boolean;
+  lastIndexed: string | null;
+  docPath: string;
+  lastError: string;
+}
+export interface ProjectConfigOut {
+  key: string;
+  name: string;
+  baseUrl: string;
+  repos: ProjectRepo[];
+  localRepoPath: string;
+  repoUrl: string;
+  environments: EnvironmentCfg[];
+  testAccounts: TestAccountOut[];
+  extra: Record<string, string>;
+  manualAuth: boolean;
+}
+export interface ProjectConfigUpdate {
+  baseUrl?: string;
+  repos?: ProjectRepo[];
+  localRepoPath?: string;
+  repoUrl?: string;
+  environments?: EnvironmentCfg[];
+  testAccounts?: TestAccountIn[];
+  extra?: Record<string, string>;
+  manualAuth?: boolean;
+}
+
+/** Saved manual-login session state for a project (GET/DELETE /projects/{key}/auth). */
+export interface AuthState {
+  exists: boolean;
+  capturedAt: string | null;
+  capturing: boolean;
+}
+
+export type KnowledgeStatus = "not_indexed" | "indexing" | "indexed" | "stale" | "error";
 
 export interface ProjectKnowledgeOut {
   key: string;
+  projectKey?: string;
   name: string;
   provider: string;
   repo: string;
@@ -63,6 +164,11 @@ export interface ProjectKnowledgeOut {
   lastIndexed: string | null;
   knowledge: Partial<KnowledgeBody>;
   docPath: string;
+  lastError?: string;
+}
+
+export interface AutomationStatus {
+  generating: boolean;
 }
 
 export interface KnowledgeBuildRequest {
@@ -222,6 +328,7 @@ export interface LinkTicketResult {
   count: number;
   created: boolean;
   linked: boolean;
+  local: boolean;
   error: string;
 }
 
@@ -233,6 +340,7 @@ export interface LinkStatusOut {
 export interface CreateLinkRequest {
   link?: boolean;
   ticketIds?: string[];
+  dryRun?: boolean;
 }
 
 export type RunStatus =
@@ -249,7 +357,14 @@ export interface RunTicketOut {
   ticketExternalId: string;
   position: number;
   genStatus: string;
+  repo: string;
   analysis: Record<string, unknown>;
+}
+
+export interface RunRepoOption {
+  name: string;
+  default: boolean;
+  status: KnowledgeStatus;
 }
 
 export interface RunOut {
@@ -292,6 +407,61 @@ export interface AutomationSpecOut {
   code: string;
 }
 
+export interface HealAttempt {
+  attempt: number;
+  status: "pass" | "fail";
+  error: string;
+  durationMs: number;
+  outputTail: string;
+  fixed: boolean;
+  diff: string;
+}
+
+export interface HealReport {
+  caseId: number;
+  finalStatus: "pass" | "fail";
+  maxAttempts: number;
+  healedAt: string;
+  attempts: HealAttempt[];
+}
+
+export interface AuditEventOut {
+  id: string;
+  ts: string;
+  category: string;
+  actor: string;
+  actorType: "user" | "ai" | "system";
+  action: string;
+  target: string;
+  ip: string;
+  status: "success" | "warning" | "error";
+  meta: string;
+}
+
+export interface AuditStats {
+  eventsToday: number;
+  aiActions: number;
+  userActions: number;
+  failures: number;
+}
+
+export interface BackendLogOut {
+  ts: string;
+  level: "info" | "warn" | "error" | "debug";
+  service: string;
+  message: string;
+  durationMs: number | null;
+  trace: string;
+}
+
+export interface BackendLogStats {
+  logVolume: number;
+  servicesHealthy: number;
+  servicesTotal: number;
+  warnings: number;
+  errors: number;
+}
+
 export type ExecCaseStatus = "pending" | "running" | "pass" | "fail" | "skipped";
 
 export interface EvidenceOut {
@@ -331,6 +501,7 @@ export interface ExecutionOut {
   progress: number;
   startedAt: string | null;
   finishedAt: string | null;
+  log: string;
   results: ExecutionResultOut[];
 }
 
@@ -379,6 +550,10 @@ export interface SettingsOut {
   screenshotOnFail: boolean;
   video: boolean;
   maxCasesPerTicket: number;
+  headless: boolean;
+  userName: string;
+  userRole: string;
+  autoAnnotate: boolean;
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 
@@ -389,6 +564,8 @@ export interface EvidenceGrouped {
     title: string;
     pass: number;
     fail: number;
+    /** Approved, automatable cases on the ticket — the denominator for "passed". */
+    approved: number;
     provGlyph: string;
     provColor: string;
     statusLabel: string;

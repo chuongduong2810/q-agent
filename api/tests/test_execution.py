@@ -274,11 +274,14 @@ def test_run_execution_end_to_end_with_mocked_subprocess(client, db_session, mon
         ]
     }
 
-    def fake_invoke(spec_dir_arg, workers, timeout_s):
+    fake_stdout = "Running 1 test using 1 worker\n  1 passed (99ms)"
+    fake_stderr = "warning: some deprecation notice"
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
         import json as _json
 
         (spec_dir_arg / "report.json").write_text(_json.dumps(report), encoding="utf-8")
-        return 0, "", ""
+        return 0, fake_stdout, fake_stderr
 
     monkeypatch.setattr(runner_module, "_invoke_playwright", fake_invoke)
 
@@ -303,12 +306,336 @@ def test_run_execution_end_to_end_with_mocked_subprocess(client, db_session, mon
     assert len(result["evidence"]) == 1
     assert result["evidence"][0]["kind"] == "screenshot"
 
+    # The captured Playwright stdout/stderr is exposed as the run log.
+    assert fake_stdout in current["log"]
+    assert fake_stderr in current["log"]
+
+    # ...and it's also returned by GET /runs/{id}/execution.
+    latest = client.get(f"/runs/{run.id}/execution").json()
+    assert fake_stdout in latest["log"]
+
     from app.db import SessionLocal
+    from app.models.execution import Execution
     from app.models.run import Run
 
     db = SessionLocal()
     try:
         refreshed_run = db.get(Run, run.id)
         assert refreshed_run.status == "evidence"
+        refreshed_exec = db.get(Execution, execution_id)
+        assert fake_stdout in refreshed_exec.log
+        assert fake_stderr in refreshed_exec.log
     finally:
         db.close()
+
+
+def test_run_single_spec_runs_only_that_spec(client, db_session, monkeypatch):
+    """POST /cases/{id}/spec/run creates a 1-case execution and runs only that spec."""
+    import json as _json
+
+    import app.services.playwright_runner as runner_module
+    from app.config import settings
+
+    run, case = _seed_run_with_approved_case(db_session)
+    spec_dir = settings.specs_dir / run.code
+    spec_dir.mkdir(parents=True, exist_ok=True)
+
+    captured = {}
+    report = {
+        "suites": [
+            {
+                "file": "1428-TC-01.spec.ts",
+                "specs": [
+                    {
+                        "title": "Login works",
+                        "file": "1428-TC-01.spec.ts",
+                        "tests": [{"results": [{"status": "passed", "duration": 55, "attachments": []}]}],
+                    }
+                ],
+                "suites": [],
+            }
+        ]
+    }
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        captured["spec_file"] = spec_file
+        (spec_dir_arg / "report.json").write_text(_json.dumps(report), encoding="utf-8")
+        return 0, "1 passed", ""
+
+    monkeypatch.setattr(runner_module, "_invoke_playwright", fake_invoke)
+
+    resp = client.post(f"/cases/{case.id}/spec/run")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1 and len(body["results"]) == 1
+    execution_id = body["id"]
+
+    for _ in range(60):
+        time.sleep(0.05)
+        if client.get(f"/executions/{execution_id}").json()["status"] == "done":
+            break
+    current = client.get(f"/executions/{execution_id}").json()
+    assert current["status"] == "done"
+    assert current["passed"] == 1 and current["total"] == 1
+    # Only the one case's spec file was targeted, not the whole suite.
+    assert captured["spec_file"] == "1428-TC-01.spec.ts"
+
+
+def test_run_single_spec_rejects_non_automatable(client, db_session):
+    from app.models.run import Run
+    from app.models.testcase import TestCase
+
+    run = Run(code="RUN-9", name="x", status="automation")
+    db_session.add(run)
+    db_session.flush()
+    manual = TestCase(run_id=run.id, ticket_external_id="SUR-1", code="TC-01",
+                      title="m", approval="approved", automation="Manual")
+    db_session.add(manual)
+    db_session.commit()
+
+    assert client.post(f"/cases/{manual.id}/spec/run").status_code == 400
+    assert client.post("/cases/999999/spec/run").status_code == 404
+
+
+def test_write_config_reflects_headless_setting(tmp_path):
+    """The generated playwright.config.ts honors the headless toggle and is rewritten."""
+    from app.services import playwright_runner as runner
+
+    runner._write_config(tmp_path, workers=4, headless=False)
+    content = (tmp_path / "playwright.config.ts").read_text(encoding="utf-8")
+    assert "headless: false" in content
+    assert "workers: 4" in content
+
+    # Rewritten (not pinned to the first run) so a toggle change takes effect.
+    runner._write_config(tmp_path, workers=2, headless=True)
+    content = (tmp_path / "playwright.config.ts").read_text(encoding="utf-8")
+    assert "headless: true" in content
+    assert "workers: 2" in content
+
+
+def test_write_config_injects_base_url_and_storage_state(tmp_path):
+    """baseURL/storageState appear only when provided; omitted otherwise."""
+    from app.services import playwright_runner as runner
+
+    # Neither provided → no baseURL/storageState keys.
+    runner._write_config(tmp_path, workers=1, headless=True)
+    content = (tmp_path / "playwright.config.ts").read_text(encoding="utf-8")
+    assert "baseURL" not in content
+    assert "storageState" not in content
+
+    # Both provided → both injected (as JSON string literals).
+    runner._write_config(
+        tmp_path, workers=1, headless=True,
+        base_url="https://app.test", storage_state="/abs/storageState.json",
+    )
+    content = (tmp_path / "playwright.config.ts").read_text(encoding="utf-8")
+    assert 'baseURL: "https://app.test"' in content
+    assert 'storageState: "/abs/storageState.json"' in content
+    # Existing use settings are preserved.
+    assert "screenshot: 'only-on-failure'" in content
+
+
+def _seed_manual_auth_run(db_session):
+    """Seed a run whose ticket resolves to a manual_auth project with a base URL."""
+    from app.models.project_config import ProjectConfig
+    from app.models.provider import Provider
+    from app.models.ticket import Ticket
+
+    db_session.add(
+        Provider(kind="ado", name="ADO", connected=True,
+                 config={"project": "Surency Platform"}, secrets={})
+    )
+    db_session.add(
+        ProjectConfig(key="Surency Platform", name="Surency Platform",
+                      base_url="https://app.test", manual_auth=True)
+    )
+    db_session.add(
+        Ticket(external_id="SUR-1428", provider_kind="ado", title="Login")
+    )
+    db_session.commit()
+
+    run, case = _seed_run_with_approved_case(db_session)
+    from app.models.run import RunTicket
+
+    db_session.add(RunTicket(run_id=run.id, ticket_external_id="SUR-1428", position=0))
+    db_session.commit()
+    return run, case
+
+
+def test_run_execution_manual_auth_capture_success(client, db_session, monkeypatch):
+    """A successful capture writes storageState into the config and the run proceeds."""
+    import app.services.playwright_runner as runner_module
+    from app.config import settings
+
+    run, _case = _seed_manual_auth_run(db_session)
+
+    captured = {}
+
+    def fake_capture(base_url, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text('{"cookies": []}', encoding="utf-8")
+        captured["base_url"] = base_url
+        return True
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        # A minimal valid (empty) report so the run finishes cleanly.
+        (spec_dir_arg / "report.json").write_text('{"suites": []}', encoding="utf-8")
+        return 0, "ok", ""
+
+    monkeypatch.setattr(runner_module, "capture_storage_state", fake_capture)
+    monkeypatch.setattr(runner_module, "_invoke_playwright", fake_invoke)
+
+    resp = client.post(f"/runs/{run.id}/execution", json={})
+    execution_id = resp.json()["id"]
+
+    for _ in range(50):
+        time.sleep(0.05)
+        if client.get(f"/executions/{execution_id}").json()["status"] == "done":
+            break
+
+    assert captured["base_url"] == "https://app.test"
+    config = (settings.specs_dir / run.code / "playwright.config.ts").read_text(encoding="utf-8")
+    assert "storageState" in config
+    assert 'baseURL: "https://app.test"' in config
+
+
+def test_run_execution_manual_auth_failure_fails_run_without_specs(client, db_session, monkeypatch):
+    """A failed capture fails every result with the clear message and never runs specs."""
+    import app.services.playwright_runner as runner_module
+
+    run, _case = _seed_manual_auth_run(db_session)
+
+    monkeypatch.setattr(runner_module, "capture_storage_state", lambda base_url, dest: False)
+
+    def boom_invoke(*args, **kwargs):
+        raise AssertionError("specs must not run when manual login fails")
+
+    monkeypatch.setattr(runner_module, "_invoke_playwright", boom_invoke)
+
+    resp = client.post(f"/runs/{run.id}/execution", json={})
+    execution_id = resp.json()["id"]
+
+    for _ in range(50):
+        time.sleep(0.05)
+        if client.get(f"/executions/{execution_id}").json()["status"] == "done":
+            break
+
+    current = client.get(f"/executions/{execution_id}").json()
+    assert current["status"] == "done"
+    assert current["failed"] == 1
+    assert current["passed"] == 0
+    assert "Manual login was not completed" in current["results"][0]["errorMessage"]
+
+
+def test_auth_fixtures_ts_contents(tmp_path):
+    """The generated fixtures.ts wires an init script and embeds the session path."""
+    from app.services import playwright_runner as runner
+
+    session_file = tmp_path / "sessionStorage.json"
+    ts = runner._auth_fixtures_ts(session_file)
+    assert "addInitScript" in ts
+    assert "export const test" in ts
+    import json as _json
+
+    assert _json.dumps(str(session_file)) in ts
+
+
+def test_apply_auth_fixtures_rewrites_imports_both_ways(tmp_path):
+    """enabled=True rewrites to './fixtures' + writes fixtures.ts; enabled=False reverts."""
+    from app.services import playwright_runner as runner
+
+    spec = tmp_path / "1428-TC-01.spec.ts"
+    spec.write_text(
+        "import { test, expect } from '@playwright/test';\n"
+        "test('x', async ({ page }) => { await page.goto('/'); });\n",
+        encoding="utf-8",
+    )
+    session_file = tmp_path / "sessionStorage.json"
+
+    runner._apply_auth_fixtures(tmp_path, session_file, enabled=True)
+    assert "'./fixtures'" in spec.read_text(encoding="utf-8")
+    assert "'@playwright/test'" not in spec.read_text(encoding="utf-8")
+    assert (tmp_path / "fixtures.ts").exists()
+
+    runner._apply_auth_fixtures(tmp_path, session_file, enabled=False)
+    assert "'@playwright/test'" in spec.read_text(encoding="utf-8")
+    assert "'./fixtures'" not in spec.read_text(encoding="utf-8")
+
+
+def test_run_execution_manual_auth_applies_session_fixtures(client, db_session, monkeypatch):
+    """Manual-auth run with a sessionStorage snapshot writes fixtures.ts + rewrites specs."""
+    import app.services.playwright_runner as runner_module
+    from app.config import settings
+
+    run, _case = _seed_manual_auth_run(db_session)
+
+    spec_dir = settings.specs_dir / run.code
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    spec = spec_dir / "1428-TC-01.spec.ts"
+    spec.write_text(
+        "import { test, expect } from '@playwright/test';\n"
+        "test('login', async ({ page }) => { await page.goto('/'); });\n",
+        encoding="utf-8",
+    )
+
+    def fake_capture(base_url, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text('{"cookies": []}', encoding="utf-8")
+        (dest.parent / "sessionStorage.json").write_text(
+            '{"https://app.test": {"msal.token": "abc"}}', encoding="utf-8"
+        )
+        return True
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        (spec_dir_arg / "report.json").write_text('{"suites": []}', encoding="utf-8")
+        return 0, "ok", ""
+
+    monkeypatch.setattr(runner_module, "capture_storage_state", fake_capture)
+    monkeypatch.setattr(runner_module, "_invoke_playwright", fake_invoke)
+
+    resp = client.post(f"/runs/{run.id}/execution", json={})
+    execution_id = resp.json()["id"]
+
+    for _ in range(50):
+        time.sleep(0.05)
+        if client.get(f"/executions/{execution_id}").json()["status"] == "done":
+            break
+
+    assert client.get(f"/executions/{execution_id}").json()["status"] == "done"
+    assert (spec_dir / "fixtures.ts").exists()
+    assert "'./fixtures'" in spec.read_text(encoding="utf-8")
+
+
+def test_run_execution_non_auth_leaves_playwright_import(client, db_session, monkeypatch):
+    """A normal (non-auth) run keeps specs importing '@playwright/test' and no fixtures."""
+    import app.services.playwright_runner as runner_module
+    from app.config import settings
+
+    run, _case = _seed_run_with_approved_case(db_session)
+
+    spec_dir = settings.specs_dir / run.code
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    spec = spec_dir / "1428-TC-01.spec.ts"
+    spec.write_text(
+        "import { test, expect } from '@playwright/test';\n"
+        "test('login', async ({ page }) => { await page.goto('/'); });\n",
+        encoding="utf-8",
+    )
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        (spec_dir_arg / "report.json").write_text('{"suites": []}', encoding="utf-8")
+        return 0, "ok", ""
+
+    monkeypatch.setattr(runner_module, "_invoke_playwright", fake_invoke)
+
+    resp = client.post(f"/runs/{run.id}/execution", json={})
+    execution_id = resp.json()["id"]
+
+    for _ in range(50):
+        time.sleep(0.05)
+        if client.get(f"/executions/{execution_id}").json()["status"] == "done":
+            break
+
+    assert client.get(f"/executions/{execution_id}").json()["status"] == "done"
+    assert "'@playwright/test'" in spec.read_text(encoding="utf-8")
+    assert not (spec_dir / "fixtures.ts").exists()

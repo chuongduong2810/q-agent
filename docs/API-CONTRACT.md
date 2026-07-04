@@ -22,12 +22,23 @@ request/response bodies use **camelCase** on the wire (Pydantic `alias_generator
 - `GET /providers/{kind}` → `ProviderOut`   (`kind` ∈ ado|jira|github)
 - `PUT /providers/{kind}` body `ProviderFieldsIn` → `ProviderOut`  (secrets encrypted at rest)
 - `POST /providers/{kind}/test` → `TestConnectionResult`  (live adapter check)
+- `GET /providers/{kind}/sprints` → `SprintOut[]`  (ADO iterations / Jira sprints)
+- `GET /providers/{kind}/work-item-metadata` → `WorkItemMetadataOut`  (area paths, work-item types, states)
 - `GET /settings` → `SettingsOut`
 - `PUT /settings` body `SettingsUpdate` → `SettingsOut`
 
 ### Projects  (`projects.py`)
 - `GET /projects` → `ProjectOut[]`
 - `POST /projects/refresh` → `ProjectOut[]`
+- `GET /projects/knowledge` → `ProjectKnowledgeOut[]`
+- `GET /projects/{key}/knowledge` → `ProjectKnowledgeOut`
+- `POST /projects/{key}/knowledge/build` body `KnowledgeBuildRequest` → `ProjectKnowledgeOut`  (project-bootstrap; traverses the configured local repo)
+- `GET /projects/{key}/config` → `ProjectConfigOut`  (test accounts masked — no passwords; includes `repos[]`)
+- `PUT /projects/{key}/config` body `ProjectConfigUpdate` → `ProjectConfigOut`  (passwords encrypted at rest)
+- `GET /projects/{key}/repos/available` → `AvailableReposOut`  (discovered from the provider — ADO/GitHub)
+- `GET /projects/{key}/repos` → `RepoKnowledgeOut[]`  (configured repos + per-repo KB status)
+- `GET /projects/{key}/repos/{repo}/knowledge` → `ProjectKnowledgeOut`  (one repo's KB)
+- `POST /projects/{key}/repos/{repo}/knowledge/build` body `KnowledgeBuildRequest` → `ProjectKnowledgeOut`  (per-repo bootstrap; traverses that repo's checkout)
 
 ### Tickets  (`tickets.py`)
 - `GET /tickets?status=&assignee=&sprint=&q=` → `TicketOut[]`
@@ -49,6 +60,11 @@ request/response bodies use **camelCase** on the wire (Pydantic `alias_generator
 - `POST /cases/{caseId}/regenerate` → `TestCaseOut`
 - `POST /runs/{runId}/approve-all` → `TestCaseOut[]`
 - `POST /runs/{runId}/tickets/{tid}/approve` → `TestCaseOut[]`
+
+### Create & Link  (`review.py`, `tickets.py`)
+- `POST /runs/{runId}/testcases/create-link` body `CreateLinkRequest` → `LinkStatusOut`  (async; creates approved cases in the provider + links them. `dryRun: true` = **local mode**: records cases locally with a `LOCAL-` marker and does **not** write to the provider)
+- `GET /runs/{runId}/linked` → `LinkStatusOut`  (per-ticket create/link status; `local` flag when recorded locally)
+- `GET /tickets/{externalId}/linked-cases` → `LinkedTestCaseOut[]`
 
 ### Automation  (`automation.py`)
 - `POST /runs/{runId}/automation/generate` → `AutomationSpecOut[]`  (approved, non-Manual)
@@ -90,7 +106,9 @@ Event names:
 - `analysis.phase` `{ ticket, phase, message }`  — reading / understanding AC / business rules / generating
 - `analysis.ticketDone` `{ ticket, caseCount }`
 - `run.status` `{ status }`
-- `automation.progress` `{ file, message, done, total }`
+- `sync.progress` `{ ticket, created, linked, local, error }`  — create & link (or local) per ticket
+- `sync.done` `{}`
+- `automation.progress` `{ file, message, done, total }`  — `message` is `Generated` / `Regenerated` / `Error: …`
 - `exec.case.running` `{ ticket, caseCode, index, total }`
 - `exec.case.result` `{ ticket, caseCode, status, durationMs }`
 - `exec.progress` `{ progress, passed, failed, remaining }`

@@ -65,6 +65,34 @@ class GitHubAdapter(ProviderAdapter):
         except httpx.HTTPError as exc:
             return {"ok": False, "message": f"GitHub connection failed: {exc}", "detail": {}}
 
+    def list_repos(self) -> list[dict[str, Any]]:
+        """List repositories in the configured GitHub org (falls back to the single repo)."""
+        with self._client() as client:
+            if self.org:
+                resp = client.get(f"/orgs/{self.org}/repos", params={"per_page": 100, "sort": "full_name"})
+                if resp.status_code >= 400 and self.repo:
+                    resp = client.get(f"/repos/{self.org}/{self.repo}")
+                    resp.raise_for_status()
+                    items = [resp.json()]
+                else:
+                    resp.raise_for_status()
+                    items = resp.json()
+            elif self.repo:
+                resp = client.get(f"/repos/{self.repo}")
+                resp.raise_for_status()
+                items = [resp.json()]
+            else:
+                return []
+        return [
+            {
+                "name": r.get("name", ""),
+                "clone_url": r.get("clone_url", ""),
+                "web_url": r.get("html_url", ""),
+                "default_branch": r.get("default_branch", ""),
+            }
+            for r in items
+        ]
+
     # -- Read ---------------------------------------------------------------
     def list_projects(self) -> list[dict[str, Any]]:
         """GitHub has no "project" concept matching ADO/Jira; return the configured repo."""

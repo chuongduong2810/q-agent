@@ -43,6 +43,7 @@ def link_status(db, run_id: int) -> dict[str, Any]:
             "count": len(items),
             "created": True,
             "linked": any(i.linked for i in items),
+            "local": all(str(i.external_id).startswith("LOCAL-") for i in items),
             "error": "",
         }
         for tid, items in by_ticket.items()
@@ -51,13 +52,19 @@ def link_status(db, run_id: int) -> dict[str, Any]:
     return {"status": status, "results": results}
 
 
-def start_create_link(run_id: int, link: bool, ticket_ids: list[str] | None) -> None:
-    """Kick off the background create+link pass (no-op if already running)."""
+def start_create_link(
+    run_id: int, link: bool, ticket_ids: list[str] | None, dry_run: bool = False
+) -> None:
+    """Kick off the background create+link pass (no-op if already running).
+
+    When ``dry_run`` is True, cases are recorded locally with a ``LOCAL-`` marker
+    and the provider is never called — nothing is created in the live project.
+    """
     if run_id in _running:
         return
     _running.add(run_id)
     threading.Thread(
-        target=_worker, args=(run_id, link, ticket_ids or []), daemon=True
+        target=_worker, args=(run_id, link, ticket_ids or [], dry_run), daemon=True
     ).start()
 
 
@@ -73,7 +80,7 @@ def _adapter_for(db, kind: str, cache: dict[str, Any]) -> Any:
     return adapter
 
 
-def _worker(run_id: int, link: bool, ticket_ids: list[str]) -> None:
+def _worker(run_id: int, link: bool, ticket_ids: list[str], dry_run: bool = False) -> None:
     db = db_module.SessionLocal()
     try:
         run = db.get(Run, run_id)
@@ -102,16 +109,25 @@ def _worker(run_id: int, link: bool, ticket_ids: list[str]) -> None:
             linked_any = False
             error = ""
             try:
-                adapter = _adapter_for(db, kind, adapters)
+                adapter = None if dry_run else _adapter_for(db, kind, adapters)
                 for case in group:
-                    res = adapter.create_test_case(
-                        tid,
-                        title=case.title,
-                        precondition=case.precondition,
-                        steps=case.steps or [],
-                        priority=case.priority,
-                        link=link,
-                    )
+                    if dry_run:
+                        # Local mode: record the case locally, never touch the provider.
+                        res = {
+                            "external_id": f"LOCAL-{case.id}",
+                            "status": "Local",
+                            "url": "",
+                            "linked": False,
+                        }
+                    else:
+                        res = adapter.create_test_case(
+                            tid,
+                            title=case.title,
+                            precondition=case.precondition,
+                            steps=case.steps or [],
+                            priority=case.priority,
+                            link=link,
+                        )
                     _upsert_link(db, run_id, case, kind, res)
                     created_any = True
                     linked_any = linked_any or bool(res.get("linked"))
@@ -123,7 +139,13 @@ def _worker(run_id: int, link: bool, ticket_ids: list[str]) -> None:
             hub.publish(
                 str(run_id),
                 "sync.progress",
-                {"ticket": tid, "created": created_any, "linked": linked_any, "error": error},
+                {
+                    "ticket": tid,
+                    "created": created_any,
+                    "linked": linked_any,
+                    "local": dry_run,
+                    "error": error,
+                },
             )
         hub.publish(str(run_id), "sync.done", {})
     finally:

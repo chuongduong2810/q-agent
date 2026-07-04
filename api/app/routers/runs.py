@@ -23,7 +23,15 @@ from app.db import get_db
 from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
-from app.schemas import RunCreate, RunDetailOut, RunOut, RunTicketOut
+from app.schemas import (
+    RunCreate,
+    RunDetailOut,
+    RunOut,
+    RunRepoOptionOut,
+    RunTicketOut,
+    RunTicketRepoUpdate,
+)
+from app.services import audit_service, project_config_service
 from app.services.ai_service import run_generation_pipeline
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -51,6 +59,24 @@ def _get_run_or_404(db: Session, run_id: int) -> Run:
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
+
+
+def _resolve_run_project_key(db: Session, run: Run) -> str | None:
+    """Resolve the project key a run's tickets belong to (via its first ticket)."""
+    first = (
+        db.query(RunTicket)
+        .filter(RunTicket.run_id == run.id)
+        .order_by(RunTicket.position)
+        .first()
+    )
+    if first is None:
+        return None
+    ticket = (
+        db.query(Ticket).filter(Ticket.external_id == first.ticket_external_id).first()
+    )
+    if ticket is None:
+        return None
+    return project_config_service.resolve_project_key(db, ticket.provider_kind)
 
 
 @router.get("", response_model=list[RunOut])
@@ -103,6 +129,12 @@ def create_run(body: RunCreate, db: Session = Depends(get_db)) -> Run:
     db.commit()
     db.refresh(run)
 
+    audit_service.record(
+        category="run", actor_type="user", action="Created run",
+        target=f"{run.code} · {run.name}",
+        meta=f"{run.framework} · {run.env} · {run.workers} workers",
+    )
+
     run_generation_pipeline(run.id, blocking=False)
 
     # If the pipeline ran synchronously (blocking, e.g. in tests) it committed via
@@ -128,6 +160,54 @@ def list_run_tickets(run_id: int, db: Session = Depends(get_db)) -> list[RunTick
     )
 
 
+@router.get("/{run_id}/repos", response_model=list[RunRepoOptionOut])
+def list_run_repos(run_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    """The run's project repositories, each with its per-repo knowledge status.
+
+    Resolves the project from the run's first work item's ticket provider; returns
+    an empty list when no project can be resolved.
+    """
+    run = _get_run_or_404(db, run_id)
+    key = _resolve_run_project_key(db, run)
+    if not key:
+        return []
+    return project_config_service.repo_options(db, key)
+
+
+@router.post("/{run_id}/tickets/{tid}/repo", response_model=RunTicketOut)
+def set_run_ticket_repo(
+    run_id: int, tid: str, body: RunTicketRepoUpdate, db: Session = Depends(get_db)
+) -> RunTicket:
+    """Set a work item's target repository.
+
+    An empty ``repo`` resets it to the project default. A non-empty value must be
+    one of the project's configured repo names, else HTTP 400.
+    """
+    run = _get_run_or_404(db, run_id)
+    run_ticket = (
+        db.query(RunTicket)
+        .filter(RunTicket.run_id == run.id, RunTicket.ticket_external_id == tid)
+        .first()
+    )
+    if run_ticket is None:
+        raise HTTPException(status_code=404, detail="Run ticket not found")
+
+    repo = (body.repo or "").strip()
+    if repo:
+        key = _resolve_run_project_key(db, run)
+        configured = {opt["name"] for opt in project_config_service.repo_options(db, key)} if key else set()
+        if repo not in configured:
+            raise HTTPException(
+                status_code=400, detail=f"Repo '{repo}' is not configured for this project"
+            )
+
+    run_ticket.repo = repo
+    db.add(run_ticket)
+    db.commit()
+    db.refresh(run_ticket)
+    return run_ticket
+
+
 @router.post("/{run_id}/regenerate", response_model=RunDetailOut)
 def regenerate_run(run_id: int, db: Session = Depends(get_db)) -> Run:
     run = _get_run_or_404(db, run_id)
@@ -144,6 +224,11 @@ def regenerate_run(run_id: int, db: Session = Depends(get_db)) -> Run:
     db.add(run)
     db.commit()
     db.refresh(run)
+
+    audit_service.record(
+        category="run", actor_type="user", action="Regenerated run",
+        target=f"{run.code} · {run.name}",
+    )
 
     run_generation_pipeline(run.id, blocking=False)
 

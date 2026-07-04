@@ -16,6 +16,7 @@ from app import crypto
 from app.models.comment import TicketComment
 from app.models.provider import Provider
 from app.models.ticket import Ticket
+from app.services import audit_service
 from app.services.adapters import ProviderError, get_adapter
 from app.ws import hub
 
@@ -75,6 +76,10 @@ def publish_one(db: Session, comment: TicketComment) -> TicketComment:
             "publish.status",
             {"ticket": comment.ticket_external_id, "status": "failed"},
         )
+        audit_service.record(
+            category="comment", actor_type="ai", action="Posted results comment",
+            target=comment.ticket_external_id, status="error", meta=comment.error_message,
+        )
         return comment
 
     comment.status = "published"
@@ -85,5 +90,9 @@ def publish_one(db: Session, comment: TicketComment) -> TicketComment:
     db.refresh(comment)
     hub.publish(
         str(comment.run_id), "publish.status", {"ticket": comment.ticket_external_id, "status": "published"}
+    )
+    audit_service.record(
+        category="comment", actor_type="ai", action="Posted results comment",
+        target=comment.ticket_external_id, meta="Comment published",
     )
     return comment

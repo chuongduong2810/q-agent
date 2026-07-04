@@ -17,6 +17,40 @@ from app.services.claude_cli import ClaudeError
 from app.services.skills import EXECUTION_ANALYZER
 
 
+def ticket_status(approved_count: int, passed: int, failed: int) -> str:
+    """A ticket's execution verdict.
+
+    "Passed" ONLY when every approved, automatable test case of the ticket has a
+    passing result (i.e. all its scripts ran and passed). Any failure -> "Failed";
+    otherwise (not all approved cases have passed yet) -> "Pending".
+    """
+    if failed > 0:
+        return "Failed"
+    if approved_count > 0 and passed >= approved_count:
+        return "Passed"
+    return "Pending"
+
+
+def approved_case_counts(db: Session, run_id: int) -> dict[str, int]:
+    """Per-ticket count of approved, automatable (non-Manual) test cases in a run —
+    the set whose scripts must all pass for the ticket to count as passed."""
+    from sqlalchemy import func
+
+    from app.models.testcase import TestCase
+
+    rows = (
+        db.query(TestCase.ticket_external_id, func.count())
+        .filter(
+            TestCase.run_id == run_id,
+            TestCase.approval == "approved",
+            TestCase.automation != "Manual",
+        )
+        .group_by(TestCase.ticket_external_id)
+        .all()
+    )
+    return {tid: count for tid, count in rows}
+
+
 def _latest_execution(db: Session, run_id: int) -> Execution | None:
     stmt = (
         select(Execution)
@@ -27,19 +61,52 @@ def _latest_execution(db: Session, run_id: int) -> Execution | None:
     return db.execute(stmt).scalars().first()
 
 
-def _per_ticket_summary(results: list[ExecutionResult]) -> list[dict]:
-    """Aggregate execution results into a per-ticket pass/fail summary."""
+def _case_diagnosis(result: ExecutionResult) -> str:
+    """The auto-annotation diagnosis for a result's failure screenshot, if any."""
+    try:
+        for e in result.evidence:
+            if e.kind == "screenshot" and (e.meta or {}).get("diagnosis"):
+                return str((e.meta or {}).get("diagnosis", ""))
+    except Exception:  # noqa: BLE001 - evidence is best-effort context
+        pass
+    return ""
+
+
+def _per_ticket_summary(
+    results: list[ExecutionResult], approved_counts: dict[str, int] | None = None
+) -> list[dict]:
+    """Aggregate execution results into a per-ticket summary WITH per-case detail.
+
+    Each ticket entry carries its pass/fail counts, a ``cases`` list (one row per
+    executed test case: code, title, status, error, diagnosis), an
+    ``approvedCount`` (approved automatable cases for the ticket) and a ``status``
+    — the ticket is "Passed" only when every approved case's script ran and passed.
+    """
+    approved_counts = approved_counts or {}
     by_ticket: dict[str, dict] = {}
     for r in results:
         entry = by_ticket.setdefault(
             r.ticket_external_id,
-            {"ticketExternalId": r.ticket_external_id, "passed": 0, "failed": 0, "total": 0},
+            {"ticketExternalId": r.ticket_external_id, "passed": 0, "failed": 0,
+             "total": 0, "cases": []},
         )
         entry["total"] += 1
         if r.status == "pass":
             entry["passed"] += 1
         elif r.status == "fail":
             entry["failed"] += 1
+        entry["cases"].append(
+            {
+                "caseCode": r.case_code,
+                "title": r.title,
+                "status": r.status,
+                "error": r.error_message or "",
+                "diagnosis": _case_diagnosis(r) if r.status == "fail" else "",
+            }
+        )
+    for tid, entry in by_ticket.items():
+        entry["approvedCount"] = approved_counts.get(tid, entry["total"])
+        entry["status"] = ticket_status(entry["approvedCount"], entry["passed"], entry["failed"])
     return list(by_ticket.values())
 
 
@@ -99,7 +166,7 @@ def build_report(db: Session, run_id: int) -> Report:
         duration_s=duration_s,
         env=execution.env if execution else "Staging",
         data={
-            "ticketSummary": _per_ticket_summary(results),
+            "ticketSummary": _per_ticket_summary(results, approved_case_counts(db, run_id)),
             "aiFailureAnalysis": ai_failure_analysis,
         },
     )

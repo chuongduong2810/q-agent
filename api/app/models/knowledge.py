@@ -13,17 +13,30 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, UTCDateTime, timestamp_column, utcnow
 
-KNOWLEDGE_STATUSES = ("not_indexed", "indexed", "stale")
+KNOWLEDGE_STATUSES = ("not_indexed", "indexing", "indexed", "stale", "error")
+
+
+def compose_key(project_key: str, repo: str = "") -> str:
+    """Row key for a project's (optionally repo-scoped) knowledge base.
+
+    Per-repo rows use ``"<project>::<repo>"``; a blank repo yields the bare
+    project key (legacy / project-level knowledge).
+    """
+    return f"{project_key}::{repo}" if repo else project_key
 
 
 class ProjectKnowledge(Base):
     __tablename__ = "project_knowledge"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Keyed by project name (the UI's project identifier). One row per project.
-    key: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    # Unique row identifier. Per-repo rows use the composite "<project>::<repo>";
+    # legacy project-level rows use just "<project>". See ``compose_key``.
+    key: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    # The owning project (the UI's project identifier). Many repos → many rows.
+    project_key: Mapped[str] = mapped_column(String(200), default="", index=True)
     name: Mapped[str] = mapped_column(String(200))
     provider: Mapped[str] = mapped_column(String(64), default="")
+    # The specific repository this knowledge base describes ("" = project-level/legacy).
     repo: Mapped[str] = mapped_column(String(300), default="")
     framework: Mapped[str] = mapped_column(String(64), default="Playwright")
 
@@ -38,6 +51,8 @@ class ProjectKnowledge(Base):
     knowledge: Mapped[dict] = mapped_column(JSON, default=dict)
     # Directory holding the emitted knowledge.md + knowledge.json (skill artifacts).
     doc_path: Mapped[str] = mapped_column(String(600), default="")
+    # Last build error message (when status == "error"); cleared on success.
+    last_error: Mapped[str] = mapped_column(String(1000), default="")
 
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)

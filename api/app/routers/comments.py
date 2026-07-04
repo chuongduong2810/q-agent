@@ -23,6 +23,7 @@ from app.schemas import CommentEdit, PublishRequest, TicketCommentOut
 from app.services import claude_cli
 from app.services.claude_cli import ClaudeError
 from app.services.publish_service import publish_one
+from app.services.report_service import build_report
 from app.services.skills import TICKET_COMMENT_GENERATOR
 
 router = APIRouter(tags=["comments"])
@@ -34,26 +35,48 @@ _TARGET_STATUS_ANY_FAIL = "QA Failed"
 
 
 def _latest_report(db: Session, run_id: int) -> Report:
+    """Latest report for the run, building one on demand if none exists yet.
+
+    Preparing comments shouldn't dead-end the user: the report is derived from the
+    run's latest execution, so if they came straight from Evidence without building
+    a report first, we build it here rather than 404'ing.
+    """
     stmt = select(Report).where(Report.run_id == run_id).order_by(Report.id.desc()).limit(1)
     report = db.execute(stmt).scalars().first()
     if report is None:
-        raise HTTPException(status_code=404, detail="No report for this run; generate one first")
+        report = build_report(db, run_id)
     return report
 
 
 def _summarize_ticket(ticket_external_id: str, summary: dict, ai_failure_analysis: str) -> str:
-    """Ask Claude to write a QA result comment body for one ticket's summary.
+    """Ask Claude for ONE consolidated QA comment aggregating all of a ticket's
+    test cases — overall verdict, per-case breakdown, and consolidated findings.
 
-    Falls back to raising ClaudeError to the caller — there is no simulated
-    fallback (ADR 0001); the router surfaces the failure as an HTTP error.
+    The ticket is only "Passed" when every case passed; any failure means the
+    ticket failed. Raises ClaudeError to the caller (ADR 0001 — no simulated
+    fallback); the router surfaces it as an HTTP error.
     """
     passed, failed, total = summary["passed"], summary["failed"], summary["total"]
+    case_lines = []
+    for c in summary.get("cases", []):
+        status = c.get("status", "")
+        mark = "PASS" if status == "pass" else "FAIL" if status == "fail" else status.upper()
+        detail = ""
+        if status == "fail":
+            detail = " — " + (c.get("diagnosis") or c.get("error") or "failed").strip()
+        case_lines.append(f"- {c.get('caseCode', '')} {c.get('title', '')}: {mark}{detail}")
+    cases_block = "\n".join(case_lines) or "- (no test cases executed)"
+
     prompt = (
-        "Write a concise, professional QA result comment to post on a ticket "
-        f"({ticket_external_id}). Results: {passed}/{total} test cases passed, "
-        f"{failed} failed. "
-        + (f"Failure analysis context: {ai_failure_analysis}\n" if failed and ai_failure_analysis else "")
-        + "Use short paragraphs or a small bullet list. Do not include a greeting or signature."
+        f"Write ONE consolidated QA result comment to post on ticket {ticket_external_id}. "
+        "It must summarize the OVERALL outcome across ALL of the ticket's executed test "
+        "cases — the ticket is 'Passed' only if every case passed; any failure means the "
+        f"ticket failed. Overall: {passed}/{total} cases passed, {failed} failed.\n\n"
+        f"Per test case:\n{cases_block}\n\n"
+        + (f"Cross-case failure analysis: {ai_failure_analysis}\n\n" if failed and ai_failure_analysis else "")
+        + "Structure the comment as: (1) a one-line overall verdict, (2) a short per-case "
+        "breakdown, and (3) consolidated key findings for any failures (fold in each failing "
+        "case's diagnosis). Do not include a greeting or signature."
     )
     return claude_cli.run_prompt(
         prompt,
@@ -83,8 +106,13 @@ def prepare_comments(run_id: int, db: Session = Depends(get_db)) -> list[TicketC
         ticket_external_id = summary["ticketExternalId"]
         ticket = tickets.get(ticket_external_id)
         provider_kind = ticket.provider_kind if ticket else ""
+        # Passed only when every approved case's script ran and passed (ticket
+        # status from the report); fall back to the failed-count for old reports.
+        ticket_status = summary.get("status") or (
+            "Passed" if summary["failed"] == 0 else "Failed"
+        )
         target_status = (
-            _TARGET_STATUS_ALL_PASS if summary["failed"] == 0 else _TARGET_STATUS_ANY_FAIL
+            _TARGET_STATUS_ALL_PASS if ticket_status == "Passed" else _TARGET_STATUS_ANY_FAIL
         )
         try:
             body = _summarize_ticket(ticket_external_id, summary, ai_failure_analysis)

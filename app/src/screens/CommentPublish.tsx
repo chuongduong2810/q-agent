@@ -95,18 +95,31 @@ export function CommentPublish() {
           title="No comments prepared"
           body="Generate a report, then prepare AI-summarized result comments for each ticket in the run."
           action={
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() =>
-                prepare.mutate(undefined, {
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Prepare failed"),
-                })
-              }
-              disabled={prepare.isPending}
-            >
-              {prepare.isPending ? <Spinner size={14} /> : <Sparkles size={16} />} Prepare comments
-            </Button>
+            <div className="flex flex-col items-center gap-2.5">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() =>
+                  prepare.mutate(undefined, {
+                    onError: (e) => toast.error(e instanceof Error ? e.message : "Prepare failed"),
+                  })
+                }
+                disabled={prepare.isPending}
+              >
+                {prepare.isPending ? (
+                  <>
+                    <Spinner size={14} /> Preparing…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} /> Prepare comments
+                  </>
+                )}
+              </Button>
+              {prepare.isPending && (
+                <span className="text-[12.5px] text-ink-dim">Summarizing results with AI…</span>
+              )}
+            </div>
           }
         />
       ) : (

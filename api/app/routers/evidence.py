@@ -22,6 +22,7 @@ from app.db import get_db
 from app.models.execution import Evidence, Execution, ExecutionResult
 from app.models.ticket import Ticket
 from app.schemas import AnnotateRequest, EvidenceOut, ExecutionResultOut
+from app.services import evidence_analysis, report_service
 from app.services.annotate import render_annotations
 
 router = APIRouter(tags=["evidence"])
@@ -51,6 +52,12 @@ def get_run_evidence(run_id: int, db: Session = Depends(get_db)) -> dict:
     for r in results:
         by_ticket.setdefault(r.ticket_external_id, []).append(r)
 
+    # Approved automatable cases per ticket — a ticket is "Passed" only when every
+    # one of these scripts ran and passed (see report_service.ticket_status).
+    approved_counts = (
+        report_service.approved_case_counts(db, execution.run_id) if execution else {}
+    )
+
     tickets_meta = {
         t.external_id: t
         for t in db.execute(
@@ -63,6 +70,7 @@ def get_run_evidence(run_id: int, db: Session = Depends(get_db)) -> dict:
         ticket = tickets_meta.get(ticket_external_id)
         passed = sum(1 for r in ticket_results if r.status == "pass")
         failed = sum(1 for r in ticket_results if r.status == "fail")
+        approved = approved_counts.get(ticket_external_id, len(ticket_results))
         provider_kind = ticket.provider_kind if ticket else ""
         tickets_summary.append(
             {
@@ -70,9 +78,10 @@ def get_run_evidence(run_id: int, db: Session = Depends(get_db)) -> dict:
                 "title": ticket.title if ticket else ticket_external_id,
                 "pass": passed,
                 "fail": failed,
+                "approved": approved,
                 "provGlyph": _PROVIDER_GLYPH.get(provider_kind, "?"),
                 "provColor": _PROVIDER_COLOR.get(provider_kind, "#6b7280"),
-                "statusLabel": "Failed" if failed else "Passed" if passed else "Pending",
+                "statusLabel": report_service.ticket_status(approved, passed, failed),
             }
         )
 
@@ -91,6 +100,27 @@ def get_result_evidence(result_id: int, db: Session = Depends(get_db)) -> list[E
     if result is None:
         raise HTTPException(status_code=404, detail="Execution result not found")
     return list(result.evidence)
+
+
+@router.post("/evidence/{evidence_id}/auto-annotate", response_model=EvidenceOut)
+def auto_annotate_evidence(evidence_id: int, db: Session = Depends(get_db)) -> Evidence:
+    """Analyze a failure screenshot with Claude vision and burn annotations on it.
+
+    Stores the diagnosis + annotated-image path in ``meta`` and flips ``annotated``.
+    502 if the analysis/render couldn't produce an annotation.
+    """
+    evidence = db.get(Evidence, evidence_id)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    if evidence.kind != "screenshot":
+        raise HTTPException(status_code=400, detail="Only screenshot evidence can be annotated")
+
+    result = db.get(ExecutionResult, evidence.result_id)
+    error_message = result.error_message if result else ""
+    if not evidence_analysis.annotate_screenshot(db, evidence, error_message or "", force=True):
+        raise HTTPException(status_code=502, detail="Auto-annotation failed (see server logs)")
+    db.refresh(evidence)
+    return evidence
 
 
 @router.post("/evidence/{evidence_id}/annotate", response_model=EvidenceOut)

@@ -1,4 +1,5 @@
 import { ArrowRight, Check, Link2, RefreshCw, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { PipelineRail } from "@/components/ui/PipelineRail";
@@ -29,6 +30,16 @@ export function CreateLinkSync() {
   const createAndLink = useCreateAndLink(activeRunId ?? 0);
   const generateAutomation = useGenerateAutomation(activeRunId ?? 0);
   useRunSocket(activeRunId);
+
+  // Local mode: create cases locally only, never write to the live provider.
+  // Persisted so the choice sticks across visits during local development.
+  const [localMode, setLocalMode] = useState(
+    () => localStorage.getItem("qagent.localCreateLink") === "1",
+  );
+  const toggleLocalMode = (on: boolean) => {
+    setLocalMode(on);
+    localStorage.setItem("qagent.localCreateLink", on ? "1" : "0");
+  };
 
   const state = status?.status ?? "idle";
   const results = status?.results ?? [];
@@ -66,7 +77,7 @@ export function CreateLinkSync() {
             variant="primary"
             size="lg"
             onClick={() => {
-              generateAutomation.mutate();
+              generateAutomation.mutate(undefined);
               navigate("automation");
             }}
           >
@@ -88,21 +99,42 @@ export function CreateLinkSync() {
             <Link2 size={30} color="#a78bfa" strokeWidth={1.9} />
           </div>
           <h2 className="m-0 mb-2 text-xl font-extrabold">Ready to create test cases</h2>
-          <p className="m-0 mb-[22px] max-w-[400px] text-[13.5px] leading-relaxed text-ink-dim">
-            Approved cases will be created in the provider and linked to each work item before
-            automation is generated.
+          <p className="m-0 mb-[18px] max-w-[400px] text-[13.5px] leading-relaxed text-ink-dim">
+            {localMode
+              ? "Local mode is on — approved cases are recorded locally only. Nothing is written to the provider."
+              : "Approved cases will be created in the provider and linked to each work item before automation is generated."}
           </p>
+
+          <label
+            className="mb-[18px] flex cursor-pointer items-center gap-2.5 rounded-xl border px-[14px] py-2.5"
+            style={{
+              background: localMode ? "rgba(139,92,246,.12)" : "rgba(255,255,255,.03)",
+              borderColor: localMode ? "rgba(139,92,246,.35)" : "rgba(255,255,255,.08)",
+            }}
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-violet"
+              checked={localMode}
+              onChange={(e) => toggleLocalMode(e.target.checked)}
+            />
+            <span className="text-[13px] font-semibold text-ink-soft">
+              Local mode — don&apos;t create in the provider (avoid test-item clutter)
+            </span>
+          </label>
+
           <Button
             variant="primary"
             size="lg"
             onClick={() =>
               createAndLink.mutate(
-                { link: true },
+                { link: !localMode, dryRun: localMode },
                 { onError: (e) => toast.error(e instanceof Error ? e.message : "Create & link failed") },
               )
             }
           >
-            <Sparkles size={16} strokeWidth={2.2} /> Create &amp; link now
+            <Sparkles size={16} strokeWidth={2.2} />{" "}
+            {localMode ? "Create locally" : "Create & link now"}
           </Button>
         </div>
       )}
@@ -128,9 +160,13 @@ export function CreateLinkSync() {
           <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-success">
             <Check size={15} color="#fff" strokeWidth={3} />
           </span>
-          <span className="text-[14px] font-bold text-success-soft">Synchronization complete</span>
+          <span className="text-[14px] font-bold text-success-soft">
+            {results.some((r) => r.local) ? "Created locally" : "Synchronization complete"}
+          </span>
           <span className="flex-1 text-[12.5px] text-[#9fe8c8]">
-            Approved test cases are created and linked. You can now generate automation.
+            {results.some((r) => r.local)
+              ? "Approved test cases were recorded locally (provider untouched). You can now generate automation."
+              : "Approved test cases are created and linked. You can now generate automation."}
           </span>
         </div>
       )}
@@ -170,12 +206,19 @@ export function CreateLinkSync() {
                     ) : (
                       <>
                         <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-success-soft">
-                          <Check size={13} strokeWidth={2.6} /> Test cases created
+                          <Check size={13} strokeWidth={2.6} />{" "}
+                          {res.local ? "Created locally" : "Test cases created"}
                         </span>
-                        {res.linked && (
-                          <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-success-soft">
-                            <Check size={13} strokeWidth={2.6} /> Linked to {providerLabel[kind]}
+                        {res.local ? (
+                          <span className="text-[11px] font-semibold text-[#9494a6]">
+                            Provider not touched
                           </span>
+                        ) : (
+                          res.linked && (
+                            <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-success-soft">
+                              <Check size={13} strokeWidth={2.6} /> Linked to {providerLabel[kind]}
+                            </span>
+                          )
                         )}
                       </>
                     )}

@@ -54,6 +54,11 @@ From the Knowledge Base you MUST reuse, not reinvent:
 - The documented **locator strategy** (selector priority order).
 - The **authentication strategy** (login flow, `storageState`, auth helpers).
 - Coding standards: naming, folder layout, assertion style, async pattern.
+- The application **base URL** and per-environment URLs (`environments`) — use them literally, don't guess a host.
+- The real **application routes / URL patterns** discovered in the code (`routes`).
+- The real **selectors / data-testids** discovered in the code (`selectors`: screen/element → selector).
+- The **login URL and auth flow** (`auth.login_url`, `auth.login_flow`, `auth.storage_state`).
+- The **test-account credentials supplied at generation time** (username + password from the injected project context) — reference them directly in the spec.
 
 If any prerequisite is missing, stop and request that `project-bootstrap` (for the KB) or
 `test-case-generator` / `test-case-reviewer` (for approved cases) be run first.
@@ -73,9 +78,13 @@ If any prerequisite is missing, stop and request that `project-bootstrap` (for t
    when a higher-priority option exists.
 6. **Handle auth via existing strategy** — reuse `storageState` / auth fixtures; do not re-script
    login inside every spec unless the KB shows that pattern.
-7. **Assert against expected results** — every "Expected Result" in the case becomes a web-first
+7. **Bake in real project values** — use the REAL base URL, routes, selectors, login URL and
+   test-account credentials from the injected project context DIRECTLY in the spec. Do not invent
+   selectors or URLs, and do not emit placeholders, when the context provides them. Emit a
+   clearly-marked `// TODO` placeholder only for a value that is genuinely absent from that context.
+8. **Assert against expected results** — every "Expected Result" in the case becomes a web-first
    assertion (`await expect(...)`).
-8. **Emit specs** — follow `templates/playwright-spec.ts`; place files per the KB folder convention.
+9. **Emit specs** — follow `templates/playwright-spec.ts`; place files per the KB folder convention.
 
 ## Output
 
@@ -95,6 +104,9 @@ If any prerequisite is missing, stop and request that `project-bootstrap` (for t
 - Specs must be **deterministic and independent** — no shared mutable state, no ordering
   dependencies between tests.
 - Reference the source **Test Case ID** in each test so failures are traceable.
+- **No unresolved placeholders** — bake in the real base URL, routes, selectors and credentials
+  from the project context; a `// TODO` is allowed only for a value truly missing from the context,
+  and each one must be called out in the handoff note.
 
 ## Handoff / Success Criteria
 

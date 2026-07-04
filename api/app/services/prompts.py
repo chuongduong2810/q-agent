@@ -8,6 +8,8 @@ JSON contracts easy to find and change in one place.
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.models.ticket import Ticket
 
 ANALYSIS_JSON_SHAPE = """{
@@ -17,7 +19,8 @@ ANALYSIS_JSON_SHAPE = """{
   "risks": string[],
   "edgeCases": string[],
   "missingInformation": string[],
-  "suggestedScope": string
+  "suggestedScope": string,
+  "suggestedRepo": string
 }"""
 
 CASES_JSON_SHAPE = """[
@@ -53,37 +56,147 @@ def _ticket_context(ticket: Ticket) -> str:
     )
 
 
-def build_analysis_prompt(ticket: Ticket) -> str:
+def render_project_context(context: dict[str, Any] | None, *, include_secrets: bool = False) -> str:
+    """Render the resolved Project Knowledge Base + config for a prompt.
+
+    This is the shared project grounding that lets downstream skills reuse real
+    domain terminology, routes, selectors, auth, and (for automation) concrete
+    URLs and credentials instead of inventing placeholders.
+
+    Args:
+        context: Output of ``project_config_service.build_context`` (or None).
+        include_secrets: When True, test-account passwords are included verbatim
+            (used ONLY by automation generation, per the "literal values" choice).
+            When False, only roles/usernames are shown.
+
+    Returns:
+        A markdown block, or an empty string when there is no project context.
+    """
+    if not context or not context.get("projectKey"):
+        return ""
+
+    lines = ["Project context (from the Project Knowledge Base — reuse this, do not invent):"]
+    if context.get("baseUrl"):
+        lines.append(f"- Base URL: {context['baseUrl']}")
+    if context.get("domain"):
+        lines.append(f"- Business domain: {context['domain']}")
+    if context.get("architecture"):
+        lines.append(f"- Architecture: {context['architecture']}")
+    if context.get("businessEntities"):
+        lines.append(f"- Business entities: {', '.join(context['businessEntities'])}")
+    if context.get("locator"):
+        lines.append(f"- Locator strategy: {context['locator']}")
+
+    routes = context.get("routes") or []
+    if routes:
+        rendered = "; ".join(
+            f"{r.get('path', '')} ({r.get('description', '')})" for r in routes[:20]
+        )
+        lines.append(f"- Application routes: {rendered}")
+
+    selectors = context.get("selectors") or []
+    if selectors:
+        rendered = "; ".join(
+            f"{s.get('screen', '')}:{s.get('element', '')}=`{s.get('selector', '')}`"
+            for s in selectors[:30]
+        )
+        lines.append(f"- Known selectors: {rendered}")
+
+    auth = context.get("auth") or {}
+    if auth.get("login_flow") or auth.get("login_url"):
+        lines.append(
+            f"- Auth: {auth.get('login_flow', '')} "
+            f"(login URL: {auth.get('login_url', '—')}, "
+            f"storageState: {auth.get('storage_state', '—')})"
+        )
+
+    for label, key in (("Page objects", "pageObjectNames"), ("Fixtures", "fixtureNames"),
+                       ("Utilities", "utilities")):
+        vals = context.get(key) or []
+        if vals:
+            lines.append(f"- {label} to reuse: {', '.join(vals)}")
+
+    accounts = context.get("testAccounts") or []
+    if accounts:
+        if include_secrets:
+            rendered = "; ".join(
+                f"{a.get('role', 'account')}: username=`{a.get('username', '')}` "
+                f"password=`{a.get('password', '')}`"
+                for a in accounts
+            )
+            lines.append(f"- Test accounts (use these real credentials directly): {rendered}")
+        else:
+            rendered = "; ".join(
+                f"{a.get('role', 'account')} ({a.get('username', '')})" for a in accounts
+            )
+            lines.append(f"- Test-account roles available: {rendered}")
+
+    return "\n".join(lines)
+
+
+def build_analysis_prompt(ticket: Ticket, context: dict[str, Any] | None = None) -> str:
     """Prompt asking Claude to analyze a ticket's requirements.
 
     Returns a JSON object with businessRules, functionalRequirements,
     validationRules, risks, edgeCases, missingInformation, suggestedScope.
+    ``context`` is the resolved Project Knowledge Base so the analysis reuses real
+    domain terms, workflows and entities instead of reinterpreting them.
     """
+    project_block = render_project_context(context)
+    project_section = f"{project_block}\n\n" if project_block else ""
+
+    repo_options = (context or {}).get("repoOptions") or []
+    if repo_options:
+        repo_lines = "\n".join(
+            f"- {opt.get('name', '')}"
+            + (f" (hint: {opt['hint']})" if opt.get("hint") else "")
+            for opt in repo_options
+            if opt.get("name")
+        )
+        repo_section = (
+            "The project has these repositories. Decide which single one this work "
+            "item most likely targets and set \"suggestedRepo\" to that repo NAME "
+            "exactly as written below (or \"\" if you are unsure):\n"
+            f"{repo_lines}\n\n"
+        )
+    else:
+        repo_section = ""
+
     return (
         "You are a senior QA analyst. Analyze the following work item and extract "
         "the information a QA engineer needs before writing manual test cases.\n\n"
+        f"{project_section}"
+        f"{repo_section}"
         f"{_ticket_context(ticket)}\n\n"
         "Identify: business rules implied by the requirements, functional "
         "requirements, validation rules (input constraints, formats, boundaries), "
         "risks (things likely to break or be misunderstood), edge cases worth "
         "testing, any missing information that should be clarified with the "
-        "author, and a one-sentence suggested test scope.\n\n"
+        "author, a one-sentence suggested test scope, and the single most likely "
+        "target repository name (suggestedRepo).\n\n"
         f"Respond with ONLY a JSON object of this exact shape:\n{ANALYSIS_JSON_SHAPE}"
     )
 
 
-def build_generation_prompt(ticket: Ticket, analysis: dict, max_cases: int = 8) -> str:
+def build_generation_prompt(
+    ticket: Ticket, analysis: dict, max_cases: int = 8, context: dict[str, Any] | None = None
+) -> str:
     """Prompt asking Claude to generate ADO-style manual test cases for a ticket.
 
     Returns a JSON array of case objects (title, precondition, steps, priority,
     testType, automation, platform). ``max_cases`` caps how many are generated.
+    ``context`` is the resolved Project Knowledge Base so preconditions and steps
+    reference real screens, routes and account roles.
     """
+    project_block = render_project_context(context)
+    project_section = f"{project_block}\n\n" if project_block else ""
     return (
         "You are a senior QA engineer. Using the ticket and the prior requirement "
         "analysis below, write a set of ADO-style manual test cases that give good "
         "coverage of the acceptance criteria, business rules, and edge cases.\n\n"
         f"Generate AT MOST {max_cases} test cases — prioritise the highest-value "
         "coverage if you would otherwise exceed that.\n\n"
+        f"{project_section}"
         f"{_ticket_context(ticket)}\n\n"
         f"Prior analysis (JSON):\n{analysis}\n\n"
         "Each test case must have: a clear title, a precondition, a list of steps "
@@ -91,6 +204,11 @@ def build_generation_prompt(ticket: Ticket, analysis: dict, max_cases: int = 8) 
         "(High/Medium/Low), a testType (e.g. Functional, Negative, Boundary, "
         "Security), an automation type (Playwright/Selenium/Cypress/Manual), and a "
         "platform (e.g. Web).\n\n"
+        "Automation type: DEFAULT to 'Playwright' for web UI and functional cases "
+        "that a browser can drive (navigation, forms, validation, CRUD, permissions). "
+        "Only use 'Manual' when a case genuinely cannot be automated reliably — e.g. "
+        "exploratory testing, subjective visual judgement, external email/SMS delivery, "
+        "or time/scheduler-dependent behavior. Do not mark a whole feature Manual by default.\n\n"
         f"Respond with ONLY a JSON array of this exact shape:\n{CASES_JSON_SHAPE}"
     )
 

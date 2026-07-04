@@ -31,7 +31,7 @@ from app.schemas import (
     TestConnectionResult,
     WorkItemMetadataOut,
 )
-from app.services import settings_store
+from app.services import audit_service, settings_store
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
 
@@ -91,6 +91,10 @@ def upsert_provider(kind: str, body: ProviderFieldsIn, db: Session = Depends(get
 
     db.commit()
     db.refresh(provider)
+    audit_service.record(
+        category="integration", actor_type="user", action="Saved provider connection",
+        target=provider.name or kind,
+    )
     return _to_provider_out(provider)
 
 
@@ -112,6 +116,13 @@ def test_provider_connection(kind: str, db: Session = Depends(get_db)) -> TestCo
 
     provider.connected = bool(result.get("ok"))
     db.commit()
+
+    audit_service.record(
+        category="integration", actor_type="user", action="Tested connection",
+        target=provider.name or kind,
+        status="success" if result.get("ok") else "error",
+        meta=result.get("message", ""),
+    )
 
     return TestConnectionResult(
         ok=result.get("ok", False),
@@ -179,6 +190,15 @@ def update_settings_endpoint(body: SettingsUpdate) -> SettingsOut:
         "screenshotOnFail": updates.get("screenshot_on_fail"),
         "video": updates.get("video"),
         "maxCasesPerTicket": updates.get("max_cases_per_ticket"),
+        "headless": updates.get("headless"),
+        "userName": updates.get("user_name"),
+        "userRole": updates.get("user_role"),
+        "autoAnnotate": updates.get("auto_annotate"),
     }
     saved = settings_store.save_settings(camel_updates)
+    _changed = ", ".join(k for k, v in camel_updates.items() if v is not None)
+    audit_service.record(
+        category="settings", actor_type="user", action="Changed settings",
+        target="Workspace settings", meta=_changed,
+    )
     return SettingsOut.model_validate(saved)

@@ -1,4 +1,5 @@
-import { Play, RotateCw } from "lucide-react";
+import { useCallback, useState } from "react";
+import { ChevronDown, ChevronRight, KeyRound, Play, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { execColors } from "@/components/ui/badges";
@@ -7,7 +8,7 @@ import { PipelineRail } from "@/components/ui/PipelineRail";
 import { useExecution, useRun, useStartExecution } from "@/hooks/queries";
 import { useRunSocket } from "@/hooks/useRunSocket";
 import { useUI } from "@/store/ui";
-import type { ExecutionResultOut } from "@/types/api";
+import type { ExecutionResultOut, ProgressEvent } from "@/types/api";
 
 /** Truncates long ticket ids for the fixed-width queue column (design's r.tidShort). */
 function shortTicket(id: string): string {
@@ -21,7 +22,23 @@ export function Execution() {
   const { data: run } = useRun(activeRunId);
   const { data: execution, isLoading } = useExecution(activeRunId);
   const startExecution = useStartExecution(activeRunId ?? 0);
-  useRunSocket(activeRunId);
+
+  // Manual-login prompt state, driven by the run WebSocket. When the backend
+  // opens a browser on the host for the operator to log in, it emits
+  // `exec.auth.waiting`; `exec.auth.captured`/`exec.auth.error` clear it.
+  const [authWaiting, setAuthWaiting] = useState<{ url: string } | null>(null);
+  const onRunEvent = useCallback((evt: ProgressEvent) => {
+    if (evt.event === "exec.auth.waiting") {
+      setAuthWaiting({ url: String(evt.payload?.url ?? "") });
+    } else if (evt.event === "exec.auth.captured") {
+      setAuthWaiting(null);
+      toast.success("Login captured");
+    } else if (evt.event === "exec.auth.error") {
+      setAuthWaiting(null);
+      toast.error(String(evt.payload?.message ?? "Manual login failed"));
+    }
+  }, []);
+  useRunSocket(activeRunId, onRunEvent);
 
   const status = execution?.status ?? "idle";
   const isIdle = !execution || status === "idle" || status === "pending";
@@ -75,6 +92,42 @@ export function Execution() {
           )}
         </Button>
       </div>
+
+      {authWaiting && (
+        <div
+          className="mb-3.5 flex items-center gap-3.5 rounded-[16px] p-[15px_18px]"
+          style={{ background: "rgba(139,92,246,.12)", border: "1px solid rgba(139,92,246,.34)" }}
+        >
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}
+          >
+            <KeyRound size={18} color="#fff" strokeWidth={2.2} />
+          </div>
+          <div className="flex-1">
+            <div className="mb-0.5 flex items-center gap-2 text-[14px] font-bold">
+              <Spinner size={13} /> Waiting for manual login
+            </div>
+            <p className="m-0 text-[12.5px] leading-relaxed text-[#c3c3d4]">
+              A browser has opened on the host machine. Log in
+              {authWaiting.url ? (
+                <>
+                  {" "}at{" "}
+                  <a
+                    href={authWaiting.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="break-all font-mono text-violet hover:text-[#c4b5fd]"
+                  >
+                    {authWaiting.url}
+                  </a>
+                </>
+              ) : null}
+              , then close the window to continue.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mb-3.5">
         <PipelineRail stage={7} />
@@ -139,6 +192,35 @@ export function Execution() {
           results.map((r) => <ExecRow key={r.id} result={r} />)
         )}
       </div>
+
+      {execution?.log ? <ExecutionLog log={execution.log} /> : null}
+    </div>
+  );
+}
+
+/** Collapsible panel showing raw Playwright stdout/stderr for the run. Collapsed by default. */
+function ExecutionLog({ log }: { log: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="glass mt-3.5 rounded-[18px] p-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-xl bg-transparent p-[9px_12px] text-left transition-colors hover:bg-white/[0.04]"
+        aria-expanded={open}
+      >
+        {open ? (
+          <ChevronDown size={14} className="text-ink-dim" />
+        ) : (
+          <ChevronRight size={14} className="text-ink-dim" />
+        )}
+        <span className="text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">EXECUTION LOG</span>
+      </button>
+      {open && (
+        <pre className="mx-1 mb-1 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-xl border border-white/[0.09] bg-[rgba(8,8,13,.7)] p-3.5 font-mono text-[12px] leading-relaxed text-[#c7c7d4]">
+          {log}
+        </pre>
+      )}
     </div>
   );
 }

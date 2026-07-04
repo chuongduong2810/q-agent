@@ -8,6 +8,7 @@ import { StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badge
 import { EmptyState } from "@/components/ui/misc";
 import {
   useProviders,
+  useSettings,
   useSprints,
   useSyncTickets,
   useTickets,
@@ -63,9 +64,13 @@ export function Tickets() {
   const { data: sprints } = useSprints(providerKind);
   const { data: metadata } = useWorkItemMetadata(providerKind);
 
+  // "Assigned to me" resolves against the configured identity (Settings → Profile).
+  const { data: settings } = useSettings();
+  const userName = (settings?.userName ?? "").trim();
+
   // Combine every active filter into the ticket query.
   const filters: TicketFilters = {
-    assignee: ticketFilter === "mine" ? "Maya Kaur" : undefined,
+    assignee: ticketFilter === "mine" && userName ? userName : undefined,
     sprint: selectedSprint?.name,
     areaPath: areaPath || undefined,
     states: states.length ? states.join(",") : undefined,
@@ -88,7 +93,8 @@ export function Tickets() {
   };
 
   const selectAssigned = () => {
-    const ids = (tickets ?? []).filter((t) => t.assignee === "Maya Kaur").map((t) => t.externalId);
+    if (!userName) return;
+    const ids = (tickets ?? []).filter((t) => t.assignee === userName).map((t) => t.externalId);
     setSelected(ids);
   };
 
@@ -132,7 +138,7 @@ export function Tickets() {
           />
         </div>
 
-        {FILTERS.map((f) => {
+        {FILTERS.filter((f) => f.id !== "mine" || !!userName).map((f) => {
           const active = ticketFilter === f.id;
           return (
             <button
@@ -176,12 +182,14 @@ export function Tickets() {
           placeholder="Work item types"
           onChange={setWorkItemTypes}
         />
-        <button
-          onClick={selectAssigned}
-          className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
-        >
-          Select my assigned
-        </button>
+        {userName && (
+          <button
+            onClick={selectAssigned}
+            className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
+          >
+            Select my assigned
+          </button>
+        )}
 
         <div className="ml-auto flex items-center gap-[9px]">
           <Button variant="glass" onClick={handleSync} disabled={syncTickets.isPending}>

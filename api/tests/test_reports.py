@@ -54,6 +54,15 @@ def _seed_execution(db_session, run_id: int = 1):
     return execution
 
 
+def test_ticket_status_requires_all_approved_cases_passed():
+    from app.services.report_service import ticket_status
+
+    assert ticket_status(2, 2, 0) == "Passed"   # all approved scripts ran + passed
+    assert ticket_status(2, 1, 0) == "Pending"  # an approved case hasn't passed yet
+    assert ticket_status(2, 1, 1) == "Failed"   # a failure anywhere
+    assert ticket_status(0, 0, 0) == "Pending"  # nothing approved/run
+
+
 def test_build_report_aggregation_math(db_session, monkeypatch):
     from app.services import report_service
 
@@ -72,7 +81,13 @@ def test_build_report_aggregation_math(db_session, monkeypatch):
     assert report.env == "Staging"
 
     ticket_summary = report.data["ticketSummary"]
-    assert ticket_summary == [{"ticketExternalId": "SUR-1", "passed": 2, "failed": 1, "total": 3}]
+    assert len(ticket_summary) == 1
+    entry = ticket_summary[0]
+    assert entry["ticketExternalId"] == "SUR-1"
+    assert (entry["passed"], entry["failed"], entry["total"]) == (2, 1, 3)
+    # Per-case detail is now included so comments can consolidate across cases.
+    assert len(entry["cases"]) == 3
+    assert {c["status"] for c in entry["cases"]} == {"pass", "fail"}
     assert "flaky selector timeout" in report.data["aiFailureAnalysis"]
 
 

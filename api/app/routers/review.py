@@ -28,7 +28,7 @@ from app.schemas import (
     TestCaseOut,
     TestCaseUpdate,
 )
-from app.services import link_service
+from app.services import audit_service, link_service
 from app.services.ai_service import next_case_code, regenerate_case
 from app.services.claude_cli import ClaudeError
 
@@ -109,6 +109,14 @@ def set_case_approval(case_id: int, body: ApprovalUpdate, db: Session = Depends(
     db.add(case)
     db.commit()
     db.refresh(case)
+    _action = {
+        "approved": "Approved test case",
+        "rejected": "Rejected test case",
+    }.get(body.approval, "Reset test case approval")
+    audit_service.record(
+        category="review", actor_type="user", action=_action,
+        target=f"{case.ticket_external_id} · {case.code}",
+    )
     return case
 
 
@@ -130,7 +138,7 @@ def create_and_link(
     Runs in the background; poll GET /runs/{id}/linked or subscribe to the run WS
     (sync.progress / sync.done) for results.
     """
-    _get_run_or_404(db, run_id)
+    run = _get_run_or_404(db, run_id)
     approved = (
         db.query(TestCase)
         .filter(TestCase.run_id == run_id, TestCase.approval == "approved")
@@ -138,7 +146,13 @@ def create_and_link(
     )
     if not approved:
         raise HTTPException(status_code=400, detail="No approved test cases to create")
-    link_service.start_create_link(run_id, body.link, body.ticket_ids)
+    link_service.start_create_link(run_id, body.link, body.ticket_ids, body.dry_run)
+    audit_service.record(
+        category="sync", actor_type="ai",
+        action="Created & linked test cases" if body.link else "Created test cases",
+        target=run.code, meta=f"{approved} approved cases"
+        + (" · dry run" if body.dry_run else ""),
+    )
     return LinkStatusOut(**link_service.link_status(db, run_id))
 
 
@@ -150,7 +164,7 @@ def linked_status(run_id: int, db: Session = Depends(get_db)) -> LinkStatusOut:
 
 @router.post("/runs/{run_id}/approve-all", response_model=list[TestCaseOut])
 def approve_all(run_id: int, db: Session = Depends(get_db)) -> list[TestCase]:
-    _get_run_or_404(db, run_id)
+    run = _get_run_or_404(db, run_id)
     cases = (
         db.query(TestCase)
         .filter(TestCase.run_id == run_id, TestCase.approval != "rejected")
@@ -160,6 +174,10 @@ def approve_all(run_id: int, db: Session = Depends(get_db)) -> list[TestCase]:
         case.approval = "approved"
         db.add(case)
     db.commit()
+    audit_service.record(
+        category="review", actor_type="user", action="Approved all test cases",
+        target=run.code, meta=f"{len(cases)} cases",
+    )
     return (
         db.query(TestCase)
         .filter(TestCase.run_id == run_id)
@@ -184,6 +202,10 @@ def approve_ticket_cases(run_id: int, tid: str, db: Session = Depends(get_db)) -
         case.approval = "approved"
         db.add(case)
     db.commit()
+    audit_service.record(
+        category="review", actor_type="user", action="Approved test cases",
+        target=tid, meta=f"{len(cases)} cases",
+    )
     return (
         db.query(TestCase)
         .filter(TestCase.run_id == run_id, TestCase.ticket_external_id == tid)

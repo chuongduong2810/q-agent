@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from app.config import settings
@@ -57,6 +58,14 @@ def _compose_system(system: str | None, skill: str | None, include_template: boo
     return f"{skill_text}\n\n{system}" if system else skill_text
 
 
+def _resolve_cwd(cwd: str | Path | None) -> str | None:
+    """Return an existing directory to run the CLI in, or None (inherit ours)."""
+    if not cwd:
+        return None
+    path = Path(cwd)
+    return str(path) if path.is_dir() else None
+
+
 def run_prompt(
     prompt: str,
     *,
@@ -65,11 +74,14 @@ def run_prompt(
     include_template: bool = False,
     timeout: int | None = None,
     label: str | None = None,
+    cwd: str | Path | None = None,
 ) -> str:
     """Run a single prompt through the Claude CLI and return its text result.
 
     If ``skill`` is given, that dedicated Q-Agent skill's SKILL.md is injected as
-    the system prompt so the action follows the skill's methodology.
+    the system prompt so the action follows the skill's methodology. If ``cwd`` is
+    an existing directory, the CLI runs there so its file tools can traverse that
+    codebase (used by project-bootstrap against a local repo clone).
     """
     system = _compose_system(system, skill, include_template)
     cmd = [
@@ -83,6 +95,7 @@ def run_prompt(
     ]
     if system:
         cmd += ["--append-system-prompt", system]
+    resolved_cwd = _resolve_cwd(cwd)
 
     # Register the call so operators can observe it live (logs + /ai/activity + WS).
     from app.services import activity
@@ -96,6 +109,7 @@ def run_prompt(
             text=True,
             timeout=timeout or settings.claude_timeout_s,
             encoding="utf-8",
+            cwd=resolved_cwd,
         )
     except FileNotFoundError as exc:  # noqa: TRY003
         activity.finish(call_id, ok=False, error="Claude CLI not found")
@@ -134,11 +148,13 @@ def run_json(
     include_template: bool = False,
     timeout: int | None = None,
     label: str | None = None,
+    cwd: str | Path | None = None,
 ) -> Any:
     """Run a prompt expecting a JSON response and parse it.
 
     ``skill`` injects a dedicated Q-Agent skill; the JSON-only instruction still
-    pins the machine-parseable output shape the backend consumes.
+    pins the machine-parseable output shape the backend consumes. ``cwd`` runs the
+    CLI in a codebase directory so its file tools can read that project.
     """
     instruction = (
         "\n\nRespond with ONLY a single valid JSON value (object or array). "
@@ -151,6 +167,7 @@ def run_json(
         include_template=include_template,
         timeout=timeout,
         label=label,
+        cwd=cwd,
     )
     return _extract_json(text)
 

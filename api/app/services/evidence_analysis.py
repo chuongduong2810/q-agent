@@ -1,0 +1,188 @@
+"""Automatic failure-screenshot analysis + annotation.
+
+When a test fails, this sends the failure screenshot (plus the Playwright error)
+to Claude vision and asks for a short diagnosis and a few annotation shapes
+(bounding box / arrow / highlight / caption) in percent coordinates. Those are
+scaled to pixels and burned onto a copy of the screenshot via the existing Pillow
+renderer (:func:`app.services.annotate.render_annotations`). The diagnosis and the
+path to the annotated PNG are stored on the Evidence row's ``meta`` so the UI and
+review comments can use it.
+
+Best-effort throughout: any failure (no Claude, bad JSON, render error) leaves the
+original screenshot untouched and never breaks the run.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from PIL import Image
+
+from app.config import settings
+from app.logging import logger
+from app.models.execution import Evidence
+from app.schemas import AnnotationShape
+from app.services import claude_cli
+from app.services.annotate import render_annotations
+from app.services.skills import SCREENSHOT_ANNOTATOR
+
+_ALLOWED_TOOLS = {"rectangle", "arrow", "highlight", "circle", "text"}
+_MAX_SHAPES = 4
+
+_PROMPT = (
+    "A Playwright end-to-end UI test FAILED. The failure screenshot is the image "
+    "file `{name}` in this directory — open and look at it.\n\n"
+    "Playwright error:\n{error}\n\n"
+    "Analyse the screenshot together with the error and localise the most likely "
+    "problem area on screen. Respond with ONLY compact JSON (no prose, no code "
+    "fence) shaped exactly like:\n"
+    '{{"diagnosis":"<=200 char plain-language likely root cause",'
+    '"shapes":['
+    '{{"tool":"rectangle","x":10,"y":20,"w":30,"h":8,"color":"#f43f5e"}},'
+    '{{"tool":"arrow","x":50,"y":60,"x2":40,"y2":28,"color":"#f43f5e"}},'
+    '{{"tool":"text","x":10,"y":12,"text":"short label","color":"#f43f5e"}}'
+    "]}}\n\n"
+    "All coordinates are PERCENT of image width/height (0-100). Draw a rectangle "
+    "around the element that is wrong, missing or unexpected; optionally an arrow "
+    "pointing at it and a short text label. Use at most 4 shapes. If you cannot "
+    "localise it, return \"shapes\":[] but still give a diagnosis."
+)
+
+
+def _parse_json(raw: str) -> dict[str, Any] | None:
+    """Tolerantly pull a JSON object out of the model's reply."""
+    raw = (raw or "").strip()
+    try:
+        obj = json.loads(raw)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        pass
+    start, end = raw.find("{"), raw.rfind("}")
+    if start != -1 and end > start:
+        try:
+            obj = json.loads(raw[start : end + 1])
+            return obj if isinstance(obj, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _pct_to_px(shape: dict[str, Any], w: int, h: int) -> dict[str, Any]:
+    """Scale one percent-coordinate shape dict to pixel coords for the renderer."""
+    def px(value: Any, dim: int) -> float:
+        try:
+            return max(0.0, min(100.0, float(value))) / 100.0 * dim
+        except (TypeError, ValueError):
+            return 0.0
+
+    return {
+        "tool": str(shape.get("tool", "")).lower(),
+        "x": px(shape.get("x", 0), w),
+        "y": px(shape.get("y", 0), h),
+        "w": px(shape.get("w", 0), w),
+        "h": px(shape.get("h", 0), h),
+        "x2": px(shape.get("x2", 0), w),
+        "y2": px(shape.get("y2", 0), h),
+        "text": str(shape.get("text", ""))[:120],
+        "color": str(shape.get("color", "#f43f5e") or "#f43f5e"),
+    }
+
+
+def _analyze(src: Path, error: str, w: int, h: int) -> dict[str, Any] | None:
+    """Ask Claude (vision) for a diagnosis + annotation shapes. None on failure."""
+    prompt = _PROMPT.format(name=src.name, error=(error or "(no error message)")[:1500])
+    try:
+        raw = claude_cli.run_prompt(
+            prompt, cwd=src.parent, skill=SCREENSHOT_ANNOTATOR, label=f"Annotate: {src.name}"
+        )
+    except Exception as exc:  # noqa: BLE001 - best-effort
+        logger.warning("evidence analysis: Claude call failed: {}", exc)
+        return None
+    data = _parse_json(raw)
+    if data is None:
+        return None
+    diagnosis = str(data.get("diagnosis", "")).strip()[:400]
+    shapes = [
+        _pct_to_px(s, w, h)
+        for s in (data.get("shapes") or [])
+        if isinstance(s, dict) and str(s.get("tool", "")).lower() in _ALLOWED_TOOLS
+    ]
+    return {"diagnosis": diagnosis, "shapes": shapes[:_MAX_SHAPES]}
+
+
+def _caption_shapes(diagnosis: str, w: int, h: int) -> list[dict[str, Any]]:
+    """Fallback annotation when nothing localisable: a red caption bar up top."""
+    bar_h = max(24.0, h * 0.06)
+    return [
+        {"tool": "highlight", "x": 0, "y": 0, "w": w, "h": bar_h, "color": "#f43f5e"},
+        {"tool": "text", "x": 10, "y": 6, "w": 0, "h": 0, "x2": 0, "y2": 0,
+         "text": diagnosis[:110], "color": "#ffffff"},
+    ]
+
+
+def annotate_screenshot(db, evidence: Evidence, error_message: str, *, force: bool = False) -> bool:
+    """Analyse + annotate one screenshot Evidence row. Returns True if annotated.
+
+    Stores ``meta.diagnosis`` + ``meta.annotatedPath`` and sets ``annotated``.
+    Idempotent unless ``force`` (skips evidence already auto-annotated).
+    """
+    if evidence.kind != "screenshot":
+        return False
+    meta = dict(evidence.meta or {})
+    if meta.get("autoAnnotated") and not force:
+        return False
+    src = settings.evidence_dir / evidence.path
+    if not src.exists():
+        return False
+    try:
+        with Image.open(src) as im:
+            w, h = im.size
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("evidence analysis: cannot open {}: {}", src, exc)
+        return False
+
+    analysis = _analyze(src, error_message, w, h)
+    diagnosis = (analysis or {}).get("diagnosis") or (error_message or "Test failed")[:200]
+    shapes_data = (analysis or {}).get("shapes") or []
+    if not shapes_data:
+        shapes_data = _caption_shapes(diagnosis, w, h)
+
+    try:
+        shapes = [AnnotationShape(**s) for s in shapes_data]
+        dst_rel = Path(evidence.path).with_name(Path(evidence.path).stem + "-annotated.png")
+        dst = settings.evidence_dir / dst_rel
+        render_annotations(src, shapes, dst)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("evidence analysis: render failed for {}: {}", src, exc)
+        return False
+
+    meta.update(
+        {
+            "autoAnnotated": True,
+            "diagnosis": diagnosis,
+            "annotatedPath": str(dst_rel).replace("\\", "/"),
+        }
+    )
+    evidence.meta = meta
+    evidence.annotated = True
+    db.add(evidence)
+    db.commit()
+    logger.info("Auto-annotated failure screenshot {} ({} shapes)", evidence.path, len(shapes_data))
+    return True
+
+
+def auto_annotate_result(db, run, result) -> None:
+    """Auto-annotate the failure screenshot of a failed ExecutionResult (best-effort)."""
+    try:
+        shot = next(
+            (e for e in result.evidence
+             if e.kind == "screenshot" and not (e.meta or {}).get("autoAnnotated")),
+            None,
+        )
+        if shot is None:
+            return
+        annotate_screenshot(db, shot, result.error_message or "")
+    except Exception as exc:  # noqa: BLE001 - never break the run
+        logger.warning("auto_annotate_result failed for result {}: {}", getattr(result, "id", "?"), exc)

@@ -17,6 +17,10 @@ DEFAULTS: dict[str, Any] = {
     "screenshotOnFail": True,
     "video": False,
     "maxCasesPerTicket": 8,
+    "headless": True,
+    "userName": "",
+    "userRole": "",
+    "autoAnnotate": True,
 }
 
 

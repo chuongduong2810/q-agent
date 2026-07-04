@@ -40,13 +40,28 @@ requirement-analyst → test-case-generator → test-case-reviewer
 - The related **Test Case ID** and its expected result; linked Acceptance Criteria if known.
 - `knowledge.md` — for environment details, URLs, and correct domain/UI terminology.
 
+## Consolidation Rule (one comment per ticket)
+
+A run executes **many test cases per ticket**. Post exactly **one consolidated comment per
+ticket** that aggregates the findings of **all** of that ticket's executed test cases — never a
+comment about a single case. The ticket's overall status is the **summary of every case**: it is
+"Passed" only when **all** cases pass; **any** failing case means the ticket failed. Structure the
+consolidated comment as:
+
+1. **Overall verdict** — one line: `N/total cases passed` and the resulting ticket status.
+2. **Per-case breakdown** — a short bullet per test case (id + PASS/FAIL + one-line note).
+3. **Consolidated key findings** — for the failures only, the combined root-cause findings, folding
+   in each failing case's screenshot **diagnosis** and evidence link.
+
 ## Workflow
 
 1. **Choose the mode** — new **Bug Ticket** (defect found) or **Progress/Update Comment** (status/clarification).
-2. **Gather facts** — repro steps, expected vs actual, environment, evidence links, from the inputs.
-3. **Write in project language** — reuse terminology and environment names from `knowledge.md`.
-4. **Draft** using `templates/ticket-comment.md` for the chosen mode.
-5. **Attach evidence** — link screenshots, trace files, and annotation notes.
+2. **Aggregate the ticket's cases** — collect every executed test case for the ticket with its
+   pass/fail status, error, and annotation diagnosis; compute the overall (all-pass vs any-fail) status.
+3. **Gather facts** — repro steps, expected vs actual, environment, evidence links, from the inputs.
+4. **Write in project language** — reuse terminology and environment names from `knowledge.md`.
+5. **Draft** using `templates/ticket-comment.md` for the chosen mode.
+6. **Attach evidence** — link the annotated screenshots, trace files, and annotation notes per case.
 
 ## Output
 

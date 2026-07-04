@@ -23,6 +23,13 @@ def setup_logging(level: str = "INFO") -> None:
         ),
         colorize=True,
     )
+    # Mirror all records into the in-memory ring buffer that backs the Audit
+    # Log page's Backend Logs tab — both our loguru records and standard-library
+    # logging (uvicorn's HTTP access lines + any library that uses `logging`).
+    from app.services.log_buffer import install_sink, install_stdlib_bridge
+
+    install_sink()
+    install_stdlib_bridge()
     _configured = True
 
 

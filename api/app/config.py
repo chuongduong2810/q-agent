@@ -42,13 +42,27 @@ class Settings(BaseSettings):
     claude_bin: str = "claude"
     claude_model: str = "claude-sonnet-5"
     claude_timeout_s: int = 300
+    # project-bootstrap traverses a whole repo, so it gets a longer budget than a
+    # one-shot prompt. It runs in a background thread, so a long wait is harmless.
+    claude_bootstrap_timeout_s: int = 1200
 
     # Dedicated Q-Agent skills (SKILL.md methodology injected per Claude action).
     skills_dir: Path = REPO_ROOT / "skills"
 
     # Playwright
-    playwright_bin: str = "npx"  # invoked as: npx playwright test ...
+    playwright_bin: str = "npx"  # fallback: npx playwright test ...
     exec_timeout_s: int = 600
+    # Self-heal loop: max times to re-generate + re-run a single failing spec
+    # (feeding the failure back to Claude) before giving up.
+    heal_max_attempts: int = 3
+    # Max seconds to wait for the operator to complete a manual login (headed
+    # browser) before the capture is abandoned and the run fails cleanly.
+    auth_capture_timeout_s: int = 300
+    # Node modules dir that has @playwright/test + installed browsers. Generated
+    # specs live under workspace/specs/<run> with no node_modules of their own, so
+    # execution runs the binary here and sets NODE_PATH so the specs' and config's
+    # `@playwright/test` imports resolve. Defaults to the frontend's install.
+    playwright_node_modules: Path = REPO_ROOT / "app" / "node_modules"
 
     @property
     def resolved_database_url(self) -> str:
@@ -68,8 +82,25 @@ class Settings(BaseSettings):
     def knowledge_dir(self) -> Path:
         return self.workspace_dir / "knowledge"
 
+    @property
+    def repos_dir(self) -> Path:
+        """Local checkouts of application repos, pulled for project-bootstrap traversal."""
+        return self.workspace_dir / "repos"
+
+    @property
+    def auth_dir(self) -> Path:
+        """Saved per-project Playwright ``storageState.json`` sessions (manual login)."""
+        return self.workspace_dir / "auth"
+
     def ensure_dirs(self) -> None:
-        for d in (self.workspace_dir, self.specs_dir, self.evidence_dir, self.knowledge_dir):
+        for d in (
+            self.workspace_dir,
+            self.specs_dir,
+            self.evidence_dir,
+            self.knowledge_dir,
+            self.repos_dir,
+            self.auth_dir,
+        ):
             d.mkdir(parents=True, exist_ok=True)
 
 

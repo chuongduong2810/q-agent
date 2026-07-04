@@ -8,27 +8,12 @@ import { runColor, timeAgo } from "@/components/dashboard/runStatus";
 import { useReports, useRuns } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
 
-/** Design's showcase 7-day trend bars — used when no run report carries a
- * `data.trend` series yet (no aggregate reporting endpoint exists across
- * runs, see docs/API-CONTRACT.md `GET /reports`). Values are bar heights
- * (0-1) with the day label, matching Q-Agent.dc.html lines 514. */
-const SHOWCASE_TREND = [
-  { d: "Wed", v: 0.72 },
-  { d: "Thu", v: 0.81 },
-  { d: "Fri", v: 0.68 },
-  { d: "Sat", v: 0.9 },
-  { d: "Sun", v: 0.85 },
-  { d: "Mon", v: 0.94 },
-  { d: "Tue", v: 0.97 },
-];
-
-/** Design's showcase flaky-tests list — no `data.flaky` on the latest report
- * falls back to this (Q-Agent.dc.html line 519). */
-const SHOWCASE_FLAKY = [
-  { id: "TC-14", name: "Checkout — apply promo code", runs: "3 of last 10 runs", rate: "70%" },
-  { id: "TC-22", name: "Login — SSO redirect timing", runs: "2 of last 10 runs", rate: "80%" },
-  { id: "TC-09", name: "Cart — quantity stepper race", runs: "4 of last 10 runs", rate: "60%" },
-];
+interface FlakyRow {
+  id: string;
+  name: string;
+  runs: string;
+  rate: string;
+}
 
 export function Reports() {
   const { data: reports, isLoading: reportsLoading } = useReports();
@@ -36,22 +21,43 @@ export function Reports() {
   const setActiveRun = useUI((s) => s.setActiveRun);
   const navigate = useUI((s) => s.navigate);
 
-  // Latest report (by createdAt) backs the summary cards; fall back to the
-  // design's showcase numbers when no run has been reported on yet.
-  const latest = reports?.length
-    ? [...reports].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-    : null;
-  const passRate = latest ? latest.passRate : 94.2;
-  const trend = (latest?.data?.trend as { d: string; v: number }[] | undefined) ?? SHOWCASE_TREND;
-  const flaky = (latest?.data?.flaky as typeof SHOWCASE_FLAKY | undefined) ?? SHOWCASE_FLAKY;
-  const avgDuration = latest ? `${Math.round(latest.durationS / 60)}m ${Math.round(latest.durationS % 60)}s` : "4m 12s";
-  const flakyRate = (latest?.data?.flakyRate as string | undefined) ?? "3.1%";
+  // Everything on this screen is derived from real run reports (GET /reports).
+  // Newest first for the summary cards; oldest→newest (last 7) for the trend.
+  const byNewest = [...(reports ?? [])].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const latest = byNewest[0] ?? null;
+  const previous = byNewest[1] ?? null;
+
+  const passRate = latest ? latest.passRate : null;
+  const avgDuration = latest
+    ? `${Math.round(latest.durationS / 60)}m ${Math.round(latest.durationS % 60)}s`
+    : "—";
+
+  // Pass-rate delta vs the previous report (percentage points); omitted when
+  // there aren't two reports to compare.
+  const passRateDelta = latest && previous ? latest.passRate - previous.passRate : null;
+
+  // Trend bars: real pass rate per report over the last (up to) 7 reports.
+  const trend = [...(reports ?? [])]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-7)
+    .map((r) => ({
+      key: r.id,
+      d: new Date(r.createdAt).toLocaleDateString(undefined, { month: "numeric", day: "numeric" }),
+      v: Math.max(0, Math.min(1, r.passRate / 100)),
+    }));
+  const canTrend = trend.length >= 2;
+
+  // Flaky tests come from the latest report's `data` blob when present.
+  const flaky = (latest?.data?.flaky as FlakyRow[] | undefined) ?? [];
+  const flakyRate = (latest?.data?.flakyRate as string | undefined) ?? (latest ? "0%" : "—");
 
   const recentRuns = [...(runs ?? [])]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 4);
 
-  const ringOffset = 377 - (377 * Math.max(0, Math.min(100, passRate))) / 100;
+  const ringOffset = 377 - (377 * Math.max(0, Math.min(100, passRate ?? 0))) / 100;
 
   return (
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
@@ -91,41 +97,67 @@ export function Reports() {
               </defs>
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-[32px] font-black leading-none tracking-tight">{passRate.toFixed(1)}%</div>
+              <div className="text-[32px] font-black leading-none tracking-tight">
+                {passRate == null ? "—" : `${passRate.toFixed(1)}%`}
+              </div>
               <div className="mt-0.5 text-[11.5px] text-muted">pass rate</div>
             </div>
           </div>
-          <div className="text-[12px] font-semibold text-[#6ee7b7]">&#9650; 2.1% vs last week</div>
+          {passRateDelta == null ? (
+            <div className="text-[12px] font-semibold text-muted">
+              {passRate == null ? "No reports yet" : "First reported run"}
+            </div>
+          ) : (
+            <div
+              className="text-[12px] font-semibold"
+              style={{ color: passRateDelta >= 0 ? "#6ee7b7" : "#fb7185" }}
+            >
+              {passRateDelta >= 0 ? "▲" : "▼"} {Math.abs(passRateDelta).toFixed(1)} pts vs previous run
+            </div>
+          )}
         </GlassCard>
 
         <GlassCard className="p-5">
           <div className="mb-[18px] text-[14px] font-bold">Pass rate trend</div>
-          <div className="relative flex h-[150px] items-end gap-3 pb-6">
-            {trend.map((b) => (
-              <div key={b.d} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
-                <motion.div
-                  initial={{ scaleY: 0.02 }}
-                  animate={{ scaleY: b.v }}
-                  transition={{ duration: 0.6, ease: "easeOut" }}
-                  className="w-full max-w-[34px] origin-bottom rounded-[8px_8px_3px_3px]"
-                  style={{ height: "100%", background: "linear-gradient(180deg,#8b5cf6,#6366f1)" }}
-                />
-                <span className="absolute bottom-0 text-[11px] text-[#7a7a8c]">{b.d}</span>
-              </div>
-            ))}
-          </div>
+          {canTrend ? (
+            <div className="relative flex h-[150px] items-end gap-3 pb-6">
+              {trend.map((b) => (
+                <div key={b.key} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
+                  <motion.div
+                    initial={{ scaleY: 0.02 }}
+                    animate={{ scaleY: b.v }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="w-full max-w-[34px] origin-bottom rounded-[8px_8px_3px_3px]"
+                    style={{ height: "100%", background: "linear-gradient(180deg,#8b5cf6,#6366f1)" }}
+                  />
+                  <span className="absolute bottom-0 text-[11px] text-[#7a7a8c]">{b.d}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-[150px] items-center justify-center text-center text-[12.5px] text-ink-dim">
+              Not enough runs yet to chart a trend.
+            </div>
+          )}
         </GlassCard>
 
         <div className="flex flex-col gap-3.5">
           <GlassCard className="flex-1 p-[18px]">
             <div className="mb-2 text-[12.5px] text-[#9494a6]">Avg run duration</div>
             <div className="text-[28px] font-black tracking-tight">{avgDuration}</div>
-            <div className="mt-1.5 text-[12px] font-semibold text-[#6ee7b7]">&#9660; parallelised</div>
+            <div className="mt-1.5 text-[12px] font-semibold text-muted">
+              {latest ? `${latest.env} · latest run` : "no reports yet"}
+            </div>
           </GlassCard>
           <GlassCard className="flex-1 p-[18px]">
             <div className="mb-2 text-[12.5px] text-[#9494a6]">Flaky rate</div>
             <div className="text-[28px] font-black tracking-tight">{flakyRate}</div>
-            <div className="mt-1.5 text-[12px] font-semibold text-[#fb7185]">&#9650; watch {flaky.length} cases</div>
+            <div
+              className="mt-1.5 text-[12px] font-semibold"
+              style={{ color: flaky.length ? "#fb7185" : "#6ee7b7" }}
+            >
+              {flaky.length ? `▲ watch ${flaky.length} case${flaky.length === 1 ? "" : "s"}` : "no flaky tests"}
+            </div>
           </GlassCard>
         </div>
       </div>
@@ -187,6 +219,8 @@ export function Reports() {
             <div className="flex justify-center py-6">
               <Spinner />
             </div>
+          ) : flaky.length === 0 ? (
+            <p className="m-0 py-6 text-center text-[12.5px] text-ink-dim">No flaky tests detected.</p>
           ) : (
             <div className="flex flex-col gap-[9px]">
               {flaky.map((f) => (

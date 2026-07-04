@@ -23,6 +23,7 @@ from app.schemas import (
     TicketDetailOut,
     TicketOut,
 )
+from app.services import audit_service
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
 
@@ -178,5 +179,11 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
     db.commit()
     for ticket in synced:
         db.refresh(ticket)
+
+    audit_service.record(
+        category="sync", actor_type="system", action="Synced tickets",
+        target=body.sprint or provider.name or provider.kind,
+        meta=f"{len(synced)} work items",
+    )
 
     return SyncResult(synced=len(synced), tickets=[TicketOut.model_validate(t) for t in synced])

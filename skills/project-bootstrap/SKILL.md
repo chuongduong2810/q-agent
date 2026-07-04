@@ -42,6 +42,23 @@ Do **not** re-run on every ticket. The knowledge base is meant to be reused.
   - `README.md`, `docs/`, architecture documents
   - Existing automation project, if any (Playwright / Selenium / Cypress / WebdriverIO)
   - Package manifests (`package.json`, `*.csproj`, `pom.xml`, `requirements.txt`, etc.)
+- **User-authored project configuration** (from the Project Details page), treated as
+  authoritative: application base URL, per-environment URLs, configured test-account
+  **roles/usernames** (never the passwords — those stay in the secure store), and any
+  extra project-specific values.
+- **A local checkout of the application source.** When a local repo path is configured it is
+  used directly; otherwise the configured **remote repo URL** is cloned/pulled into the app
+  workspace (`workspace/repos/<project>`) and used instead. When a checkout is available,
+  traverse the actual source with your file tools to discover **real** routes,
+  `data-testid`/selectors, page objects, fixtures and the authentication flow — do not infer them.
+
+## Objective: eliminate placeholders downstream
+
+The knowledge base must let `automation-generator` emit runnable Playwright specs with
+**no manual placeholders**. Discover concrete, reusable facts — base URL, real routes,
+real selectors, the login flow/URL, environments, and business entities — so the only
+values injected later at generation time are the test-account passwords (pulled from the
+secure store by role). Anything genuinely undiscoverable goes under **Missing Information**.
 
 ## Constraints
 
@@ -54,14 +71,18 @@ Do **not** re-run on every ticket. The knowledge base is meant to be reused.
 
 1. **Detect the stack** — languages, frameworks, build tools, package managers, from manifests and config.
 2. **Map the architecture** — frontend/backend frameworks, folder structure, module boundaries, layers.
-3. **Inventory automation assets** — existing test framework, config, Page Objects, fixtures, helpers, test data factories.
-4. **Determine locator strategy** — the project's actual selector priority (data-testid → getByRole → getByLabel → CSS → XPath), with real examples found in the code.
-5. **Learn authentication** — login flow, session handling, reusable auth helpers / storage state.
-6. **Extract coding standards** — naming, folder conventions, assertion style, async pattern, error handling, comment density.
-7. **Extract business domain knowledge** — entities, user roles, workflows, business rules, glossary — from docs and code.
-8. **Catalog routes, UI components, APIs, environment config, and external integrations** (Azure DevOps, Jira, storage, email, etc.).
-9. **Validate completeness** — record what is unknown under "Missing Information" rather than guessing.
-10. **Emit both artifacts** — populate `templates/knowledge.md`, then produce a synchronized `knowledge.json` using `templates/knowledge.json`.
+3. **Capture the base URL and environments** — the primary application URL (prefer the
+   configured one) and any per-environment URLs.
+4. **Catalog real routes** — the concrete routes/URL patterns a test would navigate to,
+   noting which require authentication.
+5. **Inventory automation assets** — existing test framework, config, Page Objects, fixtures, helpers, test data factories (record their **names** so downstream can reuse them).
+6. **Determine locator strategy + real selectors** — the project's actual selector priority (data-testid → getByRole → getByLabel → CSS → XPath), with **real selector/testid examples** discovered in the code, mapped to their screen/element.
+7. **Learn authentication** — login flow, **login URL**, session handling, reusable auth helpers / storage state, and which configured test-account role logs in where.
+8. **Extract coding standards** — naming, folder conventions, assertion style, async pattern, error handling, comment density.
+9. **Extract business domain knowledge** — entities, user roles, workflows, business rules, glossary — from docs and code.
+10. **Catalog UI components, APIs, environment config, and external integrations** (Azure DevOps, Jira, storage, email, etc.).
+11. **Validate completeness** — record what is unknown under "Missing Information" rather than guessing.
+12. **Emit both artifacts** — populate `templates/knowledge.md`, then produce a synchronized `knowledge.json` using `templates/knowledge.json`.
 
 ## Output
 

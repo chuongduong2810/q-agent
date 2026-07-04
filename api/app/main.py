@@ -14,6 +14,7 @@ from app.db import init_db
 from app.logging import logger, setup_logging
 from app.routers import (
     ai,
+    audit,
     automation,
     comments,
     evidence,
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     # Feature routers (implemented by feature modules).
     app.include_router(health.router)
     app.include_router(ai.router)
+    app.include_router(audit.router)
     app.include_router(providers.router)
     app.include_router(projects.router)
     app.include_router(tickets.router)

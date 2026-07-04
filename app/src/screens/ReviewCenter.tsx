@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { approvalColors, Pill, priorityBg, priorityColor } from "@/components/ui/badges";
+import { Select } from "@/components/ui/Dropdown";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { useCaseMutations, useCreateAndLink, useRun, useRunCases } from "@/hooks/queries";
 import { useRunSocket } from "@/hooks/useRunSocket";
@@ -54,8 +55,8 @@ export function ReviewCenter() {
     selectedIds.forEach((caseId) => setApproval.mutate({ caseId, approval: "approved" }));
     clearReviewSel();
   };
-  const startCreateLink = (link: boolean) => {
-    createAndLink.mutate({ link });
+  const startCreateLink = (link: boolean, dryRun = false) => {
+    createAndLink.mutate({ link, dryRun });
     if (activeRunId != null) setActiveRun(activeRunId);
     navigate("sync");
   };
@@ -100,6 +101,13 @@ export function ReviewCenter() {
           )}
           <Button variant="glass" onClick={() => approveAll.mutate()} disabled={approveAll.isPending}>
             Approve all
+          </Button>
+          <Button
+            variant="glass"
+            onClick={() => startCreateLink(false, true)}
+            title="Record approved cases locally only — nothing is written to the provider"
+          >
+            Create locally
           </Button>
           <Button
             onClick={() => startCreateLink(false)}
@@ -175,6 +183,7 @@ export function ReviewCenter() {
             onRegenerate={(caseId) => regenerateCase.mutate(caseId)}
             regeneratingCaseId={regenerateCase.isPending ? (regenerateCase.variables as number) : null}
             onSave={(caseId, body) => updateCase.mutate({ caseId, body })}
+            onSetAutomation={(caseId, automation) => updateCase.mutate({ caseId, body: { automation } })}
           />
         ))}
       </div>
@@ -193,6 +202,7 @@ function TicketAccordion({
   onRegenerate,
   regeneratingCaseId,
   onSave,
+  onSetAutomation,
 }: {
   ticketExternalId: string;
   cases: TestCaseOut[];
@@ -204,6 +214,7 @@ function TicketAccordion({
   onRegenerate: (caseId: number) => void;
   regeneratingCaseId: number | null;
   onSave: (caseId: number, body: { title: string; precondition: string; steps: { a: string; e: string }[] }) => void;
+  onSetAutomation: (caseId: number, automation: string) => void;
 }) {
   const approved = cases.filter((c) => c.approval === "approved").length;
   const pending = cases.length - approved;
@@ -281,6 +292,7 @@ function TicketAccordion({
                   onSetApproval={(approval) => onSetApproval(c.id, approval)}
                   onRegenerate={() => onRegenerate(c.id)}
                   onSave={(body) => onSave(c.id, body)}
+                  onSetAutomation={(automation) => onSetAutomation(c.id, automation)}
                 />
               ))}
             </div>
@@ -291,18 +303,27 @@ function TicketAccordion({
   );
 }
 
+const AUTOMATION_OPTIONS = [
+  { value: "Playwright", label: "Playwright" },
+  { value: "Selenium", label: "Selenium" },
+  { value: "Cypress", label: "Cypress" },
+  { value: "Manual", label: "Manual (no automation)" },
+];
+
 function CaseRow({
   testCase: c,
   regenerating,
   onSetApproval,
   onRegenerate,
   onSave,
+  onSetAutomation,
 }: {
   testCase: TestCaseOut;
   regenerating: boolean;
   onSetApproval: (approval: "approved" | "rejected") => void;
   onRegenerate: () => void;
   onSave: (body: { title: string; precondition: string; steps: { a: string; e: string }[] }) => void;
+  onSetAutomation: (automation: string) => void;
 }) {
   const expandedCase = useUI((s) => s.expandedCase);
   const toggleCase = useUI((s) => s.toggleCase);
@@ -373,23 +394,27 @@ function CaseRow({
           >
             {!isEditing ? (
               <div>
-                <div className="mb-3 flex flex-wrap gap-2">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <span className="rounded-lg bg-white/5 px-2.5 py-[3px] text-[11px] text-ink-dim">
                     Type: <b className="text-ink-soft">{c.testType}</b>
-                  </span>
-                  <span
-                    className="rounded-lg px-2.5 py-[3px] text-[11px] font-semibold"
-                    style={
-                      c.automation === "Manual"
-                        ? { background: "rgba(148,163,184,.14)", color: "#94a3b8" }
-                        : { background: "rgba(139,92,246,.14)", color: "#a78bfa" }
-                    }
-                  >
-                    {c.automation}
                   </span>
                   <span className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-[3px] text-[11px] text-ink-dim">
                     {platformIcon[c.platform] ?? "🖥"} {c.platform}
                   </span>
+                  {/* Automation type is editable — only non-Manual cases are automatable. */}
+                  <span className="ml-1 text-[11px] text-faint">Automation:</span>
+                  <Select
+                    value={c.automation}
+                    options={AUTOMATION_OPTIONS}
+                    placeholder="Manual"
+                    allowClear={false}
+                    onChange={(v) => v && v !== c.automation && onSetAutomation(v)}
+                  />
+                  {c.automation === "Manual" && (
+                    <span className="text-[11px] text-[#94a3b8]">
+                      Set a framework to make this case automatable.
+                    </span>
+                  )}
                 </div>
                 <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">PRECONDITION</div>
                 <p className="m-0 mb-3 text-[12.5px] leading-relaxed text-ink-soft">{c.precondition || "—"}</p>

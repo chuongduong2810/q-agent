@@ -21,7 +21,13 @@ export function GlassCard({ children, className, hover, index = 0, onClick, styl
       transition={{ duration: 0.4, delay: Math.min(index * 0.04, 0.3), ease: "easeOut" }}
       whileHover={
         hover
-          ? { y: -3, borderColor: "rgba(139,92,246,.32)", transition: { duration: 0.15 } }
+          ? {
+              y: -4,
+              borderColor: "rgba(139,92,246,.4)",
+              boxShadow:
+                "0 20px 45px -20px rgba(139,92,246,.5), 0 0 26px -10px rgba(34,211,238,.35)",
+              transition: { duration: 0.18 },
+            }
           : undefined
       }
       onClick={onClick}

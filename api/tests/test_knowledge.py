@@ -1,8 +1,10 @@
-"""Tests for Project Knowledge build + endpoints (Claude mocked)."""
+"""Tests for Project Knowledge build + endpoints (Claude mocked, async build)."""
 
 from __future__ import annotations
 
-from app.services import knowledge_service
+import time
+
+from app.services import knowledge_service, repo_service
 
 CANNED = {
     "branch": "main",
@@ -18,23 +20,36 @@ CANNED = {
 }
 
 
+def _wait_idle(row_key: str, timeout: float = 5.0) -> None:
+    """Block until the background knowledge build for a row finishes."""
+    deadline = time.time() + timeout
+    while knowledge_service.is_building(row_key) and time.time() < deadline:
+        time.sleep(0.02)
+
+
 def test_build_knowledge_indexes_project(client, monkeypatch):
     monkeypatch.setattr(knowledge_service, "run_json", lambda *a, **k: dict(CANNED))
+    monkeypatch.setattr(repo_service, "resolve_repo_path", lambda *a, **k: None)
 
     resp = client.post(
         "/projects/Surency Platform/knowledge/build",
         json={"name": "Surency Platform", "provider": "Azure DevOps", "repo": "org/web"},
     )
     assert resp.status_code == 200
-    data = resp.json()
+    # The build is async: the row is 'indexing' immediately, then completes.
+    assert resp.json()["status"] == "indexing"
+    _wait_idle("Surency Platform")
+
+    data = client.get("/projects/Surency Platform/knowledge").json()
     assert data["status"] == "indexed"
     assert data["confidence"] == 88
     assert data["version"] == "v1"
     assert data["knowledge"]["stack"] == ["React 19", "TypeScript"]
 
     # A rebuild bumps the version and keeps it indexed.
-    resp2 = client.post("/projects/Surency Platform/knowledge/build", json={})
-    assert resp2.json()["version"] == "v2"
+    client.post("/projects/Surency Platform/knowledge/build", json={})
+    _wait_idle("Surency Platform")
+    assert client.get("/projects/Surency Platform/knowledge").json()["version"] == "v2"
 
     listed = client.get("/projects/knowledge").json()
     assert any(k["key"] == "Surency Platform" for k in listed)
@@ -51,5 +66,12 @@ def test_build_surfaces_claude_error(client, monkeypatch):
         raise ClaudeError("cli missing")
 
     monkeypatch.setattr(knowledge_service, "run_json", boom)
+    monkeypatch.setattr(repo_service, "resolve_repo_path", lambda *a, **k: None)
+
     resp = client.post("/projects/X/knowledge/build", json={"name": "X"})
-    assert resp.status_code == 502
+    assert resp.status_code == 200  # accepted; failure surfaces on the row
+    _wait_idle("X")
+
+    row = client.get("/projects/X/knowledge").json()
+    assert row["status"] == "error"
+    assert "cli missing" in row["lastError"]

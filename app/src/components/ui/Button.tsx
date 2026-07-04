@@ -1,5 +1,6 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type MouseEvent } from "react";
 import { cn } from "@/lib/cn";
+import { useMagnetic } from "@/hooks/useMagnetic";
 
 type Variant = "primary" | "glass" | "ghost" | "white" | "success" | "danger";
 type Size = "sm" | "md" | "lg";
@@ -10,7 +11,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-[filter,background,transform,border-color] cursor-pointer border select-none disabled:opacity-50 disabled:cursor-not-allowed";
+  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-[filter,background,border-color] cursor-pointer border select-none disabled:opacity-50 disabled:cursor-not-allowed";
 
 const variants: Record<Variant, string> = {
   primary:
@@ -18,7 +19,7 @@ const variants: Record<Variant, string> = {
   glass:
     "border-white/10 bg-white/[0.05] text-ink-soft hover:bg-white/[0.1]",
   ghost: "border-transparent bg-transparent text-ink-dim hover:bg-white/[0.06]",
-  white: "border-transparent bg-white text-[#12121a] font-bold hover:-translate-y-0.5",
+  white: "border-transparent bg-white text-[#12121a] font-bold hover:brightness-95",
   success:
     "border-[rgba(16,185,129,.3)] bg-[rgba(16,185,129,.16)] text-[#6ee7b7] hover:bg-[rgba(16,185,129,.24)]",
   danger:
@@ -31,10 +32,36 @@ const sizes: Record<Size, string> = {
   lg: "h-11 px-5 text-[14px]",
 };
 
-/** Shared button matching the design's button family. */
+/** Shared button matching the design's button family, with a subtle magnetic
+ * lean toward the cursor on hover (springs back on leave). */
 export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
-  { variant = "glass", size = "md", className, ...rest },
+  { variant = "glass", size = "md", className, onMouseMove, onMouseLeave, ...rest },
   ref,
 ) {
-  return <button ref={ref} className={cn(base, variants[variant], sizes[size], className)} {...rest} />;
+  const mag = useMagnetic<HTMLButtonElement>();
+
+  const setRef = (node: HTMLButtonElement | null) => {
+    mag.ref.current = node;
+    if (typeof ref === "function") ref(node);
+    else if (ref) ref.current = node;
+  };
+
+  const handleMove = (e: MouseEvent<HTMLButtonElement>) => {
+    mag.onMouseMove(e);
+    onMouseMove?.(e);
+  };
+  const handleLeave = (e: MouseEvent<HTMLButtonElement>) => {
+    mag.onMouseLeave();
+    onMouseLeave?.(e);
+  };
+
+  return (
+    <button
+      ref={setRef}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+      className={cn(base, variants[variant], sizes[size], className)}
+      {...rest}
+    />
+  );
 });

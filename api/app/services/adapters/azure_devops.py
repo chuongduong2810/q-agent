@@ -203,6 +203,31 @@ class AzureDevOpsAdapter(ProviderAdapter):
         walk(root)
         return sprints
 
+    def list_repos(self) -> list[dict[str, Any]]:
+        """List the Git repositories in the configured ADO project."""
+        project = self.project
+        if not project:
+            raise ProviderError("Azure DevOps project is not configured")
+        with self._client() as client:
+            resp = client.get(
+                f"/{quote(project)}/_apis/git/repositories",
+                params={"api-version": API_VERSION},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        repos: list[dict[str, Any]] = []
+        for r in data.get("value", []):
+            default_branch = (r.get("defaultBranch") or "").removeprefix("refs/heads/")
+            repos.append(
+                {
+                    "name": r.get("name", ""),
+                    "clone_url": r.get("remoteUrl", ""),
+                    "web_url": r.get("webUrl", "") or r.get("remoteUrl", ""),
+                    "default_branch": default_branch,
+                }
+            )
+        return repos
+
     def list_work_item_metadata(self) -> dict[str, Any]:
         """Area paths (classification nodes), work item types + their states."""
         project = self.project

@@ -87,6 +87,15 @@ class ProviderAdapter(ABC):
         """
         return {"area_paths": [], "work_item_types": [], "states": []}
 
+    def list_repos(self) -> list[dict[str, Any]]:
+        """Return the git repositories in the configured project/org.
+
+        Each entry: ``{name, clone_url, default_branch, web_url}``. Used by the
+        Project Details page to let a user pick which repos a project owns (an
+        ADO/GitHub project can hold many). Default: none.
+        """
+        return []
+
     # -- Write ------------------------------------------------------------
     @abstractmethod
     def publish_comment(

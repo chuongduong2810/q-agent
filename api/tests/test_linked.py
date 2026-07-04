@@ -76,6 +76,34 @@ def test_create_and_link_creates_linked_cases(client, db_session, seed_ticket, m
     assert linked[0]["ticketExternalId"] == seed_ticket.external_id
 
 
+def test_dry_run_records_locally_without_touching_provider(client, db_session, seed_ticket, monkeypatch):
+    run = _seed_run_with_approved_case(db_session, seed_ticket)
+
+    # Any adapter use in dry-run mode is a bug — fail loudly if it's called.
+    def _boom(*a, **k):  # pragma: no cover - asserts non-invocation
+        raise AssertionError("provider adapter must not be called in dry-run mode")
+
+    monkeypatch.setattr(link_service, "get_adapter", _boom)
+
+    resp = client.post(f"/runs/{run.id}/testcases/create-link", json={"link": True, "dryRun": True})
+    assert resp.status_code == 200
+
+    for _ in range(50):
+        if not link_service.is_running(run.id):
+            break
+        time.sleep(0.05)
+
+    status = client.get(f"/runs/{run.id}/linked").json()
+    assert status["status"] == "done"
+    result = status["results"][0]
+    assert result["local"] is True
+    assert result["linked"] is False
+    assert result["created"] is True
+
+    linked = client.get(f"/tickets/{seed_ticket.external_id}/linked-cases").json()
+    assert linked[0]["externalId"].startswith("LOCAL-")
+
+
 def test_create_and_link_requires_approved(client, db_session, seed_ticket):
     run = Run(code="RUN-901", name="Empty", scope="selected", scope_label="Selected", status="review")
     db_session.add(run)

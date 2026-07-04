@@ -15,11 +15,16 @@ continuously active across the whole pipeline.
 ## Pipeline
 
 `Sync Tickets → Select → Create Run → Analyze (AI) → Generate Test Cases → Review
-→ Generate Playwright → Execute → Collect Evidence → Report → Prepare Comments →
-Publish`
+→ Create & Link (or local) → Generate Playwright → Execute → Collect Evidence →
+Report → Prepare Comments → Publish`
 
 The pipeline is visualized on every run-scoped screen and drives the `Run.status`
 state machine on the backend.
+
+Before running, each **project** is set up once: connect a provider, add the
+project's **repositories**, configure its base URL / test accounts on **Project
+Details**, and build a **Project Knowledge Base per repository** (`project-bootstrap`)
+that every downstream AI action reuses.
 
 ## Architecture
 
@@ -76,12 +81,27 @@ Credentials are **encrypted at rest** (Fernet key derived from `QAGENT_SECRET_KE
 in `api/.env` — change it before real use) and are never returned in plaintext.
 Use **Test connection** to verify, then **Sync** on the Tickets page.
 
-Each AI action is driven by a **dedicated skill** in `skills/` (e.g.
+### Per-project setup
+
+On **Project Details** (per project):
+
+- **Settings** — add the project's **repositories** (auto-discover from Azure
+  DevOps / GitHub, or add manually), pick the **default** repo automation targets,
+  and set the base URL, per-environment URLs, and **test accounts** (passwords
+  encrypted at rest, masked in the UI). A local repo path or remote clone URL lets
+  `project-bootstrap` traverse the real source; remote repos are cloned/pulled into
+  `api/workspace/repos/<project>/<repo>` (private repos use the provider PAT).
+- **Project Knowledge** — build a **knowledge base per repository**. Each
+  `knowledge.md` + `knowledge.json` (under `api/workspace/knowledge/<project>/<repo>/`)
+  captures stack, routes, real selectors, auth flow and reusable assets so generated
+  Playwright specs run with little to no manual editing.
+
+Each AI action is driven by a **dedicated skill** in `skills/` (`project-bootstrap`,
 `requirement-analyst`, `test-case-generator`, `automation-generator`,
 `execution-analyzer`, `ticket-comment-generator`) — the backend injects the
-skill's `SKILL.md` as the Claude system prompt for that action (see
-`docs/CONTEXT.md` → *Dedicated AI skills*; override the location with
-`QAGENT_SKILLS_DIR`).
+skill's `SKILL.md` as the Claude system prompt for that action, and downstream
+skills consume the Project Knowledge Base + Project Config (see `docs/CONTEXT.md`
+→ *Dedicated AI skills*; override the skills location with `QAGENT_SKILLS_DIR`).
 
 The Claude CLI must be authenticated (`claude login`) for AI analysis, test-case
 generation, spec generation, and comment summaries. Playwright must have browsers
@@ -92,7 +112,7 @@ installed (`npx playwright install`) for execution.
 ```bash
 # Backend
 cd api && uv run uvicorn app.main:app --reload --port 8787
-cd api && uv run pytest -q          # 78 tests
+cd api && uv run pytest -q          # 113 tests
 
 # Frontend
 cd app && npm run dev
@@ -102,8 +122,9 @@ cd app && npm run build
 
 ## Verification status
 
-Verified in this build: backend imports/boots, **78 backend unit tests pass**
+Verified in this build: backend imports/boots, **113 backend unit tests pass**
 (provider adapters via mocked HTTP, AI/automation/execution via mocked engines,
+project config + encrypted test accounts, repo resolution, per-repo knowledge,
 Pillow annotation, publish flows), frontend type-checks and production-builds, and
 the UI renders faithfully to the approved design.
 

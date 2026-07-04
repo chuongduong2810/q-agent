@@ -23,6 +23,7 @@ import { Execution } from "@/screens/Execution";
 import { Evidence } from "@/screens/Evidence";
 import { CommentPublish } from "@/screens/CommentPublish";
 import { Reports } from "@/screens/Reports";
+import { AuditLog } from "@/screens/AuditLog";
 import { Settings } from "@/screens/Settings";
 import { CommandPalette } from "@/screens/CommandPalette";
 import { CreateRunModal } from "@/screens/CreateRunModal";
@@ -42,6 +43,7 @@ const SCREENS: Record<Screen, ComponentType> = {
   evidence: Evidence,
   comment: CommentPublish,
   reports: Reports,
+  audit: AuditLog,
   settings: Settings,
 };
 

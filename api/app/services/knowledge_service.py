@@ -1,53 +1,126 @@
 """Project Knowledge Base build — invokes Claude via the project-bootstrap skill.
 
-Given a project's identity (name, provider, repo, framework) Claude produces a
-structured knowledge base (stack, architecture, domain, locator strategy, and
-counts of existing Playwright assets) that downstream AI actions reuse. Real
-Claude only (ADR 0001); errors propagate to the caller.
+Given a project's identity (name, provider, repo, framework) and its user-authored
+config (base URL, local repo clone path, environments, test-account roles) Claude
+produces a structured knowledge base: stack, architecture, domain, locator
+strategy, **base URL, application routes, real selector/testid examples, auth flow,
+environments, business entities**, and counts of existing Playwright assets.
+
+When a local repo clone path is configured, the Claude CLI runs there so its file
+tools traverse the real source — turning inferred structure into discovered fact
+and eliminating placeholders downstream. Real Claude only (ADR 0001); errors
+propagate to the caller.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
-from typing import Any
+import threading
+from typing import TYPE_CHECKING, Any
 
+from app import db as db_module
 from app.config import settings
 from app.db import utcnow
-from app.models.knowledge import ProjectKnowledge
+from app.logging import logger
+from app.models.knowledge import ProjectKnowledge, compose_key
+from app.services import audit_service, project_config_service, repo_service
 from app.services.claude_cli import run_json
 from app.services.skills import PROJECT_BOOTSTRAP
 
+if TYPE_CHECKING:
+    from app.models.project_config import ProjectConfig
 
-def _build_prompt(name: str, provider: str, repo: str, framework: str) -> str:
+# Row keys with a build currently in flight — guards against double-triggering a
+# (potentially minutes-long) bootstrap while one is already running in-process.
+_building: set[str] = set()
+
+
+def is_building(row_key: str) -> bool:
+    return row_key in _building
+
+
+def _config_hints(config: "ProjectConfig | None") -> str:
+    """Render the user-authored config as grounding facts for the build prompt."""
+    if config is None:
+        return "No project configuration has been provided yet.\n"
+    lines: list[str] = []
+    if config.base_url:
+        lines.append(f"- Application base URL: {config.base_url}")
+    if config.local_repo_path:
+        lines.append(
+            f"- A local checkout of the application source is available at: "
+            f"{config.local_repo_path}. Traverse it with your file tools to discover "
+            f"real routes, data-testids/selectors, page objects, fixtures and the auth flow."
+        )
+    for env in config.environments or []:
+        name = env.get("name", "")
+        url = env.get("base_url", "")
+        if name or url:
+            lines.append(f"- Environment '{name}': {url}")
+    roles = [a.get("role", "") for a in (config.test_accounts or []) if a.get("role")]
+    if roles:
+        lines.append(f"- Configured test-account roles: {', '.join(roles)}")
+    return "\n".join(lines) + "\n" if lines else "No project configuration has been provided yet.\n"
+
+
+def _build_prompt(name: str, provider: str, repo: str, framework: str, config) -> str:
     return (
         "Build a Project Knowledge Base for this software project so a QA "
-        "automation agent understands it before writing tests.\n\n"
+        "automation agent can generate runnable Playwright tests with NO manual "
+        "placeholders. Discover concrete, reusable facts.\n\n"
         f"Project name: {name}\n"
         f"Provider: {provider or 'unknown'}\n"
         f"Repository: {repo or 'unknown'}\n"
         f"Automation framework: {framework or 'Playwright'}\n\n"
+        "Known project configuration (treat as authoritative):\n"
+        f"{_config_hints(config)}\n"
         "Return a JSON object with EXACTLY these keys:\n"
         '{"branch": string, "stack": string[], "architecture": string, '
-        '"domain": string, "locator": string, "assets": number, '
-        '"pageObjects": number, "fixtures": number, "utilities": string[], '
-        '"confidence": number (0-100)}\n'
-        "- architecture: 1-2 sentences on the app's architecture.\n"
-        "- domain: 1 sentence on the business domain.\n"
-        "- locator: the recommended Playwright locator strategy.\n"
-        "- assets/pageObjects/fixtures: best-estimate counts of existing Playwright assets.\n"
-        "- confidence: how confident this knowledge base is (0-100)."
+        '"domain": string, "locator": string, "base_url": string, '
+        '"routes": [{"path": string, "description": string, "auth_required": boolean}], '
+        '"selectors": [{"screen": string, "element": string, "selector": string}], '
+        '"auth": {"login_flow": string, "login_url": string, "storage_state": string}, '
+        '"environments": [{"name": string, "base_url": string, "notes": string}], '
+        '"business_entities": string[], "assets": number, "pageObjects": number, '
+        '"page_object_names": string[], "fixtures": number, "fixture_names": string[], '
+        '"utilities": string[], "confidence": number (0-100)}\n'
+        "- base_url: the primary application URL (use the configured one if given).\n"
+        "- routes: real application routes/URL patterns a test would navigate to.\n"
+        "- selectors: real, stable selectors (prefer data-testid / role) found in the code.\n"
+        "- auth: how a test logs in — flow summary, the login URL, and any storageState path.\n"
+        "- architecture/domain: 1-2 sentences each.\n"
+        "- assets/pageObjects/fixtures: best-estimate COUNTS of existing Playwright assets.\n"
+        "- page_object_names/fixture_names: the actual names of reusable assets to reuse.\n"
+        "- confidence: how confident this knowledge base is (0-100). Lower it for anything guessed."
     )
 
 
-def build_knowledge_payload(name: str, provider: str, repo: str, framework: str) -> dict[str, Any]:
-    """Call Claude (project-bootstrap skill) and normalize the JSON result."""
+def build_knowledge_payload(
+    name: str,
+    provider: str,
+    repo: str,
+    framework: str,
+    *,
+    config: "ProjectConfig | None" = None,
+    repo_path: str | None = None,
+    timeout: int | None = None,
+) -> dict[str, Any]:
+    """Call Claude (project-bootstrap skill) and normalize the JSON result.
+
+    When ``repo_path`` points at an existing checkout (a configured local path or a
+    freshly cloned/pulled remote), the CLI runs there so Claude reads the real
+    source instead of inferring it. Falls back to ``config.local_repo_path``.
+    ``timeout`` defaults to the (longer) bootstrap budget.
+    """
+    cwd = repo_path or (config.local_repo_path if (config and config.local_repo_path) else None)
     raw = run_json(
-        _build_prompt(name, provider, repo, framework),
+        _build_prompt(name, provider, repo, framework, config),
         skill=PROJECT_BOOTSTRAP,
         include_template=True,
         label=f"Build knowledge: {name}",
+        cwd=cwd,
+        timeout=timeout or settings.claude_bootstrap_timeout_s,
     )
     data = raw if isinstance(raw, dict) else {}
     confidence = int(data.get("confidence", 80) or 0)
@@ -58,9 +131,17 @@ def build_knowledge_payload(name: str, provider: str, repo: str, framework: str)
         "architecture": data.get("architecture", ""),
         "domain": data.get("domain", ""),
         "locator": data.get("locator", ""),
+        "base_url": data.get("base_url", ""),
+        "routes": data.get("routes", []) or [],
+        "selectors": data.get("selectors", []) or [],
+        "auth": data.get("auth", {}) or {},
+        "environments": data.get("environments", []) or [],
+        "business_entities": data.get("business_entities", []) or [],
         "assets": int(data.get("assets", 0) or 0),
         "pageObjects": int(data.get("pageObjects", 0) or 0),
+        "page_object_names": data.get("page_object_names", []) or [],
         "fixtures": int(data.get("fixtures", 0) or 0),
+        "fixture_names": data.get("fixture_names", []) or [],
         "utilities": data.get("utilities", []) or [],
     }
     return {"knowledge": knowledge, "confidence": confidence}
@@ -70,16 +151,36 @@ def _slug(key: str) -> str:
     return re.sub(r"[^a-zA-Z0-9._-]+", "-", key).strip("-") or "project"
 
 
-def write_knowledge_files(row: ProjectKnowledge) -> str:
+def write_knowledge_files(row: ProjectKnowledge, config: "ProjectConfig | None" = None) -> str:
     """Emit the skill's knowledge.json + knowledge.md artifacts under workspace/knowledge/<key>/.
 
     project-bootstrap's contract is to persist the Project Knowledge Base as files
     (knowledge.md + knowledge.json) that downstream skills read; we mirror the DB
-    row into those files. Returns the directory path.
+    row into those files and merge the user-authored config (base URL, environments,
+    test-account roles) so the artifacts are a single, consistent project context.
+    Test-account passwords are NEVER written to these on-disk artifacts. Returns the
+    directory path.
     """
     kn = row.knowledge or {}
-    out_dir = settings.knowledge_dir / _slug(row.key)
+    # Per-repo artifacts nest under the project: knowledge/<project>/<repo>/.
+    project_slug = _slug(row.project_key or row.key)
+    out_dir = settings.knowledge_dir / project_slug
+    if row.repo:
+        out_dir = out_dir / _slug(row.repo)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    base_url = (config.base_url if config and config.base_url else "") or kn.get("base_url", "")
+    environments = (config.environments if config and config.environments else None) or kn.get(
+        "environments", []
+    )
+    test_account_roles = (
+        [
+            {"role": a.get("role", ""), "username": a.get("username", ""), "notes": a.get("notes", "")}
+            for a in (config.test_accounts or [])
+        ]
+        if config
+        else []
+    )
 
     # knowledge.json — shaped after skills/project-bootstrap/templates/knowledge.json.
     doc = {
@@ -93,11 +194,20 @@ def write_knowledge_files(row: ProjectKnowledge) -> str:
         "stack": kn.get("stack", []),
         "architecture": kn.get("architecture", ""),
         "business_domain": kn.get("domain", ""),
+        "business_entities": kn.get("business_entities", []),
+        "base_url": base_url,
         "locator_strategy": kn.get("locator", ""),
+        "routes": kn.get("routes", []),
+        "selectors": kn.get("selectors", []),
+        "auth": kn.get("auth", {}),
+        "environments": environments,
+        "test_accounts": test_account_roles,  # roles/usernames only — no secrets
         "existing_assets": {
             "spec_files": kn.get("assets", 0),
             "page_objects": kn.get("pageObjects", 0),
+            "page_object_names": kn.get("page_object_names", []),
             "fixtures": kn.get("fixtures", 0),
+            "fixture_names": kn.get("fixture_names", []),
         },
         "reusable_utilities": kn.get("utilities", []),
         "confidence": row.confidence,
@@ -108,11 +218,43 @@ def write_knowledge_files(row: ProjectKnowledge) -> str:
 
     utilities = "\n".join(f"- `{u}`" for u in kn.get("utilities", [])) or "- _none discovered_"
     stack = ", ".join(kn.get("stack", [])) or "—"
+    routes_md = (
+        "\n".join(
+            f"- `{r.get('path', '')}` — {r.get('description', '')}"
+            f"{' (auth required)' if r.get('auth_required') else ''}"
+            for r in kn.get("routes", [])
+        )
+        or "- _none discovered_"
+    )
+    selectors_md = (
+        "\n".join(
+            f"- {s.get('screen', '')}: {s.get('element', '')} → `{s.get('selector', '')}`"
+            for s in kn.get("selectors", [])
+        )
+        or "- _none discovered_"
+    )
+    envs_md = (
+        "\n".join(
+            f"- **{e.get('name', '')}**: {e.get('base_url', '')} {e.get('notes', '')}".rstrip()
+            for e in environments
+        )
+        or "- _none configured_"
+    )
+    accounts_md = (
+        "\n".join(
+            f"- **{a['role'] or 'account'}**: `{a['username']}` "
+            f"(password stored securely in Q-Agent) {a['notes']}".rstrip()
+            for a in test_account_roles
+        )
+        or "- _none configured_"
+    )
+    auth = kn.get("auth", {})
     md = f"""# Project Knowledge Base — {row.name}
 
 - **Repository:** {row.repo or "—"}
 - **Branch:** {kn.get("branch", "main")}
 - **Automation framework:** {row.framework}
+- **Base URL:** {base_url or "—"}
 - **Confidence:** {row.confidence}%  ·  **Version:** {row.version}
 
 ## Technology stack
@@ -124,31 +266,56 @@ def write_knowledge_files(row: ProjectKnowledge) -> str:
 ## Business domain
 {kn.get("domain", "—")}
 
+## Business entities
+{", ".join(kn.get("business_entities", [])) or "—"}
+
 ## Locator strategy
 {kn.get("locator", "—")}
 
+## Application routes
+{routes_md}
+
+## Known selectors
+{selectors_md}
+
+## Authentication
+- **Login flow:** {auth.get("login_flow", "—")}
+- **Login URL:** {auth.get("login_url", "—")}
+- **storageState:** {auth.get("storage_state", "—")}
+
+## Environments
+{envs_md}
+
+## Test accounts
+{accounts_md}
+
 ## Existing Playwright assets
 - Spec files: {kn.get("assets", 0)}
-- Page objects: {kn.get("pageObjects", 0)}
-- Shared fixtures: {kn.get("fixtures", 0)}
+- Page objects: {kn.get("pageObjects", 0)} {", ".join(kn.get("page_object_names", []))}
+- Shared fixtures: {kn.get("fixtures", 0)} {", ".join(kn.get("fixture_names", []))}
 
 ## Reusable test utilities
 {utilities}
 
 ## AI Context Summary
-{row.name} ({stack}). {kn.get("architecture", "")} Domain: {kn.get("domain", "")}
-Prefer existing patterns and the locator strategy above; reuse the listed utilities.
+{row.name} ({stack}) at base URL {base_url or "(unset)"}. {kn.get("architecture", "")}
+Domain: {kn.get("domain", "")} Prefer the locator strategy above and the listed routes,
+selectors, auth flow and reusable assets. Test-account credentials are supplied to the
+automation generator from Q-Agent's secure store — reference them by role.
 """
     (out_dir / "knowledge.md").write_text(md, encoding="utf-8")
     return str(out_dir)
 
 
-def apply_build(row: ProjectKnowledge, payload: dict[str, Any]) -> None:
+def apply_build(
+    row: ProjectKnowledge, payload: dict[str, Any], *, config: "ProjectConfig | None" = None
+) -> None:
     """Persist a build result onto a ProjectKnowledge row (caller commits).
 
     First index stays ``v1``; each subsequent (re)build increments the version.
     """
-    rebuild = row.status == "indexed"
+    # Detect a rebuild by prior success (the status is transiently "indexing" here).
+    rebuild = row.last_indexed is not None
     if rebuild:
         try:
             n = int((row.version or "v1").lstrip("v") or "1")
@@ -162,5 +329,63 @@ def apply_build(row: ProjectKnowledge, payload: dict[str, Any]) -> None:
     row.status = "indexed"
     row.needs_refresh = False
     row.last_indexed = utcnow()
+    row.last_error = ""
     # Persist the skill's knowledge.md + knowledge.json artifacts to the workspace.
-    row.doc_path = write_knowledge_files(row)
+    row.doc_path = write_knowledge_files(row, config)
+
+
+def _resolve_path_for_row(db, row: ProjectKnowledge, config) -> str | None:
+    """Resolve the checkout to traverse for a knowledge row (per-repo, else legacy)."""
+    project_key = row.project_key or row.key
+    repos = project_config_service.get_repos(config)
+    repo_entry = next((r for r in repos if r.get("name") == row.repo), None) if row.repo else None
+    if repo_entry is not None:
+        return repo_service.resolve_one_repo(db, project_key, repo_entry, provider_display=row.provider)
+    return repo_service.resolve_repo_path(
+        db, project_key, config, provider_display=row.provider, repo=row.repo
+    )
+
+
+def start_build(row_key: str) -> None:
+    """Kick off a background knowledge build for a row (no-op if already running).
+
+    The row must already exist with ``status='indexing'`` (set by the caller in the
+    request transaction). The build — repo clone/pull + Claude traversal — can take
+    minutes, so it runs off the request thread; the UI polls the row's status.
+    """
+    if row_key in _building:
+        return
+    _building.add(row_key)
+    threading.Thread(target=_run_build, args=(row_key,), daemon=True).start()
+
+
+def _run_build(row_key: str) -> None:
+    db = db_module.SessionLocal()
+    try:
+        row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == row_key).first()
+        if row is None:
+            return
+        project_key = row.project_key or row.key
+        config = project_config_service.get_config(db, project_key)
+        try:
+            repo_path = _resolve_path_for_row(db, row, config)
+            payload = build_knowledge_payload(
+                row.name, row.provider, row.repo, row.framework, config=config, repo_path=repo_path
+            )
+            apply_build(row, payload, config=config)
+            db.commit()
+            audit_service.record(
+                category="knowledge", actor_type="ai", action="Built project knowledge base",
+                target=f"{row.name} · {row.version}", meta=f"{row.confidence}% confidence",
+            )
+        except Exception as exc:  # noqa: BLE001 - surface on the row, don't crash the thread
+            db.rollback()
+            row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == row_key).first()
+            if row is not None:
+                row.status = "error"
+                row.last_error = str(exc)[:1000]
+                db.commit()
+            logger.error("Knowledge build failed for {}: {}", row_key, exc)
+    finally:
+        _building.discard(row_key)
+        db.close()

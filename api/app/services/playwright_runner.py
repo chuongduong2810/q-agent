@@ -24,9 +24,13 @@ keeps the specs, config, and captured artifacts self-contained per run.
 
 from __future__ import annotations
 
+import difflib
 import json
+import os
 import subprocess
+import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +38,16 @@ from app import db as db_module
 from app.config import settings
 from app.logging import logger
 from app.models.execution import Evidence, Execution, ExecutionResult
-from app.models.run import Run
+from app.models.run import Run, RunTicket
+from app.models.ticket import Ticket
+from app.services import (
+    audit_service,
+    evidence_analysis,
+    project_config_service,
+    settings_store,
+    spec_service,
+)
+from app.services.claude_cli import ClaudeError
 from app.ws import hub
 
 _PLAYWRIGHT_CONFIG_TEMPLATE = """\
@@ -46,10 +59,11 @@ export default defineConfig({
   workers: __WORKERS__,
   reporter: [['json', { outputFile: 'report.json' }]],
   use: {
+    headless: __HEADLESS__,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     trace: 'retain-on-failure',
-  },
+__EXTRA_USE__  },
 });
 """
 
@@ -69,12 +83,246 @@ _ATTACHMENT_KIND_MAP = {
 }
 
 
-def _ensure_config(spec_dir: Path, workers: int) -> None:
-    """Write playwright.config.ts into the spec dir if one doesn't exist yet."""
-    config_path = spec_dir / "playwright.config.ts"
-    if not config_path.exists():
-        content = _PLAYWRIGHT_CONFIG_TEMPLATE.replace("__WORKERS__", str(workers))
-        config_path.write_text(content, encoding="utf-8")
+def _write_config(
+    spec_dir: Path,
+    workers: int,
+    headless: bool,
+    base_url: str = "",
+    storage_state: str = "",
+) -> None:
+    """(Re)write playwright.config.ts from current settings.
+
+    Rewritten on every run (not just when absent) so toggles like ``headless``
+    take effect on the next execution rather than being pinned to the first run.
+
+    Args:
+        spec_dir: The run's spec directory the config is written into.
+        workers: Parallel worker count.
+        headless: Whether the browser runs headless.
+        base_url: When non-empty, injected as ``use.baseURL`` so relative
+            ``page.goto('/path')`` calls resolve against the app.
+        storage_state: When non-empty, an absolute path injected as
+            ``use.storageState`` so tests start from a saved auth session.
+    """
+    extra_lines: list[str] = []
+    if base_url:
+        extra_lines.append(f"    baseURL: {json.dumps(base_url)},")
+    if storage_state:
+        extra_lines.append(f"    storageState: {json.dumps(storage_state)},")
+    extra_use = ("\n".join(extra_lines) + "\n") if extra_lines else ""
+    content = (
+        _PLAYWRIGHT_CONFIG_TEMPLATE.replace("__WORKERS__", str(workers))
+        .replace("__HEADLESS__", "true" if headless else "false")
+        .replace("__EXTRA_USE__", extra_use)
+    )
+    (spec_dir / "playwright.config.ts").write_text(content, encoding="utf-8")
+
+
+_CAPTURE_SCRIPT = Path(__file__).resolve().parent / "pw_scripts" / "capture_auth.cjs"
+
+
+_capture_lock = threading.Lock()
+_capture_cooldown_until = 0.0
+
+
+def capture_storage_state(base_url: str, dest: Path) -> bool:
+    """Open ONE login window at a time, with a back-off so it can never storm.
+
+    A global lock guarantees at most one headed capture browser is ever open, so a
+    caller (or the UI) firing capture repeatedly can't spawn browser-after-browser.
+    If a capture exits in under 5s without producing a session (i.e. the window
+    "flashed"), we refuse new captures for 20s so a crash/re-trigger loop can't
+    keep reopening the window — and the node error is logged for diagnosis.
+    """
+    global _capture_cooldown_until
+    if time.monotonic() < _capture_cooldown_until:
+        logger.warning("Auth capture on cooldown after a fast failure; skipping this trigger.")
+        return dest.exists() and dest.stat().st_size > 0
+    if not _capture_lock.acquire(blocking=False):
+        logger.warning("Auth capture already in progress; ignoring duplicate trigger.")
+        return dest.exists() and dest.stat().st_size > 0
+    started = time.monotonic()
+    try:
+        result = _capture_once(base_url, dest)
+    finally:
+        _capture_lock.release()
+    if not result and (time.monotonic() - started) < 5:
+        _capture_cooldown_until = time.monotonic() + 20
+        logger.warning(
+            "Auth capture window exited in <5s with no session — backing off 20s. "
+            "See the node log above for the cause."
+        )
+    return result
+
+
+def _capture_once(base_url: str, dest: Path) -> bool:
+    """Open a real (headed) browser at ``base_url`` for manual login, save session.
+
+    Primary path runs the Node capture script (``capture_auth.cjs``) which, unlike
+    Playwright's ``storageState``, ALSO snapshots ``sessionStorage`` (where MSAL/SPA
+    tokens live) into a sibling ``sessionStorage.json``. It periodically snapshots
+    both so nothing is lost when the tab closes. Falls back to the built-in
+    Playwright ``open/codegen --save-storage`` if the Node script fails to produce
+    a non-empty ``dest``.
+
+    Uses the same NODE_PATH-pointed env as :func:`_invoke_playwright`, headed
+    (NOT headless), bounded by ``settings.auth_capture_timeout_s``. Never raises:
+    logs and returns False on any error/timeout/non-completion.
+
+    Args:
+        base_url: The application URL to open for login.
+        dest: Absolute path the captured ``storageState.json`` is written to.
+
+    Returns:
+        True only when ``dest`` exists and is non-empty after the browser closes.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    nm = settings.playwright_node_modules
+    nm_str = str(nm)
+    env = os.environ.copy()
+    env["NODE_PATH"] = nm_str + (os.pathsep + env["NODE_PATH"] if env.get("NODE_PATH") else "")
+
+    session_dest = dest.parent / "sessionStorage.json"
+    node_cmd = ["node", str(_CAPTURE_SCRIPT), base_url, str(dest), str(session_dest)]
+    # ONE headed browser only — never chain a second interactive capture, which
+    # would pop browser-after-browser. The Node script is the sole method (it also
+    # snapshots sessionStorage, which the built-in `open --save-storage` cannot).
+    try:
+        logger.info("Playwright auth capture (node): {}", " ".join(node_cmd))
+        proc = subprocess.run(  # noqa: S603
+            node_cmd,
+            cwd=nm_str,
+            capture_output=True,
+            text=True,
+            timeout=settings.auth_capture_timeout_s,
+            env=env,
+        )
+        if proc.returncode != 0:
+            logger.warning(
+                "Auth capture node exited {}: {}",
+                proc.returncode,
+                (proc.stderr or proc.stdout or "").strip()[:800],
+            )
+    except subprocess.TimeoutExpired:
+        logger.warning("Playwright auth capture timed out after {}s", settings.auth_capture_timeout_s)
+        return False
+    except FileNotFoundError:
+        logger.warning("Auth capture failed: 'node' not found on PATH")
+        return False
+    except Exception as exc:  # noqa: BLE001 - capture must never raise into the run
+        logger.warning("Playwright auth capture (node) failed: {}", exc)
+        return False
+
+    ok = dest.exists() and dest.stat().st_size > 0
+    if not ok:
+        logger.warning("Auth capture produced no storageState at {} — check the node log above", dest)
+    return ok
+
+
+def _auth_fixtures_ts(session_file: Path) -> str:
+    """TypeScript for a generated ``fixtures.ts`` that replays sessionStorage.
+
+    The fixture extends the base Playwright ``test`` with a ``context`` that adds an
+    init script restoring the captured ``sessionStorage`` entries for the current
+    origin before any app code runs — so MSAL/SPA tokens are present on load and the
+    restored session doesn't bounce back to the login page.
+
+    Args:
+        session_file: Absolute path to the ``sessionStorage.json`` snapshot; embedded
+            as a JSON-encoded string literal so the fixture reads it at runtime.
+
+    Returns:
+        The fixtures module source.
+    """
+    return (
+        "import { test as base, expect } from '@playwright/test';\n"
+        "import * as fs from 'fs';\n"
+        "\n"
+        f"const SESSION_FILE = {json.dumps(str(session_file))};\n"
+        "let SESSIONS: Record<string, Record<string, string>> = {};\n"
+        "try { SESSIONS = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8')); } catch {}\n"
+        "\n"
+        "export const test = base.extend({\n"
+        "  context: async ({ context }, use) => {\n"
+        "    await context.addInitScript((sessions: Record<string, Record<string, string>>) => {\n"
+        "      try {\n"
+        "        const entries = sessions[location.origin];\n"
+        "        if (entries) for (const k in entries) window.sessionStorage.setItem(k, entries[k]);\n"
+        "      } catch {}\n"
+        "    }, SESSIONS);\n"
+        "    await use(context);\n"
+        "  },\n"
+        "});\n"
+        "\n"
+        "export { expect };\n"
+        "export type * from '@playwright/test';\n"
+    )
+
+
+def _apply_auth_fixtures(spec_dir: Path, session_file: Path, enabled: bool) -> None:
+    """Rewrite spec imports to use (or stop using) the sessionStorage fixture.
+
+    Deterministically normalizes each ``*.spec.ts`` file's Playwright import module
+    specifier: when ``enabled`` it points at ``'./fixtures'`` (and writes the
+    generated ``fixtures.ts``); when not enabled it points back at
+    ``'@playwright/test'`` so a spec left rewritten by a prior auth run is restored
+    for a normal run. Only the module specifier is touched.
+
+    Args:
+        spec_dir: The run's spec directory containing ``*.spec.ts`` files.
+        session_file: Absolute path to the ``sessionStorage.json`` snapshot embedded
+            in the generated ``fixtures.ts``.
+        enabled: Whether sessionStorage replay is active for this run.
+    """
+    if enabled:
+        replacements = (("'@playwright/test'", "'./fixtures'"), ('"@playwright/test"', '"./fixtures"'))
+    else:
+        replacements = (("'./fixtures'", "'@playwright/test'"), ('"./fixtures"', '"@playwright/test"'))
+    for spec in spec_dir.glob("*.spec.ts"):
+        text = spec.read_text(encoding="utf-8")
+        new_text = text
+        for old, new in replacements:
+            new_text = new_text.replace(old, new)
+        if new_text != text:
+            spec.write_text(new_text, encoding="utf-8")
+    if enabled:
+        (spec_dir / "fixtures.ts").write_text(_auth_fixtures_ts(session_file), encoding="utf-8")
+
+
+# --------------------------------------------------------- standalone auth capture
+# Project keys with an in-flight headed-browser capture, so the API can report
+# ``capturing`` and refuse to open a second browser for the same project.
+_capturing: set[str] = set()
+
+
+def is_capturing(project_key: str) -> bool:
+    """Return True while a standalone login capture is running for ``project_key``."""
+    return project_key in _capturing
+
+
+def start_capture(project_key: str, base_url: str) -> None:
+    """Kick off a background headed-browser login capture for a project.
+
+    Guards on :data:`_capturing` so at most one browser is open per project. When
+    no capture is already in flight, marks the key as capturing and spawns a
+    daemon thread that runs :func:`capture_storage_state` against the project's
+    :func:`project_config_service.auth_path`, always discarding the key when done.
+
+    Args:
+        project_key: The project whose session is being captured.
+        base_url: The application URL to open for manual login.
+    """
+    if project_key in _capturing:
+        return
+    _capturing.add(project_key)
+
+    def _worker() -> None:
+        try:
+            capture_storage_state(base_url, project_config_service.auth_path(project_key))
+        finally:
+            _capturing.discard(project_key)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def parse_playwright_report(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -137,17 +385,47 @@ def parse_playwright_report(report: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def _invoke_playwright(spec_dir: Path, workers: int, timeout_s: int) -> tuple[int, str, str]:
-    """Run `npx playwright test` in spec_dir. Returns (returncode, stdout, stderr)."""
-    cmd = [settings.playwright_bin, "playwright", "test", f"--workers={workers}"]
-    logger.info("Playwright: {} (cwd={})", " ".join(cmd), spec_dir)
+def _playwright_command(workers: int) -> list[str]:
+    """Command to run Playwright, preferring the installed binary in the configured
+    node_modules (its browsers are installed) over a fresh `npx` fetch.
+    """
+    nm = settings.playwright_node_modules
+    for candidate in (nm / ".bin" / "playwright.cmd", nm / ".bin" / "playwright"):
+        if candidate.exists():
+            return [str(candidate), "test", f"--workers={workers}"]
+    return [settings.playwright_bin, "playwright", "test", f"--workers={workers}"]
+
+
+def _invoke_playwright(
+    spec_dir: Path, workers: int, timeout_s: int, spec_file: str = ""
+) -> tuple[int, str, str]:
+    """Run Playwright in spec_dir. Returns (returncode, stdout, stderr).
+
+    The spec dir has no node_modules, so we point NODE_PATH at the configured
+    install; that's how the specs' and config's `@playwright/test` imports resolve.
+
+    Args:
+        spec_file: When non-empty, only this spec file (relative to spec_dir) is
+            run — used by the self-heal loop to re-run a single case. Empty runs
+            the whole suite.
+    """
+    cmd = _playwright_command(workers)
+    if spec_file:
+        # Insert the target file right after the `test` subcommand.
+        insert_at = cmd.index("test") + 1
+        cmd.insert(insert_at, spec_file)
+    nm = str(settings.playwright_node_modules)
+    env = os.environ.copy()
+    env["NODE_PATH"] = nm + (os.pathsep + env["NODE_PATH"] if env.get("NODE_PATH") else "")
+    logger.info("Playwright: {} (cwd={}, NODE_PATH={})", " ".join(cmd), spec_dir, nm)
     proc = subprocess.run(  # noqa: S603
         cmd,
         cwd=str(spec_dir),
         capture_output=True,
         text=True,
         timeout=timeout_s,
-        shell=True,  # noqa: S602 - npx.cmd resolution on Windows
+        shell=True,  # noqa: S602 - .cmd resolution on Windows
+        env=env,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -191,6 +469,84 @@ def _store_evidence(db, run: Run, result: ExecutionResult, attachments: list[dic
         db.add(evidence)
 
 
+def _resolve_project_for_run(db, run: Run, env: str) -> tuple[str | None, str, bool, str]:
+    """Resolve a run's project identity and manual-auth settings.
+
+    Walks the run's first ticket to its provider, resolves the project key, and
+    reads that project's config. Returns ``(project_key, base_url, manual_auth,
+    provider_kind)`` where base_url respects the execution ``env``. All fields are
+    best-effort — a missing project yields ``(None, "", False, "")``.
+    """
+    run_ticket = (
+        db.query(RunTicket)
+        .filter(RunTicket.run_id == run.id)
+        .order_by(RunTicket.position, RunTicket.id)
+        .first()
+    )
+    if run_ticket is None:
+        return None, "", False, ""
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.external_id == run_ticket.ticket_external_id)
+        .first()
+    )
+    provider_kind = ticket.provider_kind if ticket else ""
+    if not provider_kind:
+        return None, "", False, ""
+    project_key = project_config_service.resolve_project_key(db, provider_kind)
+    base_url = project_config_service.base_url_for(db, provider_kind, env=env)
+    manual_auth = False
+    if project_key:
+        cfg = project_config_service.get_config(db, project_key)
+        manual_auth = bool(cfg.manual_auth) if cfg else False
+    return project_key, base_url, manual_auth, provider_kind
+
+
+def _fail_all_results(
+    db, run: Run, execution: Execution, results: list[ExecutionResult], message: str
+) -> None:
+    """Mark every result failed with ``message`` and finalize the execution.
+
+    Used when a run cannot proceed (e.g. manual login was not completed) so the
+    UI shows a clear reason on every case without any specs being run.
+    """
+    from datetime import datetime, timezone
+
+    run_id_str = str(run.id)
+    for result in results:
+        result.status = "fail"
+        result.error_message = message
+        result.duration_ms = 0
+        db.commit()
+        hub.publish(
+            run_id_str,
+            "exec.case.result",
+            {
+                "ticket": result.ticket_external_id,
+                "caseCode": result.case_code,
+                "status": result.status,
+                "durationMs": result.duration_ms,
+            },
+        )
+    total = len(results)
+    execution.passed = 0
+    execution.failed = total
+    execution.total = total
+    execution.progress = 100
+    execution.status = "done"
+    execution.log = message
+    execution.finished_at = datetime.now(timezone.utc)
+    run.status = "evidence"
+    db.commit()
+    hub.publish(run_id_str, "exec.progress", {"progress": 100, "passed": 0, "failed": total, "remaining": 0})
+    hub.publish(run_id_str, "exec.done", {"passed": 0, "failed": total})
+    hub.publish(run_id_str, "run.status", {"status": run.status})
+    audit_service.record(
+        category="execution", actor_type="ai", action="Executed test run",
+        target=f"{run.code} · {total} cases", status="error", meta=message,
+    )
+
+
 def run_execution(execution_id: int) -> None:
     """Background worker: run Playwright for an Execution and record results.
 
@@ -232,13 +588,64 @@ def run_execution(execution_id: int) -> None:
 
         spec_dir = settings.specs_dir / run.code
         spec_dir.mkdir(parents=True, exist_ok=True)
-        _ensure_config(spec_dir, execution.workers)
+        headless = bool(settings_store.load_settings().get("headless", True))
+
+        # Resolve project auth: inject baseURL always (fixes relative goto), and
+        # when manual login is enabled ensure a saved storageState exists first —
+        # capturing one via a headed browser if needed, else failing cleanly.
+        project_key, base_url, manual_auth, _provider = _resolve_project_for_run(
+            db, run, execution.env
+        )
+        storage_state = ""
+        if manual_auth and project_key:
+            session_path = project_config_service.auth_path(project_key)
+            if session_path.exists() and session_path.stat().st_size > 0:
+                storage_state = str(session_path)
+            elif base_url:
+                hub.publish(run_id_str, "exec.auth.waiting", {"url": base_url})
+                captured = capture_storage_state(base_url, session_path)
+                if captured:
+                    storage_state = str(session_path)
+                    hub.publish(run_id_str, "exec.auth.captured", {})
+                else:
+                    message = "Manual login was not completed — enable/redo login capture"
+                    hub.publish(run_id_str, "exec.auth.error", {"message": message})
+                    _fail_all_results(db, run, execution, results, message)
+                    return
+            else:
+                message = "Set a base URL for the project first."
+                hub.publish(run_id_str, "exec.auth.error", {"message": message})
+                _fail_all_results(db, run, execution, results, message)
+                return
+
+        _write_config(spec_dir, execution.workers, headless, base_url, storage_state)
+
+        # Replay captured sessionStorage (MSAL/SPA tokens) via a generated
+        # fixtures.ts + spec import rewrite, but only when a manual-auth session
+        # (storageState + sessionStorage snapshot) actually exists. Non-auth runs
+        # normalize spec imports back to '@playwright/test' and write no fixtures.
+        session_file = project_config_service.session_path(project_key) if project_key else spec_dir / "sessionStorage.json"
+        use_fixtures = bool(manual_auth and storage_state and session_file.exists())
+        _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
+
+        # A single-result execution targets just that one spec (the "run this
+        # test" action); a multi-case run executes the whole suite.
+        single_spec = ""
+        if len(results) == 1:
+            r0 = results[0]
+            single_spec = f"{r0.ticket_external_id.rsplit('-', 1)[-1]}-{r0.case_code}.spec.ts"
 
         report: dict[str, Any] = {}
         run_error: str | None = None
+        proc_output = ""
         started = time.monotonic()
         try:
-            _invoke_playwright(spec_dir, execution.workers, settings.exec_timeout_s)
+            returncode, stdout, stderr = _invoke_playwright(
+                spec_dir, execution.workers, settings.exec_timeout_s, spec_file=single_spec
+            )
+            proc_output = "\n".join(p for p in (stdout, stderr) if p).strip()
+            if returncode != 0:
+                logger.warning("Playwright exited {}: {}", returncode, proc_output[:1000])
         except FileNotFoundError as exc:
             run_error = f"Playwright binary not found ('{settings.playwright_bin}'): {exc}"
         except subprocess.TimeoutExpired:
@@ -254,7 +661,9 @@ def run_execution(execution_id: int) -> None:
                 except json.JSONDecodeError as exc:
                     run_error = f"Could not parse Playwright report: {exc}"
             else:
-                run_error = "Playwright produced no report.json"
+                # No report → surface the real Playwright error, not just a generic message.
+                detail = f" — {proc_output[:600]}" if proc_output else ""
+                run_error = f"Playwright produced no report.json{detail}"
 
         parsed = parse_playwright_report(report) if report else []
 
@@ -316,6 +725,21 @@ def run_execution(execution_id: int) -> None:
                 },
             )
 
+        # Auto-analyze + annotate failure screenshots so the Evidence step yields
+        # high-quality, annotated review evidence (client-requested). Each is a
+        # Claude vision call, so it's gated by a setting and fully best-effort.
+        if settings_store.load_settings().get("autoAnnotate", True):
+            for result in results:
+                if result.status == "fail":
+                    evidence_analysis.auto_annotate_result(db, run, result)
+
+        # Persist the real Playwright output so the UI can show the run log. On
+        # timeout / missing binary there is no stdout/stderr, so fall back to the
+        # run_error text so the log still explains why the run failed. Keep the
+        # LAST ~20000 chars so the failing tail survives truncation.
+        log_text = proc_output or run_error or ""
+        execution.log = log_text[-20000:]
+
         execution.passed = passed
         execution.failed = failed
         execution.total = total
@@ -330,5 +754,322 @@ def run_execution(execution_id: int) -> None:
         hub.publish(run_id_str, "exec.progress", {"progress": 100, "passed": passed, "failed": failed, "remaining": 0})
         hub.publish(run_id_str, "exec.done", {"passed": passed, "failed": failed})
         hub.publish(run_id_str, "run.status", {"status": run.status})
+
+        audit_service.record(
+            category="execution", actor_type="ai", action="Executed test run",
+            target=f"{run.code} · {total} cases",
+            status="warning" if failed else "success",
+            meta=f"{passed} passed · {failed} failed",
+        )
     finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Self-heal loop: re-run a single failing spec, feeding the failure back to
+# Claude to regenerate it, until it passes or a max-attempts cap is hit.
+# ---------------------------------------------------------------------------
+
+# case_id -> {"attempt": int, "maxAttempts": int, "runId": int} for in-flight
+# heals — lets the UI reflect the running state and blocks double-triggering.
+_healing: dict[int, dict[str, int]] = {}
+_healing_lock = threading.Lock()
+
+
+def is_healing(case_id: int) -> bool:
+    return case_id in _healing
+
+
+def heal_state(case_id: int) -> dict[str, Any]:
+    """Current heal status for a case, for the status endpoint."""
+    state = _healing.get(case_id)
+    return {
+        "healing": state is not None,
+        "attempt": state["attempt"] if state else 0,
+        "maxAttempts": state["maxAttempts"] if state else settings.heal_max_attempts,
+    }
+
+
+def heal_run_busy(run_id: int) -> bool:
+    """True if any case in this run is currently self-healing (they share the
+    run's spec dir / report.json, so heals must be serialized per run)."""
+    return any(state["runId"] == run_id for state in _healing.values())
+
+
+def start_heal(case_id: int, run_id: int) -> bool:
+    """Register + launch a self-heal pass for one case. Returns False if another
+    case in the same run is already healing (idempotent True if this exact case
+    is already healing)."""
+    with _healing_lock:
+        if case_id in _healing:
+            return True
+        if heal_run_busy(run_id):
+            return False
+        _healing[case_id] = {
+            "attempt": 0,
+            "maxAttempts": settings.heal_max_attempts,
+            "runId": run_id,
+        }
+    threading.Thread(target=heal_spec, args=(case_id,), daemon=True).start()
+    return True
+
+
+def _apply_heal_result(
+    db,
+    run: Run,
+    case: TestCase,
+    status: str,
+    error_message: str,
+    duration_ms: int,
+    attachments: list[dict],
+) -> None:
+    """Reflect a heal outcome on the case's most recent ExecutionResult.
+
+    Updates status/error/duration, replaces that result's evidence with the
+    latest attempt's artifacts, and recomputes the owning Execution's pass/fail
+    counts so dashboards stay accurate. No-op if the case was never executed.
+    """
+    result = (
+        db.query(ExecutionResult)
+        .filter(ExecutionResult.test_case_id == case.id)
+        .order_by(ExecutionResult.id.desc())
+        .first()
+    )
+    if result is None:
+        return
+    result.status = status
+    result.error_message = error_message
+    result.duration_ms = duration_ms
+    db.query(Evidence).filter(Evidence.result_id == result.id).delete()
+    db.commit()
+    _store_evidence(db, run, result, attachments)
+    db.commit()
+
+    execution = db.get(Execution, result.execution_id)
+    if execution is not None:
+        siblings = (
+            db.query(ExecutionResult)
+            .filter(ExecutionResult.execution_id == execution.id)
+            .all()
+        )
+        execution.passed = sum(1 for r in siblings if r.status == "pass")
+        execution.failed = sum(1 for r in siblings if r.status == "fail")
+        db.commit()
+
+    hub.publish(
+        str(run.id),
+        "exec.case.result",
+        {
+            "ticket": result.ticket_external_id,
+            "caseCode": result.case_code,
+            "status": result.status,
+            "durationMs": result.duration_ms,
+        },
+    )
+
+
+def heal_spec(case_id: int) -> None:
+    """Background worker: self-heal one test case's Playwright spec.
+
+    Runs the case's single spec; while it fails, feeds the failure back to Claude
+    to regenerate the spec and re-runs, up to ``settings.heal_max_attempts``.
+    Persists each improved spec to disk + AutomationSpec, updates the case's
+    latest ExecutionResult, and publishes ``heal.progress`` WS events with phase
+    running | fixing | passed | failed.
+    """
+    from app.models.testcase import AutomationSpec, TestCase
+
+    db = db_module.SessionLocal()
+    try:
+        case = db.get(TestCase, case_id)
+        if case is None:
+            return
+        run = db.get(Run, case.run_id)
+        if run is None:
+            return
+        spec = (
+            db.query(AutomationSpec)
+            .filter(AutomationSpec.test_case_id == case_id)
+            .first()
+        )
+        if spec is None:
+            return
+
+        run_id_str = str(run.id)
+        max_attempts = settings.heal_max_attempts
+        filename = spec_service.spec_filename(case.ticket_external_id, case.code)
+        spec_dir = settings.specs_dir / run.code
+        spec_dir.mkdir(parents=True, exist_ok=True)
+        headless = bool(settings_store.load_settings().get("headless", True))
+
+        # Reuse a saved manual-login session if present; never pop a capture
+        # browser from the heal loop.
+        project_key, base_url, manual_auth, _provider = _resolve_project_for_run(
+            db, run, run.env
+        )
+        storage_state = ""
+        session_file = spec_dir / "sessionStorage.json"
+        if manual_auth and project_key:
+            saved = project_config_service.auth_path(project_key)
+            if saved.exists() and saved.stat().st_size > 0:
+                storage_state = str(saved)
+            session_file = project_config_service.session_path(project_key)
+        use_fixtures = bool(manual_auth and storage_state and session_file.exists())
+
+        context = spec_service.build_case_context(db, case, env=run.env)
+
+        def emit(phase: str, attempt: int, message: str, error: str = "") -> None:
+            if case_id in _healing:
+                _healing[case_id]["attempt"] = attempt
+            hub.publish(
+                run_id_str,
+                "heal.progress",
+                {
+                    "caseId": case_id,
+                    "ticket": case.ticket_external_id,
+                    "caseCode": case.code,
+                    "attempt": attempt,
+                    "maxAttempts": max_attempts,
+                    "phase": phase,
+                    "message": message,
+                    "error": (error or "")[:600],
+                },
+            )
+
+        final_status = "fail"
+        final_error = ""
+        attachments: list[dict] = []
+        elapsed_ms = 0
+        attempts_log: list[dict[str, Any]] = []  # per-attempt trail for the heal report
+
+        for attempt in range(1, max_attempts + 1):
+            emit("running", attempt, f"Running spec (attempt {attempt}/{max_attempts})")
+            _write_config(spec_dir, 1, headless, base_url, storage_state)
+            _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
+
+            report: dict[str, Any] = {}
+            run_error: str | None = None
+            proc_output = ""
+            started = time.monotonic()
+            try:
+                _rc, stdout, stderr = _invoke_playwright(
+                    spec_dir, 1, settings.exec_timeout_s, spec_file=filename
+                )
+                proc_output = "\n".join(p for p in (stdout, stderr) if p).strip()
+            except FileNotFoundError as exc:
+                run_error = f"Playwright binary not found: {exc}"
+            except subprocess.TimeoutExpired:
+                run_error = f"Playwright run timed out after {settings.exec_timeout_s}s"
+            finally:
+                elapsed_ms = int((time.monotonic() - started) * 1000)
+
+            report_path = spec_dir / "report.json"
+            if run_error is None:
+                if report_path.exists():
+                    try:
+                        report = json.loads(report_path.read_text(encoding="utf-8"))
+                    except json.JSONDecodeError as exc:
+                        run_error = f"Could not parse Playwright report: {exc}"
+                else:
+                    detail = f" — {proc_output[:600]}" if proc_output else ""
+                    run_error = f"Playwright produced no report.json{detail}"
+
+            parsed = parse_playwright_report(report) if report else []
+            entry = next(
+                (e for e in parsed if Path(e["file"]).name == filename), None
+            )
+
+            final_output = proc_output or run_error or ""
+            rec: dict[str, Any] = {
+                "attempt": attempt,
+                "durationMs": elapsed_ms,
+                "outputTail": (final_output or "")[-1500:],
+                "fixed": False,
+                "diff": "",
+            }
+
+            if entry and entry["status"] == "pass":
+                final_status = "pass"
+                final_error = ""
+                attachments = entry["attachments"]
+                elapsed_ms = entry["duration_ms"] or elapsed_ms
+                rec["status"] = "pass"
+                rec["error"] = ""
+                attempts_log.append(rec)
+                emit("passed", attempt, "Spec passed")
+                break
+
+            if entry:
+                final_status = "fail"
+                final_error = entry["error_message"] or run_error or "Test failed"
+                attachments = entry["attachments"]
+                elapsed_ms = entry["duration_ms"] or elapsed_ms
+            else:
+                final_status = "fail"
+                final_error = run_error or "No result reported by Playwright"
+                attachments = []
+            rec["status"] = "fail"
+            rec["error"] = final_error
+
+            if attempt >= max_attempts:
+                attempts_log.append(rec)
+                emit("failed", attempt, "Still failing after max attempts", error=final_error)
+                break
+
+            emit("fixing", attempt, "Asking Claude to fix the spec", error=final_error)
+            try:
+                fixed = spec_service.generate_fixed_spec_code(
+                    case, spec.code, final_error, final_output, context
+                )
+            except ClaudeError as exc:
+                final_error = f"Heal generation failed: {exc}"
+                rec["error"] = final_error
+                attempts_log.append(rec)
+                emit("failed", attempt, final_error, error=final_error)
+                break
+
+            # Record what Claude changed (unified diff of the spec before -> after).
+            diff = "\n".join(
+                difflib.unified_diff(
+                    (spec.code or "").splitlines(),
+                    (fixed or "").splitlines(),
+                    fromfile=f"spec (before fix {attempt})",
+                    tofile=f"spec (after fix {attempt})",
+                    lineterm="",
+                )
+            )
+            rec["fixed"] = True
+            rec["diff"] = diff
+            attempts_log.append(rec)
+
+            path = spec_service.write_spec_file(
+                run.code, case.ticket_external_id, case.code, fixed
+            )
+            spec.code = fixed
+            spec.path = str(path)
+            db.commit()
+
+        # Persist the heal trail on the spec so the UI can show the full process.
+        try:
+            spec.heal_report = json.dumps(
+                {
+                    "caseId": case_id,
+                    "finalStatus": final_status,
+                    "maxAttempts": max_attempts,
+                    "healedAt": datetime.now(timezone.utc).isoformat(),
+                    "attempts": attempts_log,
+                }
+            )
+            db.commit()
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning("Failed to persist heal report for case {}: {}", case_id, exc)
+
+        _apply_heal_result(
+            db, run, case, final_status, final_error, elapsed_ms, attachments
+        )
+    except Exception as exc:  # noqa: BLE001 - surface, never crash the thread
+        logger.error("Self-heal failed for case {}: {}", case_id, exc)
+    finally:
+        _healing.pop(case_id, None)
         db.close()

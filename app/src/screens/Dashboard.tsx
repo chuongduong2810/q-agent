@@ -2,53 +2,26 @@ import { motion } from "framer-motion";
 import { CheckCircle2, Check, Clock, LayoutList, Sparkles, TrendingUp } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
+import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
 import { runColor, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
-import { useRunCases, useRuns } from "@/hooks/queries";
+import { useAuditEvents, useReports, useRunCases, useRuns, useSettings } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
 
-/** Design's showcase "Recent activity" feed — no backend endpoint exists for
- * an activity log, so these entries are kept as static decoration per the
- * frozen design (Q-Agent.dc.html lines 798-803). */
-const ACTIVITY = [
-  {
-    who: "Q-Agent",
-    what: "generated 21 test cases across RUN-204",
-    when: "3 minutes ago",
-    bg: "rgba(139,92,246,.16)",
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z" />
-      </svg>
-    ),
-  },
-  {
-    who: "Maya Kaur",
-    what: "approved 10 cases in SUR-1428",
-    when: "8 minutes ago",
-    bg: "rgba(16,185,129,.14)",
-    icon: <Check size={15} color="#6ee7b7" strokeWidth={2.4} />,
-  },
-  {
-    who: "RUN-201",
-    what: "full regression finished — 96% pass",
-    when: "1 day ago",
-    bg: "rgba(34,211,238,.14)",
-    icon: <LayoutList size={15} color="#67e8f9" strokeWidth={2.2} />,
-  },
-  {
-    who: "Azure DevOps",
-    what: "synced 5 tickets from Sprint 24",
-    when: "1 day ago",
-    bg: "rgba(0,120,212,.18)",
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4aa3ff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M23 4v6h-6" />
-        <path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10" />
-      </svg>
-    ),
-  },
-];
+const initials = (name: string) =>
+  name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+
+// Icon-chip colours per actor type, matching the design palette.
+const ACTOR_BG: Record<string, string> = {
+  ai: "rgba(139,92,246,.16)",
+  user: "rgba(16,185,129,.14)",
+  system: "rgba(147,197,253,.16)",
+};
+const ACTOR_FG: Record<string, string> = {
+  ai: "#a78bfa",
+  user: "#6ee7b7",
+  system: "#93c5fd",
+};
 
 export function Dashboard() {
   const { data: runs, isLoading: runsLoading } = useRuns();
@@ -57,6 +30,27 @@ export function Dashboard() {
   const openCreateRun = useUI((s) => s.openCreateRun);
   const setActiveRun = useUI((s) => s.setActiveRun);
   const { data: activeRunCases } = useRunCases(activeRunId);
+  const { data: reports } = useReports();
+  const { data: activity } = useAuditEvents({});
+  const { data: settings } = useSettings();
+  const firstName = settings?.userName?.trim().split(" ")[0] ?? "";
+
+  // Aggregate real report metrics; show em dash when no reports exist yet.
+  const reportCount = reports?.length ?? 0;
+  const passRateLabel = reportCount
+    ? `${(reports!.reduce((sum, r) => sum + r.passRate, 0) / reportCount).toFixed(1)}%`
+    : "—";
+  const avgRuntimeLabel = reportCount
+    ? `${Math.round(reports!.reduce((sum, r) => sum + r.durationS, 0) / reportCount)}s`
+    : "—";
+  const acrossLabel = reportCount ? `across ${reportCount} report${reportCount === 1 ? "" : "s"}` : "no reports yet";
+
+  // Suite health ring — aggregate pass/fail across all real reports.
+  const suitePassed = reports?.reduce((sum, r) => sum + r.passed, 0) ?? 0;
+  const suiteFailed = reports?.reduce((sum, r) => sum + r.failed, 0) ?? 0;
+  const suiteTotal = suitePassed + suiteFailed;
+  const suitePassRate = suiteTotal ? (suitePassed / suiteTotal) * 100 : null;
+  const suiteRingOffset = suitePassRate == null ? 377 : Math.round(377 - (377 * suitePassRate) / 100);
 
   const activeRuns = runs?.filter((r) => r.status !== "done") ?? [];
   const reviewRuns = runs?.filter((r) => r.status === "review") ?? [];
@@ -64,6 +58,8 @@ export function Dashboard() {
   const recentRuns = [...(runs ?? [])].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
+  // The run the hero card highlights: the active run, else the most recent.
+  const heroRun = runs?.find((r) => r.id === activeRunId) ?? recentRuns[0] ?? null;
 
   const stats = [
     {
@@ -82,20 +78,19 @@ export function Dashboard() {
       color: "#22d3ee",
       icon: <CheckCircle2 size={17} strokeWidth={2} />,
     },
-    // No aggregate pass-rate / runtime endpoint exists yet — keep the design's
-    // showcase values (see docs/API-CONTRACT.md, no /stats route).
+    // Derived from real report data via useReports() (see api.listReports()).
     {
       label: "Pass rate",
-      value: "94.2%",
-      trend: "+2.1% vs last run",
+      value: passRateLabel,
+      trend: acrossLabel,
       trendColor: "#6ee7b7",
       color: "#8b5cf6",
       icon: <TrendingUp size={17} strokeWidth={2} />,
     },
     {
       label: "Avg runtime",
-      value: "32.2s",
-      trend: "−4.8s optimised",
+      value: avgRuntimeLabel,
+      trend: acrossLabel,
       trendColor: "#6ee7b7",
       color: "#f59e0b",
       icon: <Clock size={17} strokeWidth={2} />,
@@ -107,7 +102,12 @@ export function Dashboard() {
       <div className="mb-6 flex items-end justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-muted">
-            Wednesday, July 1 · Good morning, Maya
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })}{" "}
+            · Good morning{firstName ? `, ${firstName}` : ""}
           </div>
           <h1 className="m-0 text-[32px] font-black tracking-tight">Mission control</h1>
         </div>
@@ -134,7 +134,10 @@ export function Dashboard() {
               <span className="text-[12.5px] font-medium text-[#9494a6]">{s.label}</span>
               <span style={{ color: s.color }}>{s.icon}</span>
             </div>
-            <div className="text-[29px] font-black leading-none tracking-tight">{s.value}</div>
+            <CountUp
+              value={s.value}
+              className="block text-[29px] font-black leading-none tracking-tight"
+            />
             <div className="mt-2 text-[12px] font-semibold" style={{ color: s.trendColor }}>
               {s.trend}
             </div>
@@ -167,23 +170,40 @@ export function Dashboard() {
             >
               <span
                 className="h-1.5 w-1.5 rounded-full"
-                style={{ background: "#22d3ee", animation: "pulseDot 1.5s infinite" }}
+                style={{
+                  background: heroRun ? runColor(heroRun.status) : "#22d3ee",
+                  animation: "pulseDot 1.5s infinite",
+                }}
               />
-              RUN-204 · SPRINT 24
+              {heroRun ? `${heroRun.code} · ${heroRun.status.toUpperCase()}` : "NO ACTIVE RUN"}
             </div>
             <h2 className="m-0 mb-2 max-w-[440px] text-[23px] font-extrabold tracking-tight">
-              Run a whole sprint through one QA pipeline
+              {heroRun ? heroRun.name : "Run a whole sprint through one QA pipeline"}
             </h2>
             <p className="m-0 mb-5 max-w-[440px] text-[14px] leading-relaxed text-[#c3c3d4]">
-              Select tickets, batch-generate Azure DevOps test cases, review like pull requests,
-              run Playwright in parallel, then publish evidence back to every ticket.
+              {heroRun
+                ? `${runMeta(heroRun)} — in the ${heroRun.status} stage. Review cases, run Playwright in parallel, and publish evidence back to every ticket.`
+                : "Select tickets, batch-generate test cases, review like pull requests, run Playwright in parallel, then publish evidence back to every ticket."}
             </p>
             <div className="flex gap-2.5">
-              <Button variant="white" size="lg" onClick={() => navigate("review")}>
-                <Check size={16} strokeWidth={2.3} /> Open Review Center
-              </Button>
-              <Button variant="glass" size="lg" onClick={openCreateRun}>
-                New Run
+              {heroRun ? (
+                <Button
+                  variant="white"
+                  size="lg"
+                  onClick={() => {
+                    setActiveRun(heroRun.id);
+                    navigate("run");
+                  }}
+                >
+                  <Check size={16} strokeWidth={2.3} /> Open run
+                </Button>
+              ) : (
+                <Button variant="white" size="lg" onClick={openCreateRun}>
+                  <Check size={16} strokeWidth={2.3} /> New Run
+                </Button>
+              )}
+              <Button variant="glass" size="lg" onClick={() => navigate("review")}>
+                Review Center
               </Button>
             </div>
           </div>
@@ -204,7 +224,7 @@ export function Dashboard() {
                 strokeWidth="13"
                 strokeLinecap="round"
                 strokeDasharray="377"
-                strokeDashoffset="22"
+                strokeDashoffset={suiteRingOffset}
                 transform="rotate(-90 75 75)"
               />
               <defs>
@@ -215,16 +235,18 @@ export function Dashboard() {
               </defs>
             </svg>
             <div className="absolute text-center">
-              <div className="text-[34px] font-black tracking-tight">94.2%</div>
+              <div className="text-[34px] font-black tracking-tight">
+                {suitePassRate == null ? "—" : `${suitePassRate.toFixed(1)}%`}
+              </div>
               <div className="text-[11.5px] font-medium text-muted">pass rate</div>
             </div>
           </div>
           <div className="mt-1.5 flex justify-between text-[11.5px] text-muted">
             <span>
-              <span className="font-bold text-[#10b981]">1,204</span> passed
+              <span className="font-bold text-[#10b981]">{suitePassed.toLocaleString()}</span> passed
             </span>
             <span>
-              <span className="font-bold text-[#f43f5e]">74</span> failed
+              <span className="font-bold text-[#f43f5e]">{suiteFailed.toLocaleString()}</span> failed
             </span>
           </div>
         </GlassCard>
@@ -234,25 +256,41 @@ export function Dashboard() {
         <GlassCard className="p-5">
           <div className="mb-4 text-[15px] font-bold">Recent activity</div>
           <div className="flex flex-col gap-0.5">
-            {ACTIVITY.map((a) => (
-              <div
-                key={a.who + a.when}
-                className="flex gap-[13px] rounded-xl px-1.5 py-2.5 hover:bg-white/[0.04]"
-              >
+            {(activity ?? []).length === 0 ? (
+              <p className="m-0 px-1.5 py-3 text-[12.5px] text-ink-dim">
+                No activity yet — actions you take will show up here.
+              </p>
+            ) : (
+              (activity ?? []).slice(0, 5).map((e) => (
                 <div
-                  className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px]"
-                  style={{ background: a.bg }}
+                  key={e.id}
+                  className="flex gap-[13px] rounded-xl px-1.5 py-2.5 hover:bg-white/[0.04]"
                 >
-                  {a.icon}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] text-[#dcdce4]">
-                    <span className="font-bold">{a.who}</span> {a.what}
+                  <div
+                    className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px]"
+                    style={{ background: ACTOR_BG[e.actorType] ?? ACTOR_BG.system }}
+                  >
+                    {e.actorType === "ai" ? (
+                      <Sparkles size={15} color={ACTOR_FG.ai} strokeWidth={2.2} />
+                    ) : (
+                      <span
+                        className="text-[10px] font-bold"
+                        style={{ color: ACTOR_FG[e.actorType] ?? ACTOR_FG.system }}
+                      >
+                        {initials(e.actor)}
+                      </span>
+                    )}
                   </div>
-                  <div className="mt-0.5 text-[11.5px] text-[#7a7a8c]">{a.when}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] text-[#dcdce4]">
+                      <span className="font-bold">{e.actor}</span> {e.action}
+                      {e.target ? ` · ${e.target}` : ""}
+                    </div>
+                    <div className="mt-0.5 text-[11.5px] text-[#7a7a8c]">{timeAgo(e.ts)}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </GlassCard>
 
