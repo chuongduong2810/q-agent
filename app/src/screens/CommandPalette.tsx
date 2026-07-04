@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { type ComponentType, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useResolvedRunId } from "@/hooks/useResolvedRunId";
+import { useRunRouteId } from "@/hooks/useRunRouteId";
 import { useUI } from "@/store/ui";
 
 interface PaletteCommand {
@@ -35,7 +35,7 @@ export function CommandPalette() {
   const closePalette = useUI((s) => s.closePalette);
   const openCreateRun = useUI((s) => s.openCreateRun);
   const navigate = useNavigate();
-  const runId = useResolvedRunId();
+  const runId = useRunRouteId();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
