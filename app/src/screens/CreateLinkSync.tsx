@@ -4,8 +4,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { providerGlyph } from "@/components/ui/badges";
-import { EmptyState, Spinner } from "@/components/ui/misc";
+import { Spinner } from "@/components/ui/misc";
 import { providerLabel } from "@/data/projects";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   useCreateAndLink,
   useGenerateAutomation,
@@ -13,8 +14,6 @@ import {
   useRun,
   useTickets,
 } from "@/hooks/queries";
-import { useRunSocket } from "@/hooks/useRunSocket";
-import { useUI } from "@/store/ui";
 import type { LinkTicketResult, ProviderKind } from "@/types/api";
 
 /**
@@ -22,14 +21,13 @@ import type { LinkTicketResult, ProviderKind } from "@/types/api";
  * them to each work item (pipeline stage between Review and Automation).
  */
 export function CreateLinkSync() {
-  const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
-  const { data: run } = useRun(activeRunId);
+  const runId = Number(useParams().runId);
+  const navigate = useNavigate();
+  const { data: run } = useRun(runId);
   const { data: tickets } = useTickets();
-  const { data: status } = useLinkStatus(activeRunId);
-  const createAndLink = useCreateAndLink(activeRunId ?? 0);
-  const generateAutomation = useGenerateAutomation(activeRunId ?? 0);
-  useRunSocket(activeRunId);
+  const { data: status } = useLinkStatus(runId);
+  const createAndLink = useCreateAndLink(runId);
+  const generateAutomation = useGenerateAutomation(runId);
 
   // Local mode: create cases locally only, never write to the live provider.
   // Persisted so the choice sticks across visits during local development.
@@ -51,18 +49,6 @@ export function CreateLinkSync() {
       byTicket.get(tid)?.providerKind ??
       "ado") as ProviderKind;
 
-  if (!activeRunId) {
-    return (
-      <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
-        <EmptyState
-          icon={<Link2 size={30} className="text-violet" />}
-          title="No active run"
-          body="Approve test cases in a run, then create & link them to the provider here."
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
       <div className="mb-3.5 flex items-end justify-between">
@@ -78,7 +64,7 @@ export function CreateLinkSync() {
             size="lg"
             onClick={() => {
               generateAutomation.mutate(undefined);
-              navigate("automation");
+              navigate("/runs/" + runId + "/automation");
             }}
           >
             Generate automation <ArrowRight size={15} strokeWidth={2.2} />

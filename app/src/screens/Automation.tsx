@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Dropdown";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";
-import { EmptyState } from "@/components/ui/misc";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   useAutomationStatus,
   useExecution,
@@ -25,9 +25,8 @@ import {
   useTickets,
   useUpdateSpec,
 } from "@/hooks/queries";
-import { useRunSocket } from "@/hooks/useRunSocket";
+import { useRunEvents } from "@/hooks/useRunEvents";
 import { queryKeys } from "@/lib/queryKeys";
-import { useUI } from "@/store/ui";
 import type { HealAttempt, HealReport, ProgressEvent } from "@/types/api";
 
 const THINKING_STEPS = [
@@ -38,26 +37,40 @@ const THINKING_STEPS = [
 ];
 
 export function Automation() {
-  const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
-  const { data: run } = useRun(activeRunId);
-  const { data: specs, isLoading } = useSpecs(activeRunId);
-  const { data: cases } = useRunCases(activeRunId);
-  const generateAutomation = useGenerateAutomation(activeRunId ?? 0);
-  const regenerateSpec = useRegenerateSpec(activeRunId ?? 0);
-  const updateSpec = useUpdateSpec(activeRunId ?? 0);
-  const startExecution = useStartExecution(activeRunId ?? 0);
-  const { data: autoStatus } = useAutomationStatus(activeRunId);
-  const { data: repoOptions } = useRunRepos(activeRunId);
+  const runId = Number(useParams().runId);
+  const navigate = useNavigate();
+  const { data: run } = useRun(runId);
+  const { data: specs, isLoading } = useSpecs(runId);
+  const { data: cases } = useRunCases(runId);
+  const generateAutomation = useGenerateAutomation(runId);
+  const regenerateSpec = useRegenerateSpec(runId);
+  const updateSpec = useUpdateSpec(runId);
+  const startExecution = useStartExecution(runId);
+  const { data: autoStatus } = useAutomationStatus(runId);
+  const { data: repoOptions } = useRunRepos(runId);
   const { data: tickets } = useTickets();
-  const { data: execution } = useExecution(activeRunId);
-  const setTicketRepo = useSetRunTicketRepo(activeRunId ?? 0);
-  const healSpec = useHealSpec(activeRunId ?? 0);
-  const runSpec = useRunSpec(activeRunId ?? 0);
+  const { data: execution } = useExecution(runId);
+  const setTicketRepo = useSetRunTicketRepo(runId);
+  const healSpec = useHealSpec(runId);
+  const runSpec = useRunSpec(runId);
   const qc = useQueryClient();
 
-  const selectedSpecCaseId = useUI((s) => s.selectedSpecCaseId);
-  const selectSpec = useUI((s) => s.selectSpec);
+  // Which spec is selected — a deep-linkable selection in the URL (`?case=`).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const caseParam = searchParams.get("case");
+  const selectedSpecCaseId = caseParam != null ? Number(caseParam) : null;
+  const selectSpec = useCallback(
+    (caseId: number, replace = false) =>
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("case", String(caseId));
+          return next;
+        },
+        { replace },
+      ),
+    [setSearchParams],
+  );
 
   const [copyLabel, setCopyLabel] = useState("Copy");
   const [thinkStep, setThinkStep] = useState(0);
@@ -167,15 +180,15 @@ export function Automation() {
         if (p.phase === "passed") toast.success(`Self-heal fixed ${p.caseCode}`);
         else toast.error(`Self-heal gave up on ${p.caseCode}: ${p.message || "still failing"}`);
         // The spec code, latest execution result, and heal trail changed on the server.
-        qc.invalidateQueries({ queryKey: queryKeys.specs(activeRunId ?? 0) });
-        qc.invalidateQueries({ queryKey: queryKeys.execution(activeRunId ?? 0) });
+        qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+        qc.invalidateQueries({ queryKey: queryKeys.execution(runId) });
         qc.invalidateQueries({ queryKey: queryKeys.healStatus(p.caseId) });
         qc.invalidateQueries({ queryKey: queryKeys.healReport(p.caseId) });
         setTimeout(() => setHealProgress(null), 4000);
       }
     }
-  }, [qc, activeRunId]);
-  useRunSocket(activeRunId, onRunEvent);
+  }, [qc, runId]);
+  useRunEvents(onRunEvent);
 
   // Belt-and-braces: clear the banner detail whenever generation is no longer
   // active (covers the case where the run.status event is missed).
@@ -214,7 +227,7 @@ export function Automation() {
     startExecution.mutate(
       {},
       {
-        onSuccess: () => navigate("console"),
+        onSuccess: () => navigate("/runs/" + runId + "/execution"),
         onError: (e) =>
           toast.error(e instanceof Error ? e.message : "Failed to start execution"),
       },
@@ -237,7 +250,7 @@ export function Automation() {
   // Default to the first spec once the list loads.
   useEffect(() => {
     if (specs && specs.length && selectedSpecCaseId == null) {
-      selectSpec(specs[0].testCaseId);
+      selectSpec(specs[0].testCaseId, true);
     }
   }, [specs, selectedSpecCaseId, selectSpec]);
 
@@ -310,18 +323,6 @@ export function Automation() {
     healReportRaw && "attempts" in healReportRaw && healReportRaw.attempts?.length
       ? (healReportRaw as HealReport)
       : null;
-
-  if (!activeRunId) {
-    return (
-      <div className="animate-fade-in-up px-1 pb-10 pt-0.5">
-        <EmptyState
-          icon={<Sparkles size={30} className="text-violet" />}
-          title="No active run"
-          body="Start a run and approve test cases before generating automation."
-        />
-      </div>
-    );
-  }
 
   const handleCopy = () => {
     if (!selectedSpec) return;

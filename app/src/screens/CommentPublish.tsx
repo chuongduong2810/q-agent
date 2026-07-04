@@ -6,9 +6,8 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { Pill, providerGlyph } from "@/components/ui/badges";
 import { EmptyState, Spinner } from "@/components/ui/misc";
+import { useParams } from "react-router-dom";
 import { useComments, useCommentMutations, useRun } from "@/hooks/queries";
-import { useRunSocket } from "@/hooks/useRunSocket";
-import { useUI } from "@/store/ui";
 import type { PublishStatus, TicketCommentOut } from "@/types/api";
 
 const PUBLISH_STATUS: Record<PublishStatus, [string, string, string]> = {
@@ -21,25 +20,12 @@ const PUBLISH_STATUS: Record<PublishStatus, [string, string, string]> = {
 /** Ticket Comments / Publish — prepares AI-summarized result comments per ticket
  * and publishes them back to the provider work item. Design: Q-Agent.dc.html 489-506. */
 export function CommentPublish() {
-  const activeRunId = useUI((s) => s.activeRunId);
-  const { data: run } = useRun(activeRunId);
-  const { data: comments, isLoading } = useComments(activeRunId);
-  const { prepare, publishOne, publishAll, retry } = useCommentMutations(activeRunId ?? 0);
-  useRunSocket(activeRunId);
+  const runId = Number(useParams().runId);
+  const { data: run } = useRun(runId);
+  const { data: comments, isLoading } = useComments(runId);
+  const { prepare, publishOne, publishAll, retry } = useCommentMutations(runId);
 
   const anyFailed = (comments ?? []).some((c) => c.status === "failed");
-
-  if (!activeRunId) {
-    return (
-      <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
-        <EmptyState
-          icon={<Sparkles size={30} className="text-violet" />}
-          title="No active run"
-          body="Publish results from a run once its suite has executed."
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">

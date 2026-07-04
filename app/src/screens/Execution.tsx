@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { execColors } from "@/components/ui/badges";
 import { ProgressRing, Spinner } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";
+import { useNavigate, useParams } from "react-router-dom";
 import { useExecution, useRun, useStartExecution } from "@/hooks/queries";
-import { useRunSocket } from "@/hooks/useRunSocket";
-import { useUI } from "@/store/ui";
+import { useRunEvents } from "@/hooks/useRunEvents";
 import type { ExecutionResultOut, ProgressEvent } from "@/types/api";
 
 /** Truncates long ticket ids for the fixed-width queue column (design's r.tidShort). */
@@ -16,12 +16,12 @@ function shortTicket(id: string): string {
 }
 
 export function Execution() {
-  const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
+  const runId = Number(useParams().runId);
+  const navigate = useNavigate();
 
-  const { data: run } = useRun(activeRunId);
-  const { data: execution, isLoading } = useExecution(activeRunId);
-  const startExecution = useStartExecution(activeRunId ?? 0);
+  const { data: run } = useRun(runId);
+  const { data: execution, isLoading } = useExecution(runId);
+  const startExecution = useStartExecution(runId);
 
   // Manual-login prompt state, driven by the run WebSocket. When the backend
   // opens a browser on the host for the operator to log in, it emits
@@ -38,7 +38,7 @@ export function Execution() {
       toast.error(String(evt.payload?.message ?? "Manual login failed"));
     }
   }, []);
-  useRunSocket(activeRunId, onRunEvent);
+  useRunEvents(onRunEvent);
 
   const status = execution?.status ?? "idle";
   const isIdle = !execution || status === "idle" || status === "pending";
@@ -68,7 +68,7 @@ export function Execution() {
       <div className="mb-3.5 flex items-end justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-            {run?.code ?? `RUN-${activeRunId ?? "…"}`} &middot; {run?.framework ?? "Playwright"} &middot;{" "}
+            {run?.code ?? `RUN-${runId}`} &middot; {run?.framework ?? "Playwright"} &middot;{" "}
             {run?.env ?? "Staging"} &middot; {run?.workers ?? execution?.workers ?? 0} parallel workers
           </div>
           <h1 className="m-0 text-[28px] font-black tracking-tight">Execution</h1>
@@ -164,7 +164,7 @@ export function Execution() {
             {current?.title ?? (isIdle ? "Not started" : "—")}
           </div>
           {isDone && (
-            <Button variant="glass" size="sm" onClick={() => navigate("evidence")} className="mt-1 self-start">
+            <Button variant="glass" size="sm" onClick={() => navigate("/runs/" + runId + "/evidence")} className="mt-1 self-start">
               Collect evidence
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M13 6l6 6-6 6" />
