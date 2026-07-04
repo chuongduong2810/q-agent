@@ -41,7 +41,7 @@ export function RunDetail() {
 
   if (isLoading || !run) {
     return (
-      <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
+      <div className="px-1 pb-10 pt-0.5">
         <div className="glass mb-4 h-8 w-24 animate-pulse rounded-lg" />
         <div className="glass mb-4 h-[76px] animate-pulse rounded-[18px]" />
         <div className="flex flex-col gap-[11px]">
@@ -59,7 +59,7 @@ export function RunDetail() {
   };
 
   return (
-    <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
+    <div className="px-1 pb-10 pt-0.5">
       <button
         onClick={() => navigate("/runs")}
         className="mb-3.5 flex cursor-pointer items-center gap-[7px] border-none bg-transparent p-0 text-[12.5px] font-semibold text-ink-dim hover:text-[#c7c7d4]"

@@ -111,7 +111,7 @@ export function ProjectDetail() {
   };
 
   return (
-    <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
+    <div className="px-1 pb-10 pt-0.5">
       <button
         onClick={() => navigate("/projects")}
         className="mb-3.5 flex cursor-pointer items-center gap-[7px] border-none bg-transparent p-0 text-[12.5px] font-semibold text-ink-dim hover:text-[#c7c7d4]"

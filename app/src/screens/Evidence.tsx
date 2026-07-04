@@ -103,7 +103,7 @@ export function Evidence() {
   const notReady = isError || isLoading === false ? !tickets.length : false;
 
   return (
-    <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
+    <div className="px-1 pb-10 pt-0.5">
       <div className="mb-3.5">
         <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
           RUN-{runId} &middot; evidence per test case, grouped by ticket
