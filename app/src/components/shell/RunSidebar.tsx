@@ -8,13 +8,13 @@ import {
   SquareStack,
   Ticket,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import { useRef, useState, type ComponentType } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
+import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { runColor, runRateLabel } from "@/components/dashboard/runStatus";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import { useRun } from "@/hooks/queries";
-import { useUI } from "@/store/ui";
 
 /** Pipeline stages as the run's navigation. `stage` is the 1-based index in the
  * global pipeline (see `runStatusToStage`) used for done/current styling; `seg`
@@ -54,7 +54,8 @@ export function RunSidebar({ runId }: { runId: number }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { data: run } = useRun(runId);
-  const openRunSwitcher = useUI((s) => s.openRunSwitcher);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const switchBtnRef = useRef<HTMLButtonElement>(null);
 
   // Current URL sub-segment (`review` | `sync` | … ), null on the run index.
   const urlSeg = pathname.match(/^\/runs\/\d+(?:\/(\w+))?/)?.[1] ?? null;
@@ -105,12 +106,19 @@ export function RunSidebar({ runId }: { runId: number }) {
           </div>
         )}
         <button
-          onClick={openRunSwitcher}
+          ref={switchBtnRef}
+          onClick={() => setSwitcherOpen((o) => !o)}
           title="Switch run"
           className="absolute right-2.5 top-2.5 flex h-[22px] w-[22px] items-center justify-center rounded-[7px] bg-white/[0.08] text-[#c7c7d4] transition-colors hover:bg-white/[0.16]"
         >
           <ChevronsUpDown size={13} strokeWidth={2} />
         </button>
+        <RunSwitcher
+          open={switcherOpen}
+          onClose={() => setSwitcherOpen(false)}
+          anchorRef={switchBtnRef}
+          runId={runId}
+        />
       </div>
 
       <div className="px-2 pb-1.5 pt-2 text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
