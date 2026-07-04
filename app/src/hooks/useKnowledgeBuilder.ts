@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useBuildKnowledge } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
@@ -16,6 +17,7 @@ export interface BuildTarget {
  */
 export function useKnowledgeBuilder() {
   const build = useBuildKnowledge();
+  const navigate = useNavigate();
   return (project: BuildTarget) => {
     const ui = useUI.getState();
     ui.startKnowledgeBuild(project.name);
@@ -32,8 +34,7 @@ export function useKnowledgeBuilder() {
       {
         onSuccess: () => {
           useUI.getState().endKnowledgeBuild();
-          useUI.getState().openProject(project.name);
-          useUI.getState().setProjectTab("knowledge");
+          navigate(`/projects/${encodeURIComponent(project.name)}?tab=knowledge`);
           toast.success(`Project Knowledge built for ${project.name}`);
         },
         onError: (err) => {

@@ -25,7 +25,6 @@ export function CreateRunModal() {
   const runBrowser = useUI((s) => s.runBrowser);
   const setRunField = useUI((s) => s.setRunField);
   const selected = useUI((s) => s.selected);
-  const setActiveRun = useUI((s) => s.setActiveRun);
   const navigate = useNavigate();
   const selectedSprint = useUI((s) => s.selectedSprint);
 
@@ -73,7 +72,6 @@ export function CreateRunModal() {
       {
         onSuccess: (run) => {
           closeCreateRun();
-          setActiveRun(run.id);
           navigate(`/runs/${run.id}`);
         },
         onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create run"),

@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import App from "@/App";
-import { bindRouter } from "@/lib/navigation";
 import { RunLayout } from "@/screens/RunLayout";
 
 import { Dashboard } from "@/screens/Dashboard";
@@ -55,5 +54,3 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
-
-bindRouter(router);
