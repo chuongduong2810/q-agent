@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { Plus, ArrowRight, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/misc";
@@ -21,9 +22,8 @@ const RUN_STATUS_LABEL: Record<string, string> = {
 /** Runs list: the one active (non-done) run as a hero card, plus a history of done runs. */
 export function Runs() {
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const setActiveRun = useUI((s) => s.setActiveRun);
-  const navigate = useUI((s) => s.navigate);
   const activeRunId = useUI((s) => s.activeRunId);
+  const navigate = useNavigate();
 
   const { data: runs, isLoading } = useRuns();
 
@@ -32,14 +32,8 @@ export function Runs() {
     (activeRunId != null ? runs?.find((r) => r.id === activeRunId) : undefined);
   const history = (runs ?? []).filter((r) => r.status === "done");
 
-  const goRun = (run: RunOut) => {
-    setActiveRun(run.id);
-    navigate("run");
-  };
-  const goReview = (run: RunOut) => {
-    setActiveRun(run.id);
-    navigate("review");
-  };
+  const goRun = (run: RunOut) => navigate(`/runs/${run.id}`);
+  const goReview = (run: RunOut) => navigate(`/runs/${run.id}/review`);
 
   return (
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
