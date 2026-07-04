@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Check, Clock, LayoutList, Sparkles, TrendingUp } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
@@ -6,6 +7,7 @@ import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
 import { runColor, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
 import { useAuditEvents, useReports, useRunCases, useRuns, useSettings } from "@/hooks/queries";
+import { useResolvedRunId } from "@/hooks/useResolvedRunId";
 import { useUI } from "@/store/ui";
 
 const initials = (name: string) =>
@@ -24,11 +26,11 @@ const ACTOR_FG: Record<string, string> = {
 };
 
 export function Dashboard() {
+  const navigate = useNavigate();
+  const resolvedRunId = useResolvedRunId();
   const { data: runs, isLoading: runsLoading } = useRuns();
   const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const setActiveRun = useUI((s) => s.setActiveRun);
   const { data: activeRunCases } = useRunCases(activeRunId);
   const { data: reports } = useReports();
   const { data: activity } = useAuditEvents({});
@@ -190,10 +192,7 @@ export function Dashboard() {
                 <Button
                   variant="white"
                   size="lg"
-                  onClick={() => {
-                    setActiveRun(heroRun.id);
-                    navigate("run");
-                  }}
+                  onClick={() => navigate(`/runs/${heroRun.id}`)}
                 >
                   <Check size={16} strokeWidth={2.3} /> Open run
                 </Button>
@@ -202,7 +201,11 @@ export function Dashboard() {
                   <Check size={16} strokeWidth={2.3} /> New Run
                 </Button>
               )}
-              <Button variant="glass" size="lg" onClick={() => navigate("review")}>
+              <Button
+                variant="glass"
+                size="lg"
+                onClick={() => navigate(resolvedRunId ? `/runs/${resolvedRunId}/review` : "/runs")}
+              >
                 Review Center
               </Button>
             </div>
@@ -298,7 +301,7 @@ export function Dashboard() {
           <div className="mb-4 flex items-center">
             <span className="flex-1 text-[15px] font-bold">Recent runs</span>
             <button
-              onClick={() => navigate("runs")}
+              onClick={() => navigate("/runs")}
               className="cursor-pointer border-none bg-transparent text-[12.5px] font-semibold text-[#a78bfa]"
             >
               View all
@@ -320,10 +323,7 @@ export function Dashboard() {
                 return (
                   <div
                     key={r.id}
-                    onClick={() => {
-                      setActiveRun(r.id);
-                      navigate("run");
-                    }}
+                    onClick={() => navigate(`/runs/${r.id}`)}
                     className="flex cursor-pointer items-center gap-3 rounded-[14px] p-3"
                     style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.05)" }}
                   >

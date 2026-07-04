@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
@@ -40,8 +41,8 @@ export function Tickets() {
   const selected = useUI((s) => s.selected);
   const toggleSelected = useUI((s) => s.toggleSelected);
   const setSelected = useUI((s) => s.setSelected);
-  const openTicket = useUI((s) => s.openTicket);
   const openCreateRun = useUI((s) => s.openCreateRun);
+  const navigate = useNavigate();
   const selectedSprint = useUI((s) => s.selectedSprint);
   const setSelectedSprint = useUI((s) => s.setSelectedSprint);
   const areaPath = useUI((s) => s.areaPath);
@@ -223,7 +224,7 @@ export function Tickets() {
               ticket={tk}
               selected={!!selected[tk.externalId]}
               onToggle={() => toggleSelected(tk.externalId)}
-              onOpen={() => openTicket(tk.externalId)}
+              onOpen={() => navigate(`/tickets/${encodeURIComponent(tk.externalId)}`)}
               index={i}
             />
           ))}

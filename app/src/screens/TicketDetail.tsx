@@ -1,8 +1,8 @@
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckSquare, ExternalLink, FileText, GitBranch, RefreshCw } from "lucide-react";
 import { Pill, StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
 import { useLinkedCases, useTicket } from "@/hooks/queries";
-import { useUI } from "@/store/ui";
 import { providerLabel } from "@/data/projects";
 import type { LinkedTestCaseOut, ProviderKind } from "@/types/api";
 
@@ -98,11 +98,11 @@ function LinkedRow({ lc }: { lc: LinkedTestCaseOut }) {
 }
 
 export function TicketDetail() {
-  const activeTicket = useUI((s) => s.activeTicket);
-  const navigate = useUI((s) => s.navigate);
-  const { data: detail, isLoading } = useTicket(activeTicket);
+  const { externalId } = useParams();
+  const navigate = useNavigate();
+  const { data: detail, isLoading } = useTicket(externalId ?? null);
 
-  const goTickets = () => navigate("tickets");
+  const goTickets = () => navigate("/tickets");
 
   if (isLoading || !detail) {
     return (

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -6,7 +7,6 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/misc";
 import { runColor, timeAgo } from "@/components/dashboard/runStatus";
 import { useReports, useRuns } from "@/hooks/queries";
-import { useUI } from "@/store/ui";
 
 interface FlakyRow {
   id: string;
@@ -18,8 +18,7 @@ interface FlakyRow {
 export function Reports() {
   const { data: reports, isLoading: reportsLoading } = useReports();
   const { data: runs, isLoading: runsLoading } = useRuns();
-  const setActiveRun = useUI((s) => s.setActiveRun);
-  const navigate = useUI((s) => s.navigate);
+  const navigate = useNavigate();
 
   // Everything on this screen is derived from real run reports (GET /reports).
   // Newest first for the summary cards; oldest→newest (last 7) for the trend.
@@ -178,10 +177,7 @@ export function Reports() {
                 return (
                   <div
                     key={r.id}
-                    onClick={() => {
-                      setActiveRun(r.id);
-                      navigate("run");
-                    }}
+                    onClick={() => navigate(`/runs/${r.id}`)}
                     className="flex cursor-pointer items-center gap-3 rounded-[13px] p-3"
                     style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.05)" }}
                   >

@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
@@ -35,7 +36,7 @@ import {
   useSaveProjectConfig,
   useTickets,
 } from "@/hooks/queries";
-import { useUI, type ProjectTab } from "@/store/ui";
+import { type ProjectTab } from "@/store/ui";
 import type {
   EnvironmentCfg,
   ProjectRepo,
@@ -64,10 +65,12 @@ const TABS: { id: ProjectTab; label: string }[] = [
 ];
 
 export function ProjectDetail() {
-  const key = useUI((s) => s.activeProject);
-  const projectTab = useUI((s) => s.projectTab);
-  const setProjectTab = useUI((s) => s.setProjectTab);
-  const navigate = useUI((s) => s.navigate);
+  const navigate = useNavigate();
+  const { projectName } = useParams();
+  const key = decodeURIComponent(projectName ?? "");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const projectTab = (searchParams.get("tab") as ProjectTab) ?? "overview";
+  const setProjectTab = (t: ProjectTab) => setSearchParams({ tab: t });
 
   const { data: projects } = useProjects();
   const { data: repos } = useProjectRepos(key);
@@ -102,14 +105,15 @@ export function ProjectDetail() {
   const glyphColor = meta.providerKind === "github" ? "#12121a" : "#fff";
 
   const onTab = (id: ProjectTab) => {
-    if (id === "tickets" || id === "runs") navigate(id);
+    if (id === "tickets") navigate("/tickets");
+    else if (id === "runs") navigate("/runs");
     else setProjectTab(id);
   };
 
   return (
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
       <button
-        onClick={() => navigate("projects")}
+        onClick={() => navigate("/projects")}
         className="mb-3.5 flex cursor-pointer items-center gap-[7px] border-none bg-transparent p-0 text-[12.5px] font-semibold text-ink-dim hover:text-[#c7c7d4]"
       >
         <ArrowLeft size={14} strokeWidth={2.2} /> All projects

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { ArrowRight, FolderKanban, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/Button";
@@ -6,7 +7,6 @@ import { providerGlyph } from "@/components/ui/badges";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { confidenceColor, knowledgeStatusStyle, providerLabel } from "@/data/projects";
 import { useKnowledgeList, useProjects, useProviders, useRefreshProjects } from "@/hooks/queries";
-import { useUI } from "@/store/ui";
 import type { KnowledgeStatus, ProjectKnowledgeOut, ProjectOut } from "@/types/api";
 
 /** Aggregate a project's per-repo knowledge rows into a single card summary. */
@@ -39,8 +39,7 @@ function summarize(rows: ProjectKnowledgeOut[]): KnowledgeSummary | undefined {
  * No mock data: an empty list prompts the user to connect a provider in Settings.
  */
 export function Projects() {
-  const openProject = useUI((s) => s.openProject);
-  const navigate = useUI((s) => s.navigate);
+  const navigate = useNavigate();
 
   const { data: projects, isLoading } = useProjects();
   const { data: providers } = useProviders();
@@ -110,7 +109,7 @@ export function Projects() {
           body="Connect Azure DevOps, Jira or GitHub in Settings, then refresh to pull your projects in."
           action={
             <div className="flex gap-2.5">
-              <Button variant="primary" onClick={() => navigate("settings")}>
+              <Button variant="primary" onClick={() => navigate("/settings")}>
                 Open Settings
               </Button>
               <Button variant="glass" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
@@ -127,7 +126,7 @@ export function Projects() {
               project={p}
               summary={byProject.get(p.name)}
               index={i}
-              onOpen={() => openProject(p.name)}
+              onOpen={() => navigate(`/projects/${encodeURIComponent(p.name)}`)}
             />
           ))}
         </div>
