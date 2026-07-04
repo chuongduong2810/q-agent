@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { useCreateRun, useSettings, useTickets } from "@/hooks/queries";
@@ -25,7 +26,7 @@ export function CreateRunModal() {
   const setRunField = useUI((s) => s.setRunField);
   const selected = useUI((s) => s.selected);
   const setActiveRun = useUI((s) => s.setActiveRun);
-  const navigate = useUI((s) => s.navigate);
+  const navigate = useNavigate();
   const selectedSprint = useUI((s) => s.selectedSprint);
 
   const { data: tickets } = useTickets();
@@ -73,7 +74,7 @@ export function CreateRunModal() {
         onSuccess: (run) => {
           closeCreateRun();
           setActiveRun(run.id);
-          navigate("run");
+          navigate(`/runs/${run.id}`);
         },
         onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create run"),
       },

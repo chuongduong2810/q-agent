@@ -1,68 +1,24 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, type ComponentType } from "react";
+import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { NeuralBackground } from "@/components/background/NeuralBackground";
 import { AppLayout } from "@/components/shell/AppLayout";
+import { UrlStoreSync } from "@/components/shell/UrlStoreSync";
 import { QueryProvider } from "@/app/QueryProvider";
-import { useRuns } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
-import type { Screen } from "@/types";
 
-import { Dashboard } from "@/screens/Dashboard";
-import { Projects } from "@/screens/Projects";
-import { ProjectDetail } from "@/screens/ProjectDetail";
 import { KnowledgeBuildOverlay } from "@/screens/KnowledgeBuildOverlay";
-import { Tickets } from "@/screens/Tickets";
-import { TicketDetail } from "@/screens/TicketDetail";
-import { Runs } from "@/screens/Runs";
-import { RunDetail } from "@/screens/RunDetail";
-import { ReviewCenter } from "@/screens/ReviewCenter";
-import { CreateLinkSync } from "@/screens/CreateLinkSync";
-import { Automation } from "@/screens/Automation";
-import { Execution } from "@/screens/Execution";
-import { Evidence } from "@/screens/Evidence";
-import { CommentPublish } from "@/screens/CommentPublish";
-import { Reports } from "@/screens/Reports";
-import { AuditLog } from "@/screens/AuditLog";
-import { Settings } from "@/screens/Settings";
 import { CommandPalette } from "@/screens/CommandPalette";
 import { CreateRunModal } from "@/screens/CreateRunModal";
 
-const SCREENS: Record<Screen, ComponentType> = {
-  dashboard: Dashboard,
-  projects: Projects,
-  project: ProjectDetail,
-  tickets: Tickets,
-  ticket: TicketDetail,
-  runs: Runs,
-  run: RunDetail,
-  review: ReviewCenter,
-  sync: CreateLinkSync,
-  automation: Automation,
-  console: Execution,
-  evidence: Evidence,
-  comment: CommentPublish,
-  reports: Reports,
-  audit: AuditLog,
-  settings: Settings,
-};
-
-function Shell() {
-  const screen = useUI((s) => s.screen);
-  const activeRunId = useUI((s) => s.activeRunId);
-  const setActiveRun = useUI((s) => s.setActiveRun);
+/**
+ * Root layout element for the data router (see router.tsx). Wraps the app in the
+ * query provider and background, mounts the shell (`AppLayout` renders the
+ * matched route via `<Outlet/>`), the URL→store bridge, and global overlays.
+ */
+export default function App() {
   const togglePalette = useUI((s) => s.togglePalette);
   const closePalette = useUI((s) => s.closePalette);
   const closeCreateRun = useUI((s) => s.closeCreateRun);
-  const { data: runs } = useRuns();
-
-  // Default the "active run" to the in-progress run (or the most recent) once runs load.
-  useEffect(() => {
-    if (activeRunId == null && runs && runs.length) {
-      const active = runs.find((r) => r.status !== "done") ?? runs[0];
-      setActiveRun(active.id);
-    }
-  }, [runs, activeRunId, setActiveRun]);
 
   // Global keyboard: ⌘K / Ctrl-K toggles the palette; Escape closes overlays.
   useEffect(() => {
@@ -80,36 +36,14 @@ function Shell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [togglePalette, closePalette, closeCreateRun]);
 
-  const ActiveScreen = SCREENS[screen];
-
-  return (
-    <>
-      <AppLayout>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={screen}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.28, ease: "easeOut" }}
-            className="h-full"
-          >
-            <ActiveScreen />
-          </motion.div>
-        </AnimatePresence>
-      </AppLayout>
-      <CommandPalette />
-      <CreateRunModal />
-      <KnowledgeBuildOverlay />
-    </>
-  );
-}
-
-export default function App() {
   return (
     <QueryProvider>
       <NeuralBackground />
-      <Shell />
+      <UrlStoreSync />
+      <AppLayout />
+      <CommandPalette />
+      <CreateRunModal />
+      <KnowledgeBuildOverlay />
       <Toaster
         theme="dark"
         position="bottom-right"
