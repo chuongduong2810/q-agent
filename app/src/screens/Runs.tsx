@@ -4,7 +4,6 @@ import { Plus, ArrowRight, ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/misc";
 import { useRuns } from "@/hooks/queries";
-import { useResolvedRunId } from "@/hooks/useResolvedRunId";
 import { useUI } from "@/store/ui";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import type { RunOut } from "@/types/api";
@@ -20,17 +19,21 @@ const RUN_STATUS_LABEL: Record<string, string> = {
   done: "Complete",
 };
 
-/** Runs list: the one active (non-done) run as a hero card, plus a history of done runs. */
+/**
+ * Runs list. Runs are independent and can be in flight concurrently, so every
+ * non-done run is shown: the newest as the highlighted hero, the rest in an
+ * "Active" list, and completed runs under "History".
+ */
 export function Runs() {
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const resolvedRunId = useResolvedRunId();
   const navigate = useNavigate();
 
   const { data: runs, isLoading } = useRuns();
 
-  const activeRun =
-    runs?.find((r) => r.status !== "done") ??
-    (resolvedRunId != null ? runs?.find((r) => r.id === resolvedRunId) : undefined);
+  // Runs arrive newest-first (the API orders by created_at desc).
+  const activeRuns = (runs ?? []).filter((r) => r.status !== "done");
+  const heroRun = activeRuns[0];
+  const otherActive = activeRuns.slice(1);
   const history = (runs ?? []).filter((r) => r.status === "done");
 
   const goRun = (run: RunOut) => navigate(`/runs/${run.id}`);
@@ -41,7 +44,7 @@ export function Runs() {
       <div className="mb-5 flex items-end justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-            Batch QA sessions &middot; {activeRun ? 1 : 0} active
+            Batch QA sessions &middot; {activeRuns.length} active
           </div>
           <h1 className="m-0 text-[28px] font-black tracking-tight">Runs</h1>
         </div>
@@ -72,9 +75,9 @@ export function Runs() {
         />
       ) : (
         <>
-          {activeRun && (
+          {heroRun && (
             <div
-              onClick={() => goRun(activeRun)}
+              onClick={() => goRun(heroRun)}
               className="relative mb-4 cursor-pointer overflow-hidden rounded-[20px] border p-[22px_24px] transition-colors hover:border-[rgba(139,92,246,.5)]"
               style={{
                 background: "linear-gradient(135deg,rgba(139,92,246,.18),rgba(99,102,241,.08))",
@@ -88,22 +91,22 @@ export function Runs() {
               <div className="relative flex items-center gap-4">
                 <div className="flex-1">
                   <div className="mb-1.5 flex items-center gap-2.5">
-                    <span className="font-mono text-[13px] font-bold text-violet">{activeRun.code}</span>
+                    <span className="font-mono text-[13px] font-bold text-violet">{heroRun.code}</span>
                     <span className="flex items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11px] font-bold text-[#fbbf24]" style={{ background: "rgba(245,158,11,.14)" }}>
                       <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" style={{ animation: "pulseDot 1.6s infinite" }} />
-                      {RUN_STATUS_LABEL[activeRun.status] ?? activeRun.status}
+                      {RUN_STATUS_LABEL[heroRun.status] ?? heroRun.status}
                     </span>
                   </div>
-                  <div className="text-[19px] font-extrabold tracking-tight">{activeRun.name}</div>
+                  <div className="text-[19px] font-extrabold tracking-tight">{heroRun.name}</div>
                   <div className="mt-1.5 text-[12.5px] text-[#c3c3d4]">
-                    {activeRun.scopeLabel} &middot; {activeRun.framework} &middot; {activeRun.env} &middot; {activeRun.workers} workers
+                    {heroRun.scopeLabel} &middot; {heroRun.framework} &middot; {heroRun.env} &middot; {heroRun.workers} workers
                   </div>
                 </div>
                 <Button
                   variant="white"
                   onClick={(e) => {
                     e.stopPropagation();
-                    goReview(activeRun);
+                    goReview(heroRun);
                   }}
                 >
                   Open Review Center
@@ -111,6 +114,17 @@ export function Runs() {
                 </Button>
               </div>
             </div>
+          )}
+
+          {otherActive.length > 0 && (
+            <>
+              <div className="mb-3 text-[12px] font-bold tracking-[.08em] text-[#6c6c7e]">ACTIVE</div>
+              <div className="mb-5 flex flex-col gap-[10px]">
+                {otherActive.map((r, i) => (
+                  <RunRow key={r.id} run={r} index={i} active onClick={() => goRun(r)} />
+                ))}
+              </div>
+            </>
           )}
 
           <div className="mb-3 text-[12px] font-bold tracking-[.08em] text-[#6c6c7e]">HISTORY</div>
@@ -121,7 +135,7 @@ export function Runs() {
           ) : (
             <div className="flex flex-col gap-[10px]">
               {history.map((r, i) => (
-                <HistoryRow key={r.id} run={r} index={i} onClick={() => goRun(r)} />
+                <RunRow key={r.id} run={r} index={i} onClick={() => goRun(r)} />
               ))}
             </div>
           )}
@@ -131,9 +145,24 @@ export function Runs() {
   );
 }
 
-function HistoryRow({ run, index, onClick }: { run: RunOut; index: number; onClick: () => void }) {
+/**
+ * A compact run row used by both the Active and History lists. Active rows get a
+ * pulsing amber status dot; completed rows are static green (or amber if the run
+ * ended before the final stage).
+ */
+function RunRow({
+  run,
+  index,
+  onClick,
+  active = false,
+}: {
+  run: RunOut;
+  index: number;
+  onClick: () => void;
+  active?: boolean;
+}) {
   const stage = runStatusToStage[run.status] ?? 8;
-  const color = stage >= 8 ? "#10b981" : "#f59e0b";
+  const color = active ? "#f59e0b" : stage >= 8 ? "#10b981" : "#f59e0b";
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -144,7 +173,11 @@ function HistoryRow({ run, index, onClick }: { run: RunOut; index: number; onCli
     >
       <span
         className="h-2.5 w-2.5 shrink-0 rounded-full"
-        style={{ background: color, boxShadow: `0 0 10px ${color}` }}
+        style={{
+          background: color,
+          boxShadow: `0 0 10px ${color}`,
+          ...(active ? { animation: "pulseDot 1.6s infinite" } : {}),
+        }}
       />
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center gap-[9px]">
@@ -157,7 +190,7 @@ function HistoryRow({ run, index, onClick }: { run: RunOut; index: number; onCli
       <span className="shrink-0 text-[12px] text-ink-dim">
         {run.ticketIds.length} ticket{run.ticketIds.length === 1 ? "" : "s"}
       </span>
-      <span className="w-[56px] shrink-0 text-right text-[15px] font-extrabold" style={{ color }}>
+      <span className="shrink-0 whitespace-nowrap text-right text-[15px] font-extrabold" style={{ color }}>
         {RUN_STATUS_LABEL[run.status] ?? run.status}
       </span>
     </motion.div>
