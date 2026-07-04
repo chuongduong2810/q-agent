@@ -21,6 +21,7 @@ DEFAULTS: dict[str, Any] = {
     "userName": "",
     "userRole": "",
     "autoAnnotate": True,
+    "neuralBackground": True,
 }
 
 
