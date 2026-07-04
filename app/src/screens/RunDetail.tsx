@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/misc";
 import { providerGlyph } from "@/components/ui/badges";
 import { PipelineRail, runStatusToStage } from "@/components/ui/PipelineRail";
+import { useNavigate, useParams } from "react-router-dom";
 import { useRun, useTickets } from "@/hooks/queries";
-import { useRunSocket } from "@/hooks/useRunSocket";
-import { useUI } from "@/store/ui";
+import { useRunEvents } from "@/hooks/useRunEvents";
 import type { ProgressEvent, RunTicketOut } from "@/types/api";
 
 const RUN_STATUS_LABEL: Record<string, string> = {
@@ -23,17 +23,16 @@ const RUN_STATUS_LABEL: Record<string, string> = {
 
 /** Run detail: pipeline stage, live processing banner, and per-ticket generation status. */
 export function RunDetail() {
-  const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
-  const setActiveRun = useUI((s) => s.setActiveRun);
+  const runId = Number(useParams().runId);
+  const navigate = useNavigate();
 
-  const { data: run, isLoading } = useRun(activeRunId);
+  const { data: run, isLoading } = useRun(runId);
   const { data: tickets } = useTickets();
 
   // Live phase messages per ticket, keyed by ticket externalId — updated from the
   // analysis.phase WS event since RunTicketOut.genStatus alone has no message text.
   const [phaseMsgs, setPhaseMsgs] = useState<Record<string, string>>({});
-  useRunSocket(activeRunId, (evt: ProgressEvent) => {
+  useRunEvents((evt: ProgressEvent) => {
     if (evt.event === "analysis.phase") {
       const { ticket, message } = evt.payload as { ticket?: string; message?: string };
       if (ticket && message) setPhaseMsgs((m) => ({ ...m, [ticket]: message }));
@@ -56,14 +55,13 @@ export function RunDetail() {
 
   const processing = run.status === "processing";
   const goReview = () => {
-    setActiveRun(run.id);
-    navigate("review");
+    navigate("/runs/" + run.id + "/review");
   };
 
   return (
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
       <button
-        onClick={() => navigate("runs")}
+        onClick={() => navigate("/runs")}
         className="mb-3.5 flex cursor-pointer items-center gap-[7px] border-none bg-transparent p-0 text-[12.5px] font-semibold text-ink-dim hover:text-[#c7c7d4]"
       >
         <ArrowLeft size={14} strokeWidth={2.2} />
@@ -120,10 +118,9 @@ export function RunDetail() {
             providerKind={tickets?.find((t) => t.externalId === rt.ticketExternalId)?.providerKind ?? "ado"}
             phaseMsg={phaseMsgs[rt.ticketExternalId]}
             index={i}
-            onReview={() => {
-              useUI.getState().toggleReviewTicket(rt.ticketExternalId);
-              navigate("review");
-            }}
+            onReview={() =>
+              navigate("/runs/" + runId + "/review?ticket=" + encodeURIComponent(rt.ticketExternalId))
+            }
           />
         ))}
       </div>

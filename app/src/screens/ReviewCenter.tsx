@@ -7,8 +7,8 @@ import { PipelineRail } from "@/components/ui/PipelineRail";
 import { approvalColors, Pill, priorityBg, priorityColor } from "@/components/ui/badges";
 import { Select } from "@/components/ui/Dropdown";
 import { EmptyState, Spinner } from "@/components/ui/misc";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useCaseMutations, useCreateAndLink, useRun, useRunCases } from "@/hooks/queries";
-import { useRunSocket } from "@/hooks/useRunSocket";
 import { useUI } from "@/store/ui";
 import type { TestCaseOut } from "@/types/api";
 
@@ -29,19 +29,28 @@ function groupByTicket(cases: TestCaseOut[]): Array<{ ticketExternalId: string; 
 const platformIcon: Record<string, string> = { Web: "🖥", Mobile: "📱", API: "🔌" };
 
 export function ReviewCenter() {
-  const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
-  const { data: run } = useRun(activeRunId);
-  const { data: cases, isLoading } = useRunCases(activeRunId);
-  const { setApproval, regenerateCase, approveAll, approveTicket, updateCase } = useCaseMutations(
-    activeRunId ?? 0,
-  );
-  const createAndLink = useCreateAndLink(activeRunId ?? 0);
-  const setActiveRun = useUI((s) => s.setActiveRun);
-  useRunSocket(activeRunId);
+  const runId = Number(useParams().runId);
+  const navigate = useNavigate();
+  const { data: run } = useRun(runId);
+  const { data: cases, isLoading } = useRunCases(runId);
+  const { setApproval, regenerateCase, approveAll, approveTicket, updateCase } =
+    useCaseMutations(runId);
+  const createAndLink = useCreateAndLink(runId);
 
-  const reviewOpenTicket = useUI((s) => s.reviewOpenTicket);
-  const toggleReviewTicket = useUI((s) => s.toggleReviewTicket);
+  // Which ticket accordion is expanded — a deep-linkable selection in the URL.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reviewOpenTicket = searchParams.get("ticket");
+  const toggleReviewTicket = (tid: string) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (next.get("ticket") === tid) next.delete("ticket");
+        else next.set("ticket", tid);
+        return next;
+      },
+      { replace: true },
+    );
+
   const reviewSel = useUI((s) => s.reviewSel);
   const toggleReviewSel = useUI((s) => s.toggleReviewSel);
   const clearReviewSel = useUI((s) => s.clearReviewSel);
@@ -57,8 +66,7 @@ export function ReviewCenter() {
   };
   const startCreateLink = (link: boolean, dryRun = false) => {
     createAndLink.mutate({ link, dryRun });
-    if (activeRunId != null) setActiveRun(activeRunId);
-    navigate("sync");
+    navigate("/runs/" + runId + "/sync");
   };
 
   const tickets = useMemo(() => groupByTicket(cases ?? []), [cases]);
@@ -71,18 +79,6 @@ export function ReviewCenter() {
     const pct = all.length ? Math.round((approved / all.length) * 100) : 0;
     return { approved, rejected, pending, pct };
   }, [cases]);
-
-  if (!activeRunId) {
-    return (
-      <div className="animate-fade-in-up px-1 pb-10 pt-0.5">
-        <EmptyState
-          icon={<Sparkles size={30} className="text-violet" />}
-          title="No active run"
-          body="Start a run from the Tickets screen to review generated test cases here."
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="animate-fade-in-up px-1 pb-10 pt-0.5">

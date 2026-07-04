@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Circle,
@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAnnotate, useAutoAnnotate, useEvidence } from "@/hooks/queries";
 import { useUI, type AnnotationTool, type EvidenceTab } from "@/store/ui";
 import type { ExecutionResultOut } from "@/types/api";
@@ -48,24 +49,38 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export function Evidence() {
-  const activeRunId = useUI((s) => s.activeRunId);
-  const navigate = useUI((s) => s.navigate);
-  const evidenceTicket = useUI((s) => s.evidenceTicket);
-  const setEvidenceTicket = useUI((s) => s.setEvidenceTicket);
+  const runId = Number(useParams().runId);
+  const navigate = useNavigate();
   const evidenceTab = useUI((s) => s.evidenceTab);
   const setEvidenceTab = useUI((s) => s.setEvidenceTab);
   const tool = useUI((s) => s.tool);
   const setTool = useUI((s) => s.setTool);
 
-  const { data: evidence, isLoading, isError } = useEvidence(activeRunId);
-  const annotate = useAnnotate(activeRunId ?? 0);
-  const autoAnnotate = useAutoAnnotate(activeRunId ?? 0);
+  // Which ticket's evidence is shown — a deep-linkable selection in the URL.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const evidenceTicket = searchParams.get("ticket");
+  const setEvidenceTicket = useCallback(
+    (tid: string, replace = false) =>
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("ticket", tid);
+          return next;
+        },
+        { replace },
+      ),
+    [setSearchParams],
+  );
+
+  const { data: evidence, isLoading, isError } = useEvidence(runId);
+  const annotate = useAnnotate(runId);
+  const autoAnnotate = useAutoAnnotate(runId);
 
   const tickets = evidence?.tickets ?? [];
 
   // Default to the first ticket once evidence loads.
   useEffect(() => {
-    if (!evidenceTicket && tickets.length) setEvidenceTicket(tickets[0].id);
+    if (!evidenceTicket && tickets.length) setEvidenceTicket(tickets[0].id, true);
   }, [tickets, evidenceTicket, setEvidenceTicket]);
 
   const selectedTicket = tickets.find((t) => t.id === evidenceTicket) ?? tickets[0];
@@ -91,7 +106,7 @@ export function Evidence() {
     <div className="animate-[fadeInUp_.5s_ease_both] px-1 pb-10 pt-0.5">
       <div className="mb-3.5">
         <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-          RUN-{activeRunId ?? "…"} &middot; evidence per test case, grouped by ticket
+          RUN-{runId} &middot; evidence per test case, grouped by ticket
         </div>
         <h1 className="m-0 text-[28px] font-black tracking-tight">Evidence</h1>
       </div>
@@ -111,7 +126,7 @@ export function Evidence() {
           title="No evidence yet"
           body="Run the approved suite to capture evidence for every ticket in the Run."
           action={
-            <Button variant="primary" size="lg" onClick={() => navigate("console")}>
+            <Button variant="primary" size="lg" onClick={() => navigate("/runs/" + runId + "/execution")}>
               Go to execution
             </Button>
           }
@@ -161,7 +176,7 @@ export function Evidence() {
                 })}
               </div>
             </div>
-            <Button variant="primary" size="lg" onClick={() => navigate("comment")} className="w-full">
+            <Button variant="primary" size="lg" onClick={() => navigate("/runs/" + runId + "/comment")} className="w-full">
               Prepare ticket comments
               <ArrowRight size={15} strokeWidth={2.2} />
             </Button>
