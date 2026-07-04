@@ -4,29 +4,32 @@ import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRuns } from "@/hooks/queries";
 import { cn } from "@/lib/cn";
-import { useUI } from "@/store/ui";
 
 const PANEL_WIDTH = 250;
 
 /**
- * The "Switch run" dropdown (design frame A2, `.rswitch`). Opened from the
- * {@link RunContextHeader} "Switch run" button; portalled to `document.body`
- * with fixed positioning anchored below-right of the trigger so ancestor
- * backdrop-filter/transform stacking contexts can't trap it.
+ * The "Switch run" dropdown (design frame A2, `.rswitch`). Controlled via props so
+ * each trigger owns its own instance — both the run-context header button and the
+ * workspace sidebar's run card open a menu anchored to the control that was
+ * clicked. Portalled to `document.body` with fixed positioning anchored
+ * below-right of the trigger so ancestor backdrop-filter/transform stacking
+ * contexts can't trap it.
  *
  * Selecting a run navigates to that run **on the same pipeline sub-screen**
  * (e.g. from `/runs/12/review` to `/runs/34/review`), so the user keeps their
  * place. Closes on select, outside click, or Escape.
  */
 export function RunSwitcher({
+  open,
+  onClose,
   anchorRef,
   runId,
 }: {
+  open: boolean;
+  onClose: () => void;
   anchorRef: RefObject<HTMLButtonElement | null>;
   runId: number;
 }) {
-  const open = useUI((s) => s.runSwitcherOpen);
-  const closeRunSwitcher = useUI((s) => s.closeRunSwitcher);
   const { data: runs } = useRuns();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -51,10 +54,10 @@ export function RunSwitcher({
       const t = e.target as Node;
       if (anchorRef.current?.contains(t)) return;
       if ((e.target as HTMLElement).closest?.("[data-run-switcher]")) return;
-      closeRunSwitcher();
+      onClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRunSwitcher();
+      if (e.key === "Escape") onClose();
     };
     const reposition = () => place();
     window.addEventListener("mousedown", onDown);
@@ -67,13 +70,13 @@ export function RunSwitcher({
       window.removeEventListener("scroll", reposition, true);
       window.removeEventListener("resize", reposition);
     };
-  }, [open, anchorRef, closeRunSwitcher]);
+  }, [open, anchorRef, onClose]);
 
   if (!open || !pos) return null;
 
   const select = (id: number) => {
     navigate(`/runs/${id}${seg ? `/${seg}` : ""}`);
-    closeRunSwitcher();
+    onClose();
   };
 
   return createPortal(

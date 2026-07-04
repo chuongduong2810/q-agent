@@ -1,10 +1,9 @@
 import { CheckSquare, ChevronDown } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import { runRateLabel } from "@/components/dashboard/runStatus";
 import { useRun } from "@/hooks/queries";
-import { useUI } from "@/store/ui";
 
 /**
  * The run-context header shown in place of the global top bar on every
@@ -15,7 +14,7 @@ import { useUI } from "@/store/ui";
  */
 export function RunContextHeader({ runId }: { runId: number }) {
   const { data: run } = useRun(runId);
-  const openRunSwitcher = useUI((s) => s.openRunSwitcher);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
   const stage = run ? (runStatusToStage[run.status] ?? 1) : 1;
@@ -55,13 +54,18 @@ export function RunContextHeader({ runId }: { runId: number }) {
 
       <button
         ref={btnRef}
-        onClick={openRunSwitcher}
+        onClick={() => setSwitcherOpen((o) => !o)}
         className="ml-auto flex items-center gap-1.5 rounded-[9px] border border-white/[0.1] bg-white/[0.05] px-[11px] py-1.5 text-[11px] font-semibold text-ink-soft hover:bg-white/[0.09]"
       >
         Switch run <ChevronDown size={12} strokeWidth={2} />
       </button>
 
-      <RunSwitcher anchorRef={btnRef} runId={runId} />
+      <RunSwitcher
+        open={switcherOpen}
+        onClose={() => setSwitcherOpen(false)}
+        anchorRef={btnRef}
+        runId={runId}
+      />
     </header>
   );
 }
