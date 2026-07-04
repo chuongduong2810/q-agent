@@ -19,7 +19,8 @@ Navigation is **URL-driven** via `react-router-dom` (`app/src/router.tsx`, `crea
 - The URL is the source of truth for navigation — **not** Zustand. `store/ui.ts` holds UI-only state (command palette, modals + form fields, list filters/search/selection, review edit draft, annotation tool). Never reintroduce navigation fields (`screen`, `activeRunId`, `activeProject`, `activeTicket`, `projectTab`) to the store.
 - Run-scoped screens live under `/runs/:runId/*` and read `runId` via `useParams`. Intra-screen *selection* (expanded accordion, selected case/ticket, project tab) goes in **query params** (`?ticket=`, `?case=`, `?tab=`) — not the store, not the path.
 - The run WebSocket is owned by `RunLayout` via `RunSocketProvider` (one socket per run visit, persists across intra-run navigation). Screens subscribe to transient events with `useRunEvents(handler)` — don't open `useRunSocket` per screen.
-- Resolve "the current run" for shell/nav links with `useResolvedRunId()` (URL `runId` → most-recent non-done run) — never a stored `activeRunId`.
+- **Run-scoped screens are reachable only from within a run** (workspace mode — see [ADR 0004](docs/adr/0004-run-workspace-navigation.md)). The global sidebar (`GlobalSidebar`) lists **only** global screens; run-scoped nav (Review/Automation/Execution/Evidence/Link/Publish) lives in the run workspace sidebar (`RunSidebar`) + run-context header (`RunContextHeader`), both shown only under `/runs/:runId/*`.
+- **Never default to "the latest run."** For shell chrome, read `useRunRouteId()` (URL-only, returns `null` off run routes) — there is no "resolve current run" fallback (the old `useResolvedRunId` is deleted). `RunLayout` guards every run-scoped route: an invalid or nonexistent `:runId` redirects to `/runs`, never auto-selecting a run.
 
 ## Build & verify (app/)
 
