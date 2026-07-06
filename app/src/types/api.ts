@@ -398,6 +398,14 @@ export interface RunCreate {
   sprintPath?: string | null;
 }
 
+export type SpecStatus =
+  | "draft"
+  | "blocked"
+  | "running"
+  | "passed"
+  | "failed"
+  | "product_defect";
+
 export interface AutomationSpecOut {
   id: number;
   testCaseId: number;
@@ -405,6 +413,9 @@ export interface AutomationSpecOut {
   language: string;
   framework: string;
   code: string;
+  status: string;
+  blockReason: string;
+  gateReport: string;
 }
 
 export interface HealAttempt {
@@ -464,6 +475,14 @@ export interface BackendLogStats {
 
 export type ExecCaseStatus = "pending" | "running" | "pass" | "fail" | "skipped";
 
+export type FailureClass =
+  | ""
+  | "test_defect"
+  | "product_defect"
+  | "flaky"
+  | "environment"
+  | "timeout";
+
 export interface EvidenceOut {
   id: number;
   kind: string;
@@ -481,6 +500,7 @@ export interface ExecutionResultOut {
   caseCode: string;
   title: string;
   status: ExecCaseStatus;
+  failureClass: string;
   durationMs: number;
   errorMessage: string;
   consoleLogs: Array<Record<string, unknown>>;
@@ -555,6 +575,7 @@ export interface SettingsOut {
   userRole: string;
   autoAnnotate: boolean;
   neuralBackground: boolean;
+  claudeModel: string;
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 

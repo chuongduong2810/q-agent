@@ -12,6 +12,8 @@ from app.db import Base, UTCDateTime, timestamp_column
 EXEC_STATUSES = ("queued", "running", "passed", "failed", "done")
 CASE_RESULT_STATUSES = ("pending", "running", "pass", "fail", "skipped")
 EVIDENCE_KINDS = ("screenshot", "video", "trace", "console", "network", "summary")
+# Root-cause classification of a failed result (see failure_classifier). "" = unclassified.
+FAILURE_CLASSES = ("", "test_defect", "product_defect", "flaky", "environment", "timeout")
 
 
 class Execution(Base):
@@ -53,6 +55,8 @@ class ExecutionResult(Base):
     title: Mapped[str] = mapped_column(String(500), default="")
 
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    # Root-cause classification of a failure (see FAILURE_CLASSES); "" until classified.
+    failure_class: Mapped[str] = mapped_column(String(24), default="")
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str] = mapped_column(Text, default="")
     console_logs: Mapped[list] = mapped_column(JSON, default=list)
