@@ -1,6 +1,7 @@
 import { ChevronDown, Plus, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
+import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
 import { RunContextHeader } from "@/components/shell/RunContextHeader";
 import { useProjects } from "@/hooks/queries";
 import { useRunRouteId } from "@/hooks/useRunRouteId";
@@ -51,6 +52,7 @@ export function TopBar() {
 
       <div className="ml-auto flex items-center gap-2">
         <AiActivityIndicator />
+        <ClaudeStatsButton />
         <button
           onClick={openCreateRun}
           className="accent-gradient flex h-[38px] items-center gap-2 rounded-xl px-4 text-[13px] font-semibold text-white shadow-[0_8px_22px_-8px_rgba(139,92,246,.8)] hover:brightness-110"

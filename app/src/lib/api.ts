@@ -10,6 +10,7 @@ import type {
   AuditEventOut,
   AuditStats,
   AuthState,
+  ClaudeStats,
   AutomationSpecOut,
   AutomationStatus,
   BackendLogOut,
@@ -105,6 +106,7 @@ export const api = {
   // health / observability
   capabilities: () => get<{ claude: boolean; version: string }>("/capabilities"),
   aiActivity: () => get<AiActivity>("/ai/activity"),
+  aiStats: () => get<ClaudeStats>("/ai/stats"),
   aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai`,
 
   // providers + settings
