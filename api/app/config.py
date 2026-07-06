@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Claude CLI
     claude_bin: str = "claude"
     claude_model: str = "claude-sonnet-5"
+    # Root of the local Claude Code state (session transcripts live under
+    # `<claude_home>/projects/`). Read by `claude_usage_reader` for real /ai/stats.
+    claude_home: Path = Path.home() / ".claude"
     claude_timeout_s: int = 300
     # project-bootstrap traverses a whole repo, so it gets a longer budget than a
     # one-shot prompt. It runs in a background thread, so a long wait is harmless.

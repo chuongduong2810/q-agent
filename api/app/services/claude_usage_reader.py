@@ -1,0 +1,281 @@
+"""Read REAL Claude Code usage from local session transcripts.
+
+LOCAL-ONLY: this reads the Claude Code session logs stored on THIS machine under
+``~/.claude/projects/<slug>/<sessionId>.jsonl`` — the same data the CLI's
+``/usage`` command reports. It aggregates **all** local Claude sessions on the
+machine (every project), reads local files only, and never transmits anything.
+
+Each transcript line is a JSON record; assistant API responses carry
+``message.model`` and ``message.usage`` (``input_tokens`` / ``output_tokens`` /
+``cache_creation_input_tokens`` → cacheWrite / ``cache_read_input_tokens`` →
+cacheRead), a top-level ISO ``timestamp`` ('Z'), and a message id
+(``message.id`` and/or top-level ``uuid``). Duplicate lines for the same message
+occur, so we DEDUP by message id. Per-message cost is not stored by the CLI
+(``costUSD`` is null), so cost is computed from token counts × a per-model price
+table (see ``_PRICES``).
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from app.config import settings as app_settings
+from app.logging import logger
+from app.services.ai_usage_service import MODEL_LABELS, _current_model
+
+# --- Pricing -----------------------------------------------------------------
+# USD per 1,000,000 tokens. Sourced from the `claude-api` skill (Current Models
+# pricing table + the prompt-caching economics section): cache-read ≈ 0.1× the
+# input price, cache-write ≈ 1.25× the input price (5-minute TTL — the CLI's
+# default). Sonnet uses the standard (non-introductory) list price. Models absent
+# from this table contribute 0 to cost (we don't guess prices).
+_MTOK = 1_000_000
+_PRICES: dict[str, dict[str, float]] = {
+    "claude-opus-4-8": {"input": 5.0, "output": 25.0, "cacheRead": 0.5, "cacheWrite": 6.25},
+    "claude-sonnet-5": {"input": 3.0, "output": 15.0, "cacheRead": 0.3, "cacheWrite": 3.75},
+    "claude-haiku-4-5-20251001": {"input": 1.0, "output": 5.0, "cacheRead": 0.1, "cacheWrite": 1.25},
+}
+
+_SESSION_WINDOW = timedelta(hours=5)
+_CACHE_TTL_S = 60.0
+
+# In-process (timestamp, result) cache. The frontend polls ~every 30s and a full
+# scan of the transcripts is comparatively expensive, so we reuse the computed
+# result within a short TTL.
+_cache: tuple[float, dict[str, Any]] | None = None
+
+
+def _int(value: Any) -> int:
+    """Best-effort non-negative int coercion for a token count."""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_ts(raw: Any) -> datetime | None:
+    """Parse an ISO-8601 'Z' timestamp into an aware datetime, or None."""
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _empty_kinds() -> dict[str, int]:
+    return {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
+
+
+def _cost(model: str, kinds: dict[str, int]) -> float:
+    """Compute USD cost for one model's token sums via the price table."""
+    price = _PRICES.get(model)
+    if not price:
+        return 0.0
+    return (
+        kinds["input"] * price["input"]
+        + kinds["output"] * price["output"]
+        + kinds["cacheRead"] * price["cacheRead"]
+        + kinds["cacheWrite"] * price["cacheWrite"]
+    ) / _MTOK
+
+
+def _iso_z(dt: datetime) -> str:
+    """Format an aware datetime as an ISO-8601 'Z' (UTC) string."""
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _window_summary(
+    models: dict[str, dict[str, int]], requests: int, resets_at: str
+) -> dict[str, Any]:
+    """Roll per-model token sums into a window summary (all-model totals)."""
+    total_tokens = 0
+    total_cost = 0.0
+    for model, kinds in models.items():
+        total_tokens += sum(kinds.values())
+        total_cost += _cost(model, kinds)
+    return {
+        "costUsd": round(total_cost, 2),
+        "tokens": total_tokens,
+        "requests": requests,
+        "resetsAt": resets_at,
+    }
+
+
+def _compute() -> dict[str, Any]:
+    """Scan the local transcripts and build the ``/ai/stats`` contract dict."""
+    from app.services import claude_cli  # local import avoids load-order coupling
+
+    cur_model = _current_model()
+    cur_label, cur_ctx = MODEL_LABELS.get(cur_model, (cur_model, "—"))
+
+    now_local = datetime.now().astimezone()
+    today_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=today_start.weekday())
+    session_start = now_local - _SESSION_WINDOW
+    # Only files touched at/after the earlier of the two window starts can hold
+    # relevant records (the 5h session window can precede Monday 00:00 early in
+    # the week).
+    file_cutoff = min(week_start, session_start)
+
+    # Next Monday 00:00 UTC — the ISO-week reset boundary.
+    now_utc = datetime.now(timezone.utc)
+    today_utc = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    days_ahead = 7 - now_utc.weekday()  # Mon=0 -> 7 (always the *next* Monday)
+    week_resets_at = (today_utc + timedelta(days=days_ahead)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    week_models: dict[str, dict[str, int]] = defaultdict(_empty_kinds)
+    session_models: dict[str, dict[str, int]] = defaultdict(_empty_kinds)
+    week_requests = 0
+    session_requests = 0
+    session_earliest: datetime | None = None
+    seen: set[str] = set()
+
+    projects_dir = app_settings.claude_home / "projects"
+    if projects_dir.is_dir():
+        for path in projects_dir.rglob("*.jsonl"):
+            try:
+                mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            except OSError:
+                continue
+            if mtime < file_cutoff:
+                continue
+            try:
+                handle = path.open("r", encoding="utf-8")
+            except OSError:
+                continue
+            with handle:
+                for line in handle:
+                    if '"usage"' not in line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    if not isinstance(rec, dict):
+                        continue
+                    msg = rec.get("message")
+                    if not isinstance(msg, dict):
+                        continue
+                    usage = msg.get("usage")
+                    if not isinstance(usage, dict):
+                        continue
+
+                    mid = msg.get("id") or rec.get("uuid")
+                    if mid is not None:
+                        if mid in seen:
+                            continue  # DEDUP: same assistant message already counted
+                        seen.add(mid)
+
+                    ts = _parse_ts(rec.get("timestamp"))
+                    if ts is None:
+                        continue
+                    in_week = ts >= week_start
+                    in_session = ts >= session_start
+                    if not (in_week or in_session):
+                        continue
+
+                    model = msg.get("model") or "unknown"
+                    kinds = {
+                        "input": _int(usage.get("input_tokens")),
+                        "output": _int(usage.get("output_tokens")),
+                        "cacheRead": _int(usage.get("cache_read_input_tokens")),
+                        "cacheWrite": _int(usage.get("cache_creation_input_tokens")),
+                    }
+                    if in_week:
+                        acc = week_models[model]
+                        for k, v in kinds.items():
+                            acc[k] += v
+                        week_requests += 1
+                    if in_session:
+                        acc = session_models[model]
+                        for k, v in kinds.items():
+                            acc[k] += v
+                        session_requests += 1
+                        if session_earliest is None or ts < session_earliest:
+                            session_earliest = ts
+
+    session_resets_at = _iso_z((session_earliest or now_local) + _SESSION_WINDOW)
+
+    cur_kinds = week_models.get(cur_model, _empty_kinds())
+    by_model = sorted(
+        (
+            {
+                "model": model,
+                "modelLabel": MODEL_LABELS.get(model, (model, "—"))[0],
+                "input": kinds["input"],
+                "output": kinds["output"],
+                "cacheRead": kinds["cacheRead"],
+                "cacheWrite": kinds["cacheWrite"],
+                "costUsd": round(_cost(model, kinds), 2),
+            }
+            for model, kinds in week_models.items()
+        ),
+        key=lambda m: m["costUsd"],
+        reverse=True,
+    )
+
+    return {
+        "model": cur_model,
+        "modelLabel": cur_label,
+        "operational": claude_cli.is_available(),
+        "ctxWindow": cur_ctx,
+        "session": _window_summary(session_models, session_requests, session_resets_at),
+        "week": _window_summary(week_models, week_requests, week_resets_at),
+        "breakdown": {
+            "input": cur_kinds["input"],
+            "output": cur_kinds["output"],
+            "cacheRead": cur_kinds["cacheRead"],
+            "cacheWrite": cur_kinds["cacheWrite"],
+        },
+        "byModel": by_model,
+    }
+
+
+def _compute_zero() -> dict[str, Any]:
+    """A well-formed all-zero stats dict used as the defensive fallback."""
+    now_local = datetime.now().astimezone()
+    cur_model = "unknown"
+    try:
+        cur_model = _current_model()
+    except Exception:  # noqa: BLE001
+        pass
+    label, ctx = MODEL_LABELS.get(cur_model, (cur_model, "—"))
+    now_utc = datetime.now(timezone.utc)
+    today_utc = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_resets = (today_utc + timedelta(days=7 - now_utc.weekday())).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    zero = {"costUsd": 0.0, "tokens": 0, "requests": 0}
+    return {
+        "model": cur_model,
+        "modelLabel": label,
+        "operational": False,
+        "ctxWindow": ctx,
+        "session": {**zero, "resetsAt": _iso_z(now_local + _SESSION_WINDOW)},
+        "week": {**zero, "resetsAt": week_resets},
+        "breakdown": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+        "byModel": [],
+    }
+
+
+def read_stats() -> dict[str, Any]:
+    """Return real local Claude usage as the ``GET /ai/stats`` contract dict.
+
+    Never raises: a malformed transcript, missing log directory, or unreadable
+    file yields a well-formed (all-zero if necessary) stats dict. Results are
+    cached in-process for ~60s.
+    """
+    global _cache
+    now = time.monotonic()
+    if _cache is not None and now - _cache[0] < _CACHE_TTL_S:
+        return _cache[1]
+    try:
+        result = _compute()
+    except Exception as exc:  # noqa: BLE001 - stats must never break the endpoint
+        logger.warning("Claude usage read failed: {}", exc)
+        result = _compute_zero()
+    _cache = (now, result)
+    return result
