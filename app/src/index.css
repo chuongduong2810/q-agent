@@ -93,6 +93,14 @@
   0% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(9); }
 }
+@keyframes procDot {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+@keyframes procScan {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
 
 * {
   box-sizing: border-box;

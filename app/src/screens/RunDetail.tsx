@@ -58,6 +58,11 @@ export function RunDetail() {
     navigate("/runs/" + run.id + "/review");
   };
 
+  const total = run.runTickets.length;
+  const analyzed = run.runTickets.filter((rt) => rt.genStatus === "done").length;
+  const pct = total ? Math.round((analyzed / total) * 100) : 0;
+  const headline = Object.values(phaseMsgs).at(-1) ?? "Reading requirements…";
+
   return (
     <div className="px-1 pb-10 pt-0.5">
       <button
@@ -96,15 +101,96 @@ export function RunDetail() {
 
       {processing && (
         <div
-          className="glass mb-3.5 rounded-[20px] p-[20px_22px]"
-          style={{ borderColor: "rgba(139,92,246,.24)" }}
+          className="relative mb-3.5 overflow-hidden rounded-[20px] p-[22px_24px]"
+          style={{
+            background: "linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.08))",
+            border: "1px solid rgba(139,92,246,.34)",
+            boxShadow: "0 0 40px -12px rgba(139,92,246,.4)",
+          }}
         >
-          <div className="mb-1 flex items-center gap-[11px] text-[14px] font-bold">
-            <span className="h-[5px] w-[5px] rounded-full bg-[#a78bfa]" style={{ animation: "think 1.4s infinite" }} />
-            Q&#8209;Agent is processing the ticket queue
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 top-0 w-[120px]"
+            style={{
+              background: "linear-gradient(90deg,transparent,rgba(167,139,250,.18),transparent)",
+              animation: "procScan 2.2s ease-in-out infinite",
+            }}
+          />
+          <div className="relative flex items-center gap-[15px]">
+            <div
+              className="relative flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[13px]"
+              style={{
+                background: "linear-gradient(135deg,#8b5cf6,#6366f1)",
+                boxShadow: "0 8px 24px -6px rgba(139,92,246,.7)",
+              }}
+            >
+              <span
+                className="absolute rounded-[16px]"
+                style={{
+                  inset: "-5px",
+                  border: "2px solid transparent",
+                  borderTopColor: "#c4b5fd",
+                  borderRightColor: "#c4b5fd",
+                  animation: "spin 1s linear infinite",
+                }}
+              />
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-[10px]">
+                <span className="text-[15px] font-extrabold tracking-[-.01em]">
+                  Q&#8209;Agent is analyzing your tickets
+                </span>
+                <span className="inline-flex gap-[3px]">
+                  <span
+                    className="h-[5px] w-[5px] rounded-full bg-[#c4b5fd]"
+                    style={{ animation: "procDot 1.2s ease-in-out infinite" }}
+                  />
+                  <span
+                    className="h-[5px] w-[5px] rounded-full bg-[#c4b5fd]"
+                    style={{ animation: "procDot 1.2s ease-in-out .2s infinite" }}
+                  />
+                  <span
+                    className="h-[5px] w-[5px] rounded-full bg-[#c4b5fd]"
+                    style={{ animation: "procDot 1.2s ease-in-out .4s infinite" }}
+                  />
+                </span>
+              </div>
+              <div className="mt-[3px] text-[12.5px] text-[#c3b8e8]">{headline}</div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-[22px] font-black tracking-[-.02em] text-white">
+                {analyzed}
+                <span className="text-[13px] font-bold text-[#b9a8e6]">/{total}</span>
+              </div>
+              <div className="text-[10.5px] font-semibold tracking-[.03em] text-[#b9a8e6]">
+                TICKETS ANALYZED
+              </div>
+            </div>
           </div>
-          <div className="text-[12.5px] text-ink-dim">
-            Reading requirements and generating test cases for each ticket in the Run
+          <div
+            className="relative mt-[16px] h-[6px] overflow-hidden rounded-[6px]"
+            style={{ background: "rgba(255,255,255,.09)" }}
+          >
+            <div
+              className="h-full rounded-[6px]"
+              style={{
+                background: "linear-gradient(90deg,#8b5cf6,#22d3ee)",
+                width: pct + "%",
+                transition: "width .5s cubic-bezier(.2,.8,.2,1)",
+                boxShadow: "0 0 12px rgba(139,92,246,.7)",
+              }}
+            />
           </div>
         </div>
       )}
