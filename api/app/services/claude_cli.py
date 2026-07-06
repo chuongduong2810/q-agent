@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +71,34 @@ def _compose_system(system: str | None, skill: str | None, include_template: boo
     return f"{skill_text}\n\n{system}" if system else skill_text
 
 
+def _record_usage(envelope: dict | None, *, model: str, action: str, wall_ms: int) -> None:
+    """Best-effort: log a successful call's real token/cost/latency usage.
+
+    Parses the CLI's JSON result envelope for ``total_cost_usd``, ``usage`` token
+    counts and ``duration_ms`` (falling back to the measured wall-clock time), and
+    hands them to :func:`ai_usage_service.record`. Wrapped so a logging failure can
+    never break the Claude call it observes.
+    """
+    try:
+        from app.services import ai_usage_service
+
+        env = envelope or {}
+        usage = env.get("usage") or {}
+        duration = env.get("duration_ms")
+        ai_usage_service.record(
+            model=model,
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
+            cache_read=usage.get("cache_read_input_tokens", 0),
+            cache_write=usage.get("cache_creation_input_tokens", 0),
+            cost_usd=env.get("total_cost_usd", 0.0),
+            duration_ms=int(duration) if isinstance(duration, (int, float)) else wall_ms,
+            action=action,
+        )
+    except Exception as exc:  # noqa: BLE001 - usage capture is additive + best-effort
+        logger.warning("Claude usage capture skipped: {}", exc)
+
+
 def _resolve_cwd(cwd: str | Path | None) -> str | None:
     """Return an existing directory to run the CLI in, or None (inherit ours)."""
     if not cwd:
@@ -115,6 +144,7 @@ def run_prompt(
 
     call_id = activity.start(label or skill or "Claude CLI", skill)
     logger.info("Claude CLI: {} chars prompt, model={}", len(prompt), model)
+    t0 = time.monotonic()
     try:
         proc = subprocess.run(  # noqa: S603
             cmd,
@@ -142,14 +172,20 @@ def run_prompt(
         raise ClaudeError(f"Claude CLI exited {proc.returncode}: {proc.stderr.strip()[:500]}")
 
     activity.finish(call_id, ok=True)
+    wall_ms = int((time.monotonic() - t0) * 1000)
     raw = proc.stdout.strip()
-    # JSON envelope: {"type":"result","result":"...", ...}
+    # JSON envelope: {"type":"result","result":"...","usage":{...},"total_cost_usd":...}
+    envelope: dict | None = None
     try:
-        envelope = json.loads(raw)
-        if isinstance(envelope, dict) and "result" in envelope:
-            return str(envelope["result"])
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            envelope = parsed
     except json.JSONDecodeError:
         pass
+    # Capture real per-call usage (tokens/cost/latency) for the stats panel.
+    _record_usage(envelope, model=model, action=label or skill or "Claude CLI", wall_ms=wall_ms)
+    if envelope is not None and "result" in envelope:
+        return str(envelope["result"])
     return raw
 
 
