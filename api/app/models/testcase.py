@@ -12,6 +12,8 @@ from app.db import Base, timestamp_column
 APPROVAL_STATUSES = ("pending", "approved", "rejected")
 AUTOMATION_TYPES = ("Playwright", "Selenium", "Cypress", "Manual")
 SOURCES = ("ai", "manual")
+# Lifecycle of a generated spec through the placeholder gate + execution/heal loop.
+SPEC_STATUSES = ("draft", "blocked", "running", "passed", "failed", "product_defect")
 
 
 class TestCase(Base):
@@ -57,6 +59,12 @@ class AutomationSpec(Base):
     path: Mapped[str] = mapped_column(String(500), default="")  # on-disk spec path
     # Last self-heal run: JSON {finalStatus, maxAttempts, healedAt, attempts:[...]}.
     heal_report: Mapped[str] = mapped_column(Text, default="")
+    # Placeholder-gate + execution lifecycle (see SPEC_STATUSES).
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    # Why the gate blocked this spec (human-readable; empty unless blocked).
+    block_reason: Mapped[str] = mapped_column(Text, default="")
+    # JSON string of the last placeholder-gate outcome (see placeholder_gate.gate_spec).
+    gate_report: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = timestamp_column()
 
     test_case: Mapped["TestCase"] = relationship(back_populates="spec")

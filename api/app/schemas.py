@@ -452,6 +452,9 @@ class AutomationSpecOut(ApiModel):
     language: str = "TypeScript"
     framework: str = "Playwright"
     code: str = ""
+    status: str = "draft"
+    block_reason: str = ""
+    gate_report: str = ""
 
 
 class AutomationSpecUpdate(ApiModel):
@@ -478,6 +481,7 @@ class ExecutionResultOut(ApiModel):
     case_code: str
     title: str = ""
     status: str
+    failure_class: str = ""
     duration_ms: int = 0
     error_message: str = ""
     console_logs: list = Field(default_factory=list)
@@ -573,6 +577,7 @@ class SettingsOut(ApiModel):
     user_role: str = ""
     auto_annotate: bool = True
     neural_background: bool = True
+    claude_model: str = "claude-sonnet-5"
 
 
 class SettingsUpdate(ApiModel):
@@ -586,3 +591,4 @@ class SettingsUpdate(ApiModel):
     user_role: str | None = None
     auto_annotate: bool | None = None
     neural_background: bool | None = None
+    claude_model: str | None = None
