@@ -24,7 +24,7 @@ from app.models.provider import Provider
 from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
-from app.services import audit_service, project_config_service, settings_store
+from app.services import audit_service, project_config_service, run_context, settings_store
 from app.services.adapters import get_adapter
 from app.services.claude_cli import ClaudeError, run_json
 from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR
@@ -227,6 +227,8 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
 
 def _run_pipeline(run_id: int) -> None:
     """The actual pipeline body; opens its own session. Safe to call from any thread."""
+    # Attribute this thread's Claude spend to the run (see run_context).
+    run_context.set_run(run_id)
     db = db_module.SessionLocal()
     try:
         run = db.query(Run).filter(Run.id == run_id).first()
@@ -256,6 +258,7 @@ def _run_pipeline(run_id: int) -> None:
         )
     finally:
         db.close()
+        run_context.clear()
 
 
 def run_generation_pipeline(run_id: int, *, blocking: bool = False) -> threading.Thread | None:

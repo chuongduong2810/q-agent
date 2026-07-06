@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app import db
 from app.config import settings as app_settings
@@ -31,6 +32,31 @@ MODEL_LABELS: dict[str, tuple[str, str]] = {
     "claude-sonnet-5": ("Claude Sonnet 5", "200K"),
     "claude-haiku-4-5-20251001": ("Claude Haiku 4.5", "200K"),
 }
+
+# Recorded CLI ``action`` (skill id) -> (process key, display name). Groups the
+# raw per-call usage rows into the coarse "process" buckets the per-run cost panel
+# renders. Anything unmatched falls into an "other" bucket (see ``_process_for_action``).
+_PROCESS_MAP: dict[str, tuple[str, str]] = {
+    "requirement-analyst": ("analyze", "Analyze"),
+    "test-case-generator": ("generate", "Generate cases"),
+    "automation-generator": ("automation", "Automation"),
+    "execution-analyzer": ("analysis", "Failure analysis"),
+    "ticket-comment-generator": ("publish", "Publish"),
+    "screenshot-annotator": ("evidence", "Evidence analysis"),
+}
+
+
+def _process_for_action(action: str) -> tuple[str, str]:
+    """Map a recorded ``action`` to its ``(process key, display name)``.
+
+    Known skill ids map to their fixed process; anything else falls into the
+    ``other`` bucket with a titleized version of the action as its name.
+    """
+    raw = (action or "").strip()
+    if raw in _PROCESS_MAP:
+        return _PROCESS_MAP[raw]
+    name = raw.replace("-", " ").replace("_", " ").strip().title() or "Other"
+    return "other", name
 
 
 def _current_model() -> str:
@@ -49,6 +75,7 @@ def record(
     cost_usd: float,
     duration_ms: int,
     action: str,
+    run_id: int | None = None,
 ) -> None:
     """Append one usage row for a completed Claude CLI call (best-effort).
 
@@ -65,12 +92,20 @@ def record(
         cost_usd: Total call cost in USD (``total_cost_usd``).
         duration_ms: Wall-clock duration of the call in milliseconds.
         action: Human label for the call (skill / label / "Claude CLI").
+        run_id: The run this call belongs to. When ``None`` (the common case for
+            CLI callers) it is resolved from the ambient run context set by the
+            run-scoped worker thread, so per-run spend can be attributed later.
     """
+    if run_id is None:
+        from app.services import run_context
+
+        run_id = run_context.get_run()
     try:
         session = db.SessionLocal()
         try:
             session.add(
                 ClaudeUsage(
+                    run_id=run_id,
                     model=model or "",
                     input_tokens=int(input_tokens or 0),
                     output_tokens=int(output_tokens or 0),
@@ -159,4 +194,87 @@ def stats() -> dict[str, Any]:
             "cacheRead": bk_cache_read,
             "cacheWrite": bk_cache_write,
         },
+    }
+
+
+def run_breakdown(session: Session, run_id: int) -> dict[str, Any]:
+    """Aggregate one run's recorded Claude usage into the per-run cost contract.
+
+    Sums every :class:`ClaudeUsage` row stamped with ``run_id``, grouped into
+    coarse process buckets (see :data:`_PROCESS_MAP`). Per-process ``tokens`` is
+    the all-kinds total (input+output+cacheRead+cacheWrite); totals sum across the
+    processes. ``modelLabel`` is the most-used model's human label. Returns the
+    empty-usage shape (``processes: []``) when the run has no recorded calls.
+
+    Args:
+        session: An open SQLAlchemy session bound to the app database.
+        run_id: The run whose usage rows to aggregate.
+
+    Returns:
+        The ``GET /runs/{run_id}/ai-usage`` contract dict.
+    """
+    rows = session.query(ClaudeUsage).filter(ClaudeUsage.run_id == run_id).all()
+    if not rows:
+        return {
+            "runId": run_id,
+            "modelLabel": "",
+            "totalCostUsd": 0.0,
+            "totalTokens": 0,
+            "processes": [],
+        }
+
+    model_counts: dict[str, int] = {}
+    groups: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        model_counts[row.model or ""] = model_counts.get(row.model or "", 0) + 1
+        key, name = _process_for_action(row.action)
+        group = groups.get(key)
+        if group is None:
+            group = groups[key] = {
+                "key": key,
+                "name": name,
+                "action": (row.action or "").strip() or key,
+                "input": 0,
+                "output": 0,
+                "tokens": 0,
+                "costUsd": 0.0,
+                "calls": 0,
+            }
+        row_tokens = (
+            int(row.input_tokens or 0)
+            + int(row.output_tokens or 0)
+            + int(row.cache_read_tokens or 0)
+            + int(row.cache_write_tokens or 0)
+        )
+        group["input"] += int(row.input_tokens or 0)
+        group["output"] += int(row.output_tokens or 0)
+        group["tokens"] += row_tokens
+        group["costUsd"] += float(row.cost_usd or 0.0)
+        group["calls"] += 1
+
+    top_model = max(model_counts, key=lambda m: model_counts[m])
+    model_label = MODEL_LABELS.get(top_model, (top_model, ""))[0] if top_model else ""
+
+    processes = []
+    for group in groups.values():
+        calls = group["calls"]
+        processes.append(
+            {
+                "key": group["key"],
+                "name": group["name"],
+                "meta": f"{group['action']} · {calls} call{'s' if calls != 1 else ''}",
+                "input": group["input"],
+                "output": group["output"],
+                "tokens": group["tokens"],
+                "costUsd": round(group["costUsd"], 2),
+            }
+        )
+    processes.sort(key=lambda p: p["costUsd"], reverse=True)
+
+    return {
+        "runId": run_id,
+        "modelLabel": model_label,
+        "totalCostUsd": round(sum(p["costUsd"] for p in processes), 2),
+        "totalTokens": sum(p["tokens"] for p in processes),
+        "processes": processes,
     }

@@ -47,6 +47,7 @@ from app.services import (
     failure_classifier,
     placeholder_gate,
     project_config_service,
+    run_context,
     settings_store,
     spec_examples,
     spec_service,
@@ -563,6 +564,8 @@ def run_execution(execution_id: int) -> None:
         execution = db.get(Execution, execution_id)
         if execution is None:
             return
+        # Attribute this thread's Claude spend (auto-annotate) to the run.
+        run_context.set_run(execution.run_id)
         run = db.get(Run, execution.run_id)
         if run is None:
             return
@@ -784,6 +787,7 @@ def run_execution(execution_id: int) -> None:
         )
     finally:
         db.close()
+        run_context.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -916,6 +920,8 @@ def heal_spec(case_id: int) -> None:
         case = db.get(TestCase, case_id)
         if case is None:
             return
+        # Attribute this thread's Claude spend (spec heal) to the case's run.
+        run_context.set_run(case.run_id)
         run = db.get(Run, case.run_id)
         if run is None:
             return
@@ -1207,3 +1213,4 @@ def heal_spec(case_id: int) -> None:
     finally:
         _healing.pop(case_id, None)
         db.close()
+        run_context.clear()

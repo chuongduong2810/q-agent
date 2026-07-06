@@ -129,3 +129,59 @@ def test_record_still_writes_a_row(workspace_dir):
         assert session.query(ClaudeUsage).count() == 1
     finally:
         session.close()
+
+
+def test_run_breakdown_groups_by_process_and_isolates_runs(workspace_dir):
+    """run_breakdown groups a run's rows by process with correct totals, and a
+    run with no recorded usage returns the empty shape."""
+    from app import db
+
+    # Run 42: two analyze calls + one generate call (same model).
+    ai_usage_service.record(
+        model="claude-sonnet-5", input_tokens=1000, output_tokens=500,
+        cache_read=200, cache_write=100, cost_usd=0.30, duration_ms=1000,
+        action="requirement-analyst", run_id=42,
+    )
+    ai_usage_service.record(
+        model="claude-sonnet-5", input_tokens=2000, output_tokens=1000,
+        cache_read=0, cache_write=0, cost_usd=0.70, duration_ms=1000,
+        action="requirement-analyst", run_id=42,
+    )
+    ai_usage_service.record(
+        model="claude-sonnet-5", input_tokens=500, output_tokens=500,
+        cache_read=0, cache_write=0, cost_usd=0.10, duration_ms=1000,
+        action="test-case-generator", run_id=42,
+    )
+    # A different run's (expensive) call must never leak into run 42.
+    ai_usage_service.record(
+        model="claude-opus-4-8", input_tokens=9, output_tokens=9,
+        cache_read=0, cache_write=0, cost_usd=5.0, duration_ms=1000,
+        action="requirement-analyst", run_id=99,
+    )
+
+    session = db.SessionLocal()
+    try:
+        out = ai_usage_service.run_breakdown(session, 42)
+        empty = ai_usage_service.run_breakdown(session, 7)
+    finally:
+        session.close()
+
+    assert out["runId"] == 42
+    assert out["modelLabel"] == "Claude Sonnet 5"
+    # Processes sorted by cost desc: analyze (1.00) before generate (0.10).
+    assert [p["key"] for p in out["processes"]] == ["analyze", "generate"]
+    analyze = out["processes"][0]
+    assert analyze["name"] == "Analyze"
+    assert analyze["meta"] == "requirement-analyst · 2 calls"
+    assert analyze["input"] == 3000
+    assert analyze["output"] == 1500
+    assert analyze["tokens"] == 4800  # 1800 + 3000 (input+output+cacheRead+cacheWrite)
+    assert analyze["costUsd"] == 1.0
+    assert out["totalCostUsd"] == 1.10
+    assert out["totalTokens"] == 5800  # 4800 analyze + 1000 generate
+
+    # A run with no usage returns the empty contract shape.
+    assert empty["processes"] == []
+    assert empty["modelLabel"] == ""
+    assert empty["totalCostUsd"] == 0.0
+    assert empty["totalTokens"] == 0

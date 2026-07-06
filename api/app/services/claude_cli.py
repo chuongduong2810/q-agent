@@ -183,7 +183,10 @@ def run_prompt(
     except json.JSONDecodeError:
         pass
     # Capture real per-call usage (tokens/cost/latency) for the stats panel.
-    _record_usage(envelope, model=model, action=label or skill or "Claude CLI", wall_ms=wall_ms)
+    # Record the skill (not the per-call label) as the action so per-run cost
+    # attribution can group calls by process; run_id is read from the ambient
+    # run context inside ai_usage_service.record.
+    _record_usage(envelope, model=model, action=skill or label or "Claude CLI", wall_ms=wall_ms)
     if envelope is not None and "result" in envelope:
         return str(envelope["result"])
     return raw
