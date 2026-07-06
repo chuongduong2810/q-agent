@@ -32,6 +32,18 @@ class ClaudeError(RuntimeError):
     """Raised when the Claude CLI is unavailable or returns an error."""
 
 
+def _resolve_model() -> str:
+    """Return the operator-selected Claude model, falling back to config.
+
+    The chosen model lives in the app-wide settings store (set from the Settings
+    screen); a blank/missing value falls back to ``settings.claude_model`` so
+    every CLI call inherits the selection with no per-caller changes.
+    """
+    from app.services import settings_store  # local import avoids load-order coupling
+
+    return settings_store.load_settings().get("claudeModel") or settings.claude_model
+
+
 def _extract_json(text: str) -> Any:
     """Pull the first JSON object/array out of a model response."""
     fenced = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", text, re.DOTALL)
@@ -84,6 +96,7 @@ def run_prompt(
     codebase (used by project-bootstrap against a local repo clone).
     """
     system = _compose_system(system, skill, include_template)
+    model = _resolve_model()
     cmd = [
         settings.claude_bin,
         "-p",
@@ -91,7 +104,7 @@ def run_prompt(
         "--output-format",
         "json",
         "--model",
-        settings.claude_model,
+        model,
     ]
     if system:
         cmd += ["--append-system-prompt", system]
@@ -101,7 +114,7 @@ def run_prompt(
     from app.services import activity
 
     call_id = activity.start(label or skill or "Claude CLI", skill)
-    logger.info("Claude CLI: {} chars prompt, model={}", len(prompt), settings.claude_model)
+    logger.info("Claude CLI: {} chars prompt, model={}", len(prompt), model)
     try:
         proc = subprocess.run(  # noqa: S603
             cmd,

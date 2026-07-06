@@ -22,6 +22,7 @@ DEFAULTS: dict[str, Any] = {
     "userRole": "",
     "autoAnnotate": True,
     "neuralBackground": True,
+    "claudeModel": "claude-sonnet-5",
 }
 
 
