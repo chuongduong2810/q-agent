@@ -196,6 +196,7 @@ def update_settings_endpoint(body: SettingsUpdate) -> SettingsOut:
         "autoAnnotate": updates.get("auto_annotate"),
         "neuralBackground": updates.get("neural_background"),
         "claudeModel": updates.get("claude_model"),
+        "weeklyTokenBudget": updates.get("weekly_token_budget"),
     }
     saved = settings_store.save_settings(camel_updates)
     _changed = ", ".join(k for k, v in camel_updates.items() if v is not None)

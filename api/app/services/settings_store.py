@@ -23,6 +23,7 @@ DEFAULTS: dict[str, Any] = {
     "autoAnnotate": True,
     "neuralBackground": True,
     "claudeModel": "claude-sonnet-5",
+    "weeklyTokenBudget": 0,
 }
 
 

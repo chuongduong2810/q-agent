@@ -578,6 +578,7 @@ class SettingsOut(ApiModel):
     auto_annotate: bool = True
     neural_background: bool = True
     claude_model: str = "claude-sonnet-5"
+    weekly_token_budget: int = 0
 
 
 class SettingsUpdate(ApiModel):
@@ -592,3 +593,4 @@ class SettingsUpdate(ApiModel):
     auto_annotate: bool | None = None
     neural_background: bool | None = None
     claude_model: str | None = None
+    weekly_token_budget: int | None = None

@@ -12,9 +12,11 @@ from app.models.comment import TicketComment
 from app.models.knowledge import ProjectKnowledge
 from app.models.linked import LinkedTestCase
 from app.models.audit import AuditLog
+from app.models.claude_usage import ClaudeUsage
 
 __all__ = [
     "AuditLog",
+    "ClaudeUsage",
     "Provider",
     "Project",
     "ProjectConfig",
