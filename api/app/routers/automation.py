@@ -417,4 +417,7 @@ def _spec_out(spec: AutomationSpec) -> dict:
         "language": spec.language,
         "framework": spec.framework,
         "code": spec.code,
+        "status": spec.status,
+        "blockReason": spec.block_reason,
+        "gateReport": spec.gate_report,
     }

@@ -206,6 +206,7 @@ def _result_out(db: Session, result: ExecutionResult) -> dict:
         "caseCode": result.case_code,
         "title": result.title,
         "status": result.status,
+        "failureClass": result.failure_class,
         "durationMs": result.duration_ms,
         "errorMessage": result.error_message,
         "consoleLogs": result.console_logs,
