@@ -4,6 +4,14 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+if ! command -v uv >/dev/null 2>&1; then
+  echo "==> uv not found: installing"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # Make uv available in this shell (installer adds it to ~/.local/bin).
+  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  command -v uv >/dev/null 2>&1 || { echo "uv install failed; open a new shell or add ~/.local/bin to PATH"; exit 1; }
+fi
+
 echo "==> Backend (api): uv sync"
 ( cd "$ROOT/api" && uv sync --extra dev )
 
