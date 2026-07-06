@@ -576,8 +576,24 @@ export interface SettingsOut {
   autoAnnotate: boolean;
   neuralBackground: boolean;
   claudeModel: string;
+  weeklyTokenBudget: number;
 }
 export type SettingsUpdate = Partial<SettingsOut>;
+
+/** Claude usage stats for the top-bar chip + panel (GET /ai/stats). */
+export interface ClaudeStats {
+  model: string; // "claude-sonnet-5"
+  modelLabel: string; // "Claude Sonnet 5"
+  operational: boolean;
+  ctxWindow: string; // "200K"
+  requestsToday: number;
+  avgLatencyMs: number;
+  costMonth: number; // USD
+  weekTokens: number; // all-model total tokens this week
+  weekBudget: number; // tokens; 0 = no budget set
+  weekResetsAt: string | null; // ISO
+  breakdown: { input: number; output: number; cacheRead: number; cacheWrite: number };
+}
 
 /** Evidence grouped-by-ticket response for GET /runs/{id}/evidence. */
 export interface EvidenceGrouped {

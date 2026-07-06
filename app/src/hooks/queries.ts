@@ -30,6 +30,10 @@ import type {
 export const useCapabilities = () =>
   useQuery({ queryKey: queryKeys.capabilities, queryFn: api.capabilities });
 
+// Claude usage stats for the top-bar chip + panel; refetched on a light poll.
+export const useAiStats = () =>
+  useQuery({ queryKey: queryKeys.aiStats, queryFn: api.aiStats, refetchInterval: 30_000 });
+
 // -------------------------------------------------------------- providers + settings
 export const useProviders = () =>
   useQuery({ queryKey: queryKeys.providers, queryFn: api.listProviders });

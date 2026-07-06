@@ -186,6 +186,20 @@ export function Settings() {
             <span className="text-[12px] text-muted">
               Model used for all AI actions (analysis, generation, self-heal).
             </span>
+
+            <span className="mt-4 text-[12px] font-semibold text-[#9494a6]">
+              Weekly token budget (tokens)
+            </span>
+            <input
+              type="number"
+              min={0}
+              value={settings.weeklyTokenBudget}
+              onChange={(e) => updateSettings.mutate({ weeklyTokenBudget: Number(e.target.value) })}
+              className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
+            />
+            <span className="text-[12px] text-muted">
+              Shown as a usage bar in the Claude stats panel. 0 = no budget.
+            </span>
           </label>
         )}
       </GlassCard>

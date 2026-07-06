@@ -1,6 +1,7 @@
 import { CheckSquare, ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
+import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import { runRateLabel } from "@/components/dashboard/runStatus";
@@ -57,6 +58,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
         {/* Claude CLI activity indicator — also present in the global TopBar, so it
             stays visible when the run-context header replaces it on run screens. */}
         <AiActivityIndicator />
+        <ClaudeStatsButton />
         <button
           ref={btnRef}
           onClick={() => setSwitcherOpen((o) => !o)}
