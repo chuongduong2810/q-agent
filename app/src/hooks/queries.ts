@@ -272,6 +272,18 @@ export const useRunRepos = (runId: number | string | null) =>
     enabled: runId != null,
   });
 
+// Per-process AI usage + cost for a run. Errors gracefully (e.g. 404 while the
+// backend endpoint is still rolling out) — the card just doesn't render. Polls
+// lightly while the run is still producing AI work.
+export const useRunAiUsage = (runId: number | string | null) =>
+  useQuery({
+    queryKey: queryKeys.runAiUsage(runId ?? 0),
+    queryFn: () => api.runAiUsage(runId as number),
+    enabled: runId != null,
+    retry: false,
+    refetchInterval: 15_000,
+  });
+
 export const useSetRunTicketRepo = (runId: number | string) => {
   const qc = useQueryClient();
   return useMutation({

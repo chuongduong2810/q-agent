@@ -1,14 +1,26 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  ArrowRight,
+  Brain,
+  Check,
+  Cpu,
+  FileText,
+  Image as ImageIcon,
+  Send,
+  Terminal,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/misc";
 import { providerGlyph } from "@/components/ui/badges";
 import { PipelineRail, runStatusToStage } from "@/components/ui/PipelineRail";
 import { useNavigate, useParams } from "react-router-dom";
-import { useRun, useTickets } from "@/hooks/queries";
+import { useRun, useRunAiUsage, useTickets } from "@/hooks/queries";
 import { useRunEvents } from "@/hooks/useRunEvents";
-import type { ProgressEvent, RunTicketOut } from "@/types/api";
+import type { ProgressEvent, RunAiUsage, RunTicketOut } from "@/types/api";
 
 const RUN_STATUS_LABEL: Record<string, string> = {
   processing: "AI processing",
@@ -28,6 +40,7 @@ export function RunDetail() {
 
   const { data: run, isLoading } = useRun(runId);
   const { data: tickets } = useTickets();
+  const { data: aiUsage } = useRunAiUsage(runId);
 
   // Live phase messages per ticket, keyed by ticket externalId — updated from the
   // analysis.phase WS event since RunTicketOut.genStatus alone has no message text.
@@ -210,6 +223,10 @@ export function RunDetail() {
           />
         ))}
       </div>
+
+      {aiUsage && aiUsage.processes.length > 0 && (
+        <AiUsageCard usage={aiUsage} runCode={run.code} />
+      )}
     </div>
   );
 }
@@ -268,5 +285,115 @@ function RunTicketRow({
       )}
       {queued && <span className="text-[12px] font-semibold text-[#6b7280]">Queued</span>}
     </motion.div>
+  );
+}
+
+/** USD → "$42.60". */
+function fmtCost(usd: number): string {
+  return `$${usd.toFixed(2)}`;
+}
+
+/** Compact token/number → "1.5K" / "2.4M" (integers below 1000 stay as-is). */
+function fmtCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(n);
+}
+
+/** Lucide icon per AI-process key (falls back to Cpu for unknown kinds). */
+const PROCESS_ICON: Record<string, LucideIcon> = {
+  analyze: Brain,
+  generate: FileText,
+  automation: Terminal,
+  analysis: Activity,
+  publish: Send,
+  evidence: ImageIcon,
+};
+
+/**
+ * AI usage & cost card — per-process token spend for a run, read from
+ * `GET /runs/{id}/ai-usage`. Rendered at the bottom of the run overview only when
+ * there is at least one process with usage.
+ */
+function AiUsageCard({ usage, runCode }: { usage: RunAiUsage; runCode: string }) {
+  return (
+    <div className="glass mt-[18px] overflow-hidden rounded-[18px]">
+      {/* Header */}
+      <div
+        className="flex items-center gap-[11px] p-[15px_18px]"
+        style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}
+      >
+        <div
+          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px]"
+          style={{ background: "rgba(217,119,87,.16)", border: "1px solid rgba(217,119,87,.3)" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#D97757">
+            <path d="M12 2.4l2.6 6.6 6.9.4-5.3 4.4 1.8 6.7L12 17.3 6 20.9l1.8-6.7L2.5 9.4l6.9-.4z" />
+          </svg>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-bold">AI usage &amp; cost</div>
+          <div className="text-[11.5px] text-[#8b8b9e]">
+            Per-process spend for {runCode} &middot; {usage.modelLabel}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-[18px] font-black tracking-[-.02em] text-[#6ee7b7]">
+            {fmtCost(usage.totalCostUsd)}
+          </div>
+          <div className="text-[10.5px] text-[#8b8b9e]">{fmtCompact(usage.totalTokens)} tokens</div>
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div
+        className="grid items-center gap-[10px] p-[9px_18px] text-[10px] font-bold tracking-[.05em] text-[#6c6c7e]"
+        style={{ gridTemplateColumns: "1.5fr .8fr .8fr .8fr .7fr", background: "rgba(255,255,255,.02)" }}
+      >
+        <span>AI PROCESS</span>
+        <span className="text-right">INPUT</span>
+        <span className="text-right">OUTPUT</span>
+        <span className="text-right">TOKENS</span>
+        <span className="text-right">COST</span>
+      </div>
+
+      {/* Rows */}
+      {usage.processes.map((p) => {
+        const Icon = PROCESS_ICON[p.key] ?? Cpu;
+        return (
+          <div
+            key={p.key}
+            className="grid items-center gap-[10px] p-[12px_18px]"
+            style={{
+              gridTemplateColumns: "1.5fr .8fr .8fr .8fr .7fr",
+              borderTop: "1px solid rgba(255,255,255,.045)",
+            }}
+          >
+            <div className="flex min-w-0 items-center gap-[10px]">
+              <span
+                className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px]"
+                style={{ background: "rgba(139,92,246,.14)" }}
+              >
+                <Icon size={14} strokeWidth={2} color="#a78bfa" />
+              </span>
+              <div className="min-w-0">
+                <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] font-semibold">
+                  {p.name}
+                </div>
+                <div className="text-[10.5px] text-[#7a7a8c]">{p.meta}</div>
+              </div>
+            </div>
+            <span className="text-right font-mono text-[12px] text-[#9a9aae]">{fmtCompact(p.input)}</span>
+            <span className="text-right font-mono text-[12px] text-[#9a9aae]">{fmtCompact(p.output)}</span>
+            <span className="text-right font-mono text-[12px] font-semibold text-[#c7c7d4]">
+              {fmtCompact(p.tokens)}
+            </span>
+            <span className="text-right font-mono text-[12.5px] font-bold text-[#6ee7b7]">
+              {fmtCost(p.costUsd)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

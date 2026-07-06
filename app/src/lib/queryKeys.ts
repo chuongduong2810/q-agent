@@ -25,6 +25,7 @@ export const queryKeys = {
   runs: ["runs"] as const,
   run: (runId: number | string) => ["runs", runId] as const,
   runRepos: (runId: number | string) => ["runs", runId, "repos"] as const,
+  runAiUsage: (runId: number | string) => ["runs", runId, "ai-usage"] as const,
   runCases: (runId: number | string) => ["runs", runId, "cases"] as const,
   specs: (runId: number | string) => ["runs", runId, "automation"] as const,
   automationStatus: (runId: number | string) =>

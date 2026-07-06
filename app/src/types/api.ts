@@ -614,6 +614,26 @@ export interface ClaudeStats {
   limitsStatus: "loading" | "ready" | "unavailable"; // state of the CLI /usage % fetch
 }
 
+/** One AI process (ticket-analysis phase, automation, etc.) and its token spend. */
+export interface RunAiProcess {
+  key: string; // stable process kind ("analyze" | "generate" | "automation" | …)
+  name: string; // display label
+  meta: string; // sub-line (e.g. "12 tickets · 34 cases")
+  input: number; // input tokens
+  output: number; // output tokens
+  tokens: number; // total tokens
+  costUsd: number; // spend in USD
+}
+
+/** Per-process AI usage + cost for a run (GET /runs/{id}/ai-usage). */
+export interface RunAiUsage {
+  runId: number;
+  modelLabel: string; // "Claude Sonnet 4.6"
+  totalCostUsd: number;
+  totalTokens: number;
+  processes: RunAiProcess[]; // sorted by costUsd desc; [] if none
+}
+
 /** Evidence grouped-by-ticket response for GET /runs/{id}/evidence. */
 export interface EvidenceGrouped {
   tickets: Array<{
