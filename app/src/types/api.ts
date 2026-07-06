@@ -586,6 +586,8 @@ export interface UsageWindow {
   tokens: number; // total tokens in this window
   requests: number; // request count in this window
   resetsAt: string; // ISO (UTC); render in local tz
+  pctUsed: number; // plan-limit % used (from the CLI's /usage); -1 = unknown
+  resetLabel: string; // authoritative reset text from the CLI (e.g. "Jul 7, 3:20am (Asia/Saigon)"); "" = none
 }
 
 /** Per-model usage rollup for the panel's "By model" list. */
@@ -609,6 +611,7 @@ export interface ClaudeStats {
   week: UsageWindow; // current rolling week
   breakdown: { input: number; output: number; cacheRead: number; cacheWrite: number };
   byModel: ByModelUsage[];
+  limitsStatus: "loading" | "ready" | "unavailable"; // state of the CLI /usage % fetch
 }
 
 /** Evidence grouped-by-ticket response for GET /runs/{id}/evidence. */

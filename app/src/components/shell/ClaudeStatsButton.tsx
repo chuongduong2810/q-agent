@@ -47,7 +47,14 @@ function shortModel(label: string): string {
 }
 
 /** Safe fallback so the panel renders while the endpoint is on the old shape. */
-const EMPTY_WINDOW: UsageWindow = { costUsd: 0, tokens: 0, requests: 0, resetsAt: "" };
+const EMPTY_WINDOW: UsageWindow = {
+  costUsd: 0,
+  tokens: 0,
+  requests: 0,
+  resetsAt: "",
+  pctUsed: -1,
+  resetLabel: "",
+};
 
 /**
  * Top-bar Claude usage chip (`● ⭐ Sonnet 5 ▾`) + a portalled dropdown panel of
@@ -87,29 +94,70 @@ export function ClaudeStatsButton() {
   );
 }
 
-/** One rolling window row (session / week): label + cost, then a sub-line. */
+/**
+ * One rolling window row (session / week). The right-hand value + bar reflect the
+ * plan-limit % from the CLI's `/usage`:
+ *  - `loading`     → skeleton (the % is being fetched in the background),
+ *  - `ready`       → "N% used" + a filled gauge (width = pctUsed),
+ *  - `unavailable` → fall back to the window's cost + a faint bar.
+ * The sub-line always shows real tokens · requests · cost · resets.
+ */
 function UsageRow({
   label,
   window,
   resetsAsDate,
+  status,
 }: {
   label: string;
   window: UsageWindow;
   resetsAsDate?: boolean;
+  status: ClaudeStats["limitsStatus"];
 }) {
-  const reset = resetsAsDate ? fmtDateTime(window.resetsAt) : fmtTime(window.resetsAt);
-  const sub = `${fmtTokens(window.tokens)} tokens · ${window.requests} requests${
-    reset ? ` · resets ${reset}` : ""
-  }`;
+  const loading = status === "loading";
+  const hasPct = window.pctUsed >= 0;
+  const pct = Math.max(0, Math.min(100, window.pctUsed));
+  // Prefer the CLI's authoritative (already-localized) reset label; else format the ISO.
+  const reset =
+    window.resetLabel || (resetsAsDate ? fmtDateTime(window.resetsAt) : fmtTime(window.resetsAt));
+  const sub = `${fmtTokens(window.tokens)} tokens · ${window.requests} requests · ${fmtCost(
+    window.costUsd,
+  )}${reset ? ` · resets ${reset}` : ""}`;
+
   return (
     <div className="mt-[15px]">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-ink-soft">{label}</span>
-        <span className="text-[12px] font-bold text-ink">{fmtCost(window.costUsd)}</span>
+        {loading ? (
+          <span className="h-3 w-14 animate-pulse rounded bg-white/[0.12]" />
+        ) : hasPct ? (
+          <span className="text-[12px] font-bold text-ink">{pct}% used</span>
+        ) : (
+          <span className="text-[12px] font-bold text-ink">{fmtCost(window.costUsd)}</span>
+        )}
       </div>
-      {/* Thin faint bar — a divider cue, not a % gauge (no budget model). */}
-      <div className="mt-2 h-[3px] w-full rounded-full bg-white/[0.06]" />
-      <div className="mt-1.5 text-[10.5px] text-ink-dim">{sub}</div>
+
+      {loading ? (
+        <div className="mt-2 h-[6px] w-full animate-pulse rounded-full bg-white/[0.12]" />
+      ) : hasPct ? (
+        <div className="mt-2 h-[6px] w-full overflow-hidden rounded-full bg-white/[0.08]">
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${pct}%`,
+              background: "linear-gradient(90deg,#8b5cf6,#22d3ee)",
+              transition: "width .5s cubic-bezier(.2,.8,.2,1)",
+            }}
+          />
+        </div>
+      ) : (
+        <div className="mt-2 h-[3px] w-full rounded-full bg-white/[0.06]" />
+      )}
+
+      {loading ? (
+        <div className="mt-2 h-2.5 w-3/4 animate-pulse rounded bg-white/[0.08]" />
+      ) : (
+        <div className="mt-1.5 text-[10.5px] text-ink-dim">{sub}</div>
+      )}
     </div>
   );
 }
@@ -165,6 +213,7 @@ function StatsPanel({
   if (!open || !pos) return null;
 
   const short = shortModel(stats.modelLabel);
+  const limitsStatus = stats.limitsStatus ?? "unavailable";
   const session = stats.session ?? EMPTY_WINDOW;
   const week = stats.week ?? EMPTY_WINDOW;
   const bd = stats.breakdown ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
@@ -210,8 +259,8 @@ function StatsPanel({
       </div>
 
       {/* Rolling windows */}
-      <UsageRow label="Current session" window={session} />
-      <UsageRow label="Current week" window={week} resetsAsDate />
+      <UsageRow label="Current session" window={session} status={limitsStatus} />
+      <UsageRow label="Current week" window={week} resetsAsDate status={limitsStatus} />
 
       {/* Token breakdown */}
       <div className="mt-[15px] mb-[7px] text-[9px] font-bold tracking-[0.1em] text-ink-dim">
