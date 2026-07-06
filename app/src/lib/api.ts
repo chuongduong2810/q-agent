@@ -35,6 +35,7 @@ import type {
   ReportOut,
   RunCreate,
   RunDetailOut,
+  RunAiUsage,
   RunOut,
   RunRepoOption,
   RunTicketOut,
@@ -173,6 +174,7 @@ export const api = {
   getRun: (runId: number | string) => get<RunDetailOut>(`/runs/${runId}`),
   regenerateRun: (runId: number | string) => post<RunDetailOut>(`/runs/${runId}/regenerate`),
   runRepos: (runId: number | string) => get<RunRepoOption[]>(`/runs/${runId}/repos`),
+  runAiUsage: (runId: number | string) => get<RunAiUsage>(`/runs/${runId}/ai-usage`),
   setRunTicketRepo: (runId: number | string, tid: string, repo: string) =>
     post<RunTicketOut>(`/runs/${runId}/tickets/${encodeURIComponent(tid)}/repo`, { repo }),
 
