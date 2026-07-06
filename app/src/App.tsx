@@ -44,13 +44,19 @@ export default function App() {
       <KnowledgeBuildOverlay />
       <Toaster
         theme="dark"
-        position="bottom-right"
+        position="bottom-center"
         toastOptions={{
           style: {
-            background: "rgba(24,24,32,.92)",
-            border: "1px solid rgba(255,255,255,.11)",
-            color: "#ececf1",
-            backdropFilter: "blur(20px)",
+            background: "rgba(22,22,30,.9)",
+            backdropFilter: "blur(24px) saturate(1.3)",
+            WebkitBackdropFilter: "blur(24px) saturate(1.3)",
+            border: "1px solid rgba(255,255,255,.1)",
+            borderRadius: "11px",
+            boxShadow: "0 16px 40px -16px rgba(0,0,0,.8)",
+            color: "#f4f4f8",
+            fontSize: "13px",
+            fontWeight: 600,
+            padding: "9px 14px",
           },
         }}
       />
