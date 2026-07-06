@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
-import { ChevronDown, ChevronRight, KeyRound, Play, RotateCw } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, KeyRound, Play, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { execColors } from "@/components/ui/badges";
+import { Pill, execColors, productDefectStyle } from "@/components/ui/badges";
 import { ProgressRing, Spinner } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { useNavigate, useParams } from "react-router-dom";
@@ -226,7 +226,14 @@ function ExecutionLog({ log }: { log: string }) {
 }
 
 function ExecRow({ result }: { result: ExecutionResultOut }) {
-  const [color, label] = execColors[result.status] ?? execColors.pending;
+  // A confirmed product defect is a failed case whose failureClass says so. It gets
+  // the fuchsia "Product defect" treatment (dot glow, label, pill) so it reads
+  // distinctly from a plain red script "Failed". Any other status — or a fail that
+  // is unclassified / not a product defect — renders with the shared execColors.
+  const isProductDefect = result.status === "fail" && result.failureClass === "product_defect";
+  const [color, label] = isProductDefect
+    ? productDefectStyle
+    : (execColors[result.status] ?? execColors.pending);
   return (
     <div className="flex items-center gap-3 rounded-xl p-[11px_13px] transition-colors hover:bg-white/[0.04]">
       {result.status === "running" && <Spinner size={15} />}
@@ -241,9 +248,16 @@ function ExecRow({ result }: { result: ExecutionResultOut }) {
       <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#dcdce4]">
         {result.title}
       </span>
-      <span className="shrink-0 text-[11px] font-bold" style={{ color }}>
-        {label}
-      </span>
+      {isProductDefect ? (
+        <Pill color={color} bg="rgba(217,70,239,.14)">
+          <AlertTriangle size={11} strokeWidth={2.4} />
+          {label}
+        </Pill>
+      ) : (
+        <span className="shrink-0 text-[11px] font-bold" style={{ color }}>
+          {label}
+        </span>
+      )}
     </div>
   );
 }
