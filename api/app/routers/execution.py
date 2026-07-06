@@ -49,8 +49,12 @@ def start_execution(
         .order_by(TestCase.id)
         .all()
     )
+    # A spec that failed the placeholder gate (blocked) or was classified a genuine
+    # product defect (terminal) must never be promoted to Execution — blocked specs
+    # aren't runnable, and product defects route to the report, not a re-run.
+    cases = [c for c in cases if not (c.spec and c.spec.status in ("blocked", "product_defect"))]
     if not cases:
-        raise HTTPException(status_code=400, detail="No approved, automatable test cases to execute")
+        raise HTTPException(status_code=400, detail="No runnable specs to execute (all approved cases are blocked or product defects)")
 
     workers = body.get("workers") or run.workers
     env = body.get("env") or run.env
@@ -104,6 +108,11 @@ def run_single_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="Test case not found")
     if case.approval != "approved" or case.automation == "Manual":
         raise HTTPException(status_code=400, detail="Case is not an approved, automatable test")
+    if case.spec and case.spec.status in ("blocked", "product_defect"):
+        raise HTTPException(
+            status_code=400,
+            detail="Spec is blocked or a product defect — resolve the block or route the defect to the report; it is not runnable",
+        )
     run = db.get(Run, case.run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
