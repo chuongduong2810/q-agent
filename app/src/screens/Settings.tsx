@@ -159,6 +159,37 @@ export function Settings() {
         )}
       </GlassCard>
 
+      <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">AI MODEL</div>
+      <GlassCard className="p-[22px]">
+        {settingsLoading || !settings ? (
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        ) : (
+          <label className="flex flex-col gap-2">
+            <span className="text-[12px] font-semibold text-[#9494a6]">Claude model</span>
+            <select
+              value={settings.claudeModel}
+              onChange={(e) => updateSettings.mutate({ claudeModel: e.target.value })}
+              className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
+            >
+              <option className="bg-[#16161c] text-ink" value="claude-opus-4-8">
+                Opus 4.8 — highest quality
+              </option>
+              <option className="bg-[#16161c] text-ink" value="claude-sonnet-5">
+                Sonnet 5 — balanced (default)
+              </option>
+              <option className="bg-[#16161c] text-ink" value="claude-haiku-4-5-20251001">
+                Haiku 4.5 — fastest
+              </option>
+            </select>
+            <span className="text-[12px] text-muted">
+              Model used for all AI actions (analysis, generation, self-heal).
+            </span>
+          </label>
+        )}
+      </GlassCard>
+
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">INTERFACE</div>
       <GlassCard className="p-[22px]">
         {settingsLoading || !settings ? (
