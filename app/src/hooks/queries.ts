@@ -30,9 +30,17 @@ import type {
 export const useCapabilities = () =>
   useQuery({ queryKey: queryKeys.capabilities, queryFn: api.capabilities });
 
-// Claude usage stats for the top-bar chip + panel; refetched on a light poll.
+// Claude usage stats for the top-bar chip + panel. The plan-limit % is fetched
+// lazily on the server (background CLI `/usage` call), so the first response is
+// `limitsStatus: "loading"` (skeleton). Poll fast while loading so the skeleton
+// resolves within a couple seconds of the server cache warming up, then back off
+// to a light poll once it's "ready"/"unavailable".
 export const useAiStats = () =>
-  useQuery({ queryKey: queryKeys.aiStats, queryFn: api.aiStats, refetchInterval: 30_000 });
+  useQuery({
+    queryKey: queryKeys.aiStats,
+    queryFn: api.aiStats,
+    refetchInterval: (q) => (q.state.data?.limitsStatus === "loading" ? 3_000 : 30_000),
+  });
 
 // -------------------------------------------------------------- providers + settings
 export const useProviders = () =>
