@@ -1,4 +1,4 @@
-import { ChevronDown, SlidersHorizontal, Star } from "lucide-react";
+import { ChevronDown, Info, SlidersHorizontal, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -250,6 +250,16 @@ function StatsPanel({
           </div>
         </>
       )}
+
+      {/* Estimate disclaimer — cost is computed from token counts × model pricing
+          (per-message cost isn't recorded), aggregated from local Claude sessions. */}
+      <div className="mt-[13px] flex items-start gap-1.5 text-[10px] leading-[1.45] text-ink-dim">
+        <Info size={12} strokeWidth={2} className="mt-px shrink-0" />
+        <span>
+          Estimated — costs are computed from token usage × model pricing, from local
+          Claude sessions on this machine.
+        </span>
+      </div>
 
       {/* Manage AI settings */}
       <button
