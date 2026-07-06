@@ -12,6 +12,7 @@ persists AutomationSpec rows. Manual cases are skipped. Publishes WS progress.
 
 from __future__ import annotations
 
+import json
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,10 +22,18 @@ from app import db as db_module
 from app.config import settings
 from app.db import get_db
 from app.logging import logger
-from app.models.run import Run
+from app.models.run import Run, RunTicket
 from app.models.testcase import AutomationSpec, TestCase
+from app.models.ticket import Ticket
 from app.schemas import AutomationSpecUpdate
-from app.services import audit_service, playwright_runner, spec_service
+from app.services import (
+    audit_service,
+    placeholder_gate,
+    playwright_runner,
+    project_config_service,
+    spec_examples,
+    spec_service,
+)
 from app.services.claude_cli import ClaudeError
 from app.ws import hub
 
@@ -52,8 +61,45 @@ def _eligible_cases_query(db: Session, run_id: int):
     )
 
 
+def _select_examples_for_case(db: Session, case: TestCase) -> list[dict]:
+    """Pick up to 2 proven, already-passing specs from the SAME project + repo.
+
+    Resolves the case's project key (via its ticket's provider) and target repo
+    (via its RunTicket), then delegates to ``spec_examples.select_examples``. Purely
+    best-effort grounding for generation — returns ``[]`` when nothing resolves.
+    """
+    ticket = db.query(Ticket).filter(Ticket.external_id == case.ticket_external_id).first()
+    if ticket is None:
+        return []
+    project_key = project_config_service.resolve_project_key(db, ticket.provider_kind)
+    if not project_key:
+        return []
+    run_ticket = (
+        db.query(RunTicket)
+        .filter(
+            RunTicket.run_id == case.run_id,
+            RunTicket.ticket_external_id == case.ticket_external_id,
+        )
+        .first()
+    )
+    repo = run_ticket.repo if run_ticket else ""
+    return spec_examples.select_examples(db, project_key, repo, case, limit=2)
+
+
 def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
     """Generate (or regenerate) and persist the AutomationSpec for one case.
+
+    Generation is grounded with few-shot examples (proven passing specs from the
+    same project) and gated by the placeholder / invented-reference gate plus a
+    best-effort ``playwright --list`` parse check before the spec is accepted:
+
+    - ``passed``   -> write the file, ``status="draft"`` (runnable).
+    - ``blocked``  -> save the row ``status="blocked"`` with ``block_reason``; the
+                      file is NOT written, so a blocked spec never enters the
+                      runnable file set.
+    - ``rejected`` -> keep any previous good spec untouched (code/path/status),
+                      recording the rejection in ``gate_report``. With no previous
+                      spec, save ``status="blocked"`` (still not runnable).
 
     Args:
         db: Active session (caller commits).
@@ -64,19 +110,65 @@ def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
         The created or updated AutomationSpec row (not yet committed).
     """
     context = spec_service.build_case_context(db, case, env=run.env)
-    code = spec_service.generate_spec_code(case, context)
-    path = spec_service.write_spec_file(run.code, case.ticket_external_id, case.code, code)
+    examples = _select_examples_for_case(db, case)
+    code = spec_service.generate_spec_code(case, context, examples=examples)
     filename = spec_service.spec_filename(case.ticket_external_id, case.code)
 
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
+    has_previous_good = bool(spec is not None and (spec.code or "").strip())
     if spec is None:
         spec = AutomationSpec(test_case_id=case.id)
         db.add(spec)
     spec.filename = filename
     spec.language = "TypeScript"
     spec.framework = "Playwright"
+
+    # Build the KB view the gate compares against (accepts raw KB shapes directly).
+    known = {
+        "routes": context.get("routes", []),
+        "selectors": context.get("selectors", []),
+        "base_url": context.get("baseUrl", ""),
+    }
+    gate = placeholder_gate.gate_spec(code, known)
+    outcome = gate["outcome"]
+    # A spec Playwright cannot even parse/collect is treated like a rejection
+    # (best-effort: an unavailable CLI/timeout skips the check, never blocks).
+    if outcome == "passed" and not spec_service.playwright_list_ok(code):
+        outcome = "rejected"
+        gate = {
+            "outcome": "rejected",
+            "findings": ["playwright --list parse failure"],
+            "reason": "Playwright could not parse/collect the generated spec.",
+            "unblock_action": "Regenerate the spec so it parses cleanly under Playwright.",
+        }
+
+    if outcome == "blocked":
+        # Missing-input: persist the generated code + reason but never write the
+        # file, so a blocked spec is not part of the runnable set.
+        spec.code = code
+        spec.status = "blocked"
+        spec.block_reason = f'{gate["reason"]} {gate["unblock_action"]}'.strip()
+        spec.gate_report = json.dumps(gate)
+        return spec
+
+    if outcome == "rejected":
+        spec.gate_report = json.dumps(gate)
+        if has_previous_good:
+            # Keep the previous good spec: leave code/path/status untouched.
+            return spec
+        # No previous spec to fall back on — save non-runnable, noting the rejection.
+        spec.code = code
+        spec.status = "blocked"
+        spec.block_reason = f'Rejected: {gate["reason"]} {gate["unblock_action"]}'.strip()
+        return spec
+
+    # passed — accept and write the runnable spec file.
+    path = spec_service.write_spec_file(run.code, case.ticket_external_id, case.code, code)
     spec.code = code
     spec.path = str(path)
+    spec.status = "draft"
+    spec.block_reason = ""
+    spec.gate_report = json.dumps(gate)
     return spec
 
 

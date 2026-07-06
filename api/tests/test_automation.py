@@ -35,6 +35,29 @@ def _clear_heal_state():
     playwright_runner._healing.clear()
 
 
+@pytest.fixture(autouse=True)
+def _stub_external_gates(monkeypatch):
+    """Keep generation/heal deterministic + fast.
+
+    Two wiring points call real external tools: the ``playwright test --list`` parse
+    gate (a subprocess) and the Claude-backed failure classifier. Stub both to safe
+    no-op defaults so tests exercise our own control flow, not node/Claude. Tests
+    that need a specific outcome override these locally after this fixture runs."""
+    from app.services import failure_classifier, spec_service
+
+    monkeypatch.setattr(spec_service, "playwright_list_ok", lambda code: True)
+    monkeypatch.setattr(
+        failure_classifier,
+        "classify_failure",
+        lambda *a, **k: {
+            "failureClass": "test_defect",
+            "suspectedProductDefect": False,
+            "reason": "stub",
+        },
+    )
+    yield
+
+
 def _seed_run_and_case(db_session, *, automation="Playwright", approval="approved"):
     global _run_counter
     _run_counter += 1
@@ -389,9 +412,18 @@ def test_heal_fixes_then_passes_updates_spec(client, db_session, monkeypatch):
         (spec_dir_arg / "report.json").write_text(__import__("json").dumps(report), encoding="utf-8")
         return (1 if status == "failed" else 0), status, ""
 
-    FIXED = "import { test, expect } from '@playwright/test';\n\ntest('Login works', async () => { /* fixed */ });\n"
+    # A valid fix keeps at least as many assertions as before (anti-cheat gate):
+    # this one adds a distinguishing comment while preserving the assertions.
+    FIXED = (
+        "import { test, expect } from '@playwright/test';\n\n"
+        "test('Login works', async ({ page }) => {\n"
+        "  // fixed\n"
+        "  await page.goto('https://example.com/login');\n"
+        "  await expect(page).toHaveTitle(/Login/);\n"
+        "});\n"
+    )
 
-    def fake_fix(case_arg, current_code, error_message, run_output="", context=None):
+    def fake_fix(case_arg, current_code, error_message, run_output="", context=None, examples=None):
         calls["fix"] += 1
         assert "selector not found" in error_message
         return FIXED
@@ -447,7 +479,15 @@ def test_heal_report_captures_attempts_and_diff(client, db_session, monkeypatch)
         (spec_dir_arg / "report.json").write_text(__import__("json").dumps(report), encoding="utf-8")
         return (1 if status == "failed" else 0), status, ""
 
-    FIXED = "import { test, expect } from '@playwright/test';\n\ntest('Login works', async () => { /* healed */ });\n"
+    # Keep >= the original assertion count (anti-cheat) while marking the change.
+    FIXED = (
+        "import { test, expect } from '@playwright/test';\n\n"
+        "test('Login works', async ({ page }) => {\n"
+        "  // healed\n"
+        "  await page.goto('https://example.com/login');\n"
+        "  await expect(page).toHaveTitle(/Login/);\n"
+        "});\n"
+    )
     monkeypatch.setattr(playwright_runner, "_invoke_playwright", fake_invoke)
     monkeypatch.setattr(playwright_runner.spec_service, "generate_fixed_spec_code",
                         lambda *a, **k: FIXED)
@@ -520,3 +560,153 @@ def test_spec_filename_strips_ticket_prefix():
     from app.services import spec_service
 
     assert spec_service.spec_filename("SUR-1428", "TC-01") == "1428-TC-01.spec.ts"
+
+
+def test_heal_rejects_assertion_weakening_fix(client, db_session, monkeypatch):
+    """Anti-cheat: a regenerated 'fix' with fewer assertions than the current spec
+    is rejected — the previous good spec is kept verbatim and the heal is marked
+    failed (a weaker check is never a valid fix)."""
+    from app.services import claude_cli, playwright_runner
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    original = client.get(f"/cases/{case.id}/spec").json()["code"]  # 3 assertions
+    _seed_execution_result(db_session, run, case, status="fail")
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        report = {"suites": [{"file": "1428-TC-01.spec.ts", "specs": [
+            {"title": "Login works", "file": "1428-TC-01.spec.ts", "tests": [
+                {"results": [{"status": "failed", "duration": 5, "attachments": [],
+                              "error": {"message": "boom"}}]}]}]}]}
+        (spec_dir_arg / "report.json").write_text(__import__("json").dumps(report), encoding="utf-8")
+        return 1, "failed", ""
+
+    # The "fix" deletes every assertion — pure cheating; must be rejected.
+    WEAK = "import { test } from '@playwright/test';\n\ntest('Login works', async () => {});\n"
+    calls = {"fix": 0}
+
+    def fake_fix(*a, **k):
+        calls["fix"] += 1
+        return WEAK
+
+    monkeypatch.setattr(playwright_runner, "_invoke_playwright", fake_invoke)
+    monkeypatch.setattr(playwright_runner.spec_service, "generate_fixed_spec_code", fake_fix)
+
+    assert client.post(f"/cases/{case.id}/spec/heal").json()["started"] is True
+    _wait_heal_done(client, case.id)
+
+    # Previous good spec kept; the weakening fix never overwrote it.
+    assert client.get(f"/cases/{case.id}/spec").json()["code"] == original
+    assert calls["fix"] == 1
+
+    from app.db import SessionLocal
+    from app.models.execution import ExecutionResult
+    from app.models.testcase import AutomationSpec
+
+    db = SessionLocal()
+    try:
+        result = (
+            db.query(ExecutionResult)
+            .filter(ExecutionResult.test_case_id == case.id)
+            .order_by(ExecutionResult.id.desc())
+            .first()
+        )
+        assert result.status == "fail"
+        spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
+        assert spec.status == "failed"
+    finally:
+        db.close()
+
+
+def test_heal_stops_on_product_defect_without_regenerating(client, db_session, monkeypatch):
+    """A product-defect classification stops the heal loop before any regenerate:
+    the spec is marked terminal ``product_defect`` and the fixer is never called."""
+    from app.services import claude_cli, failure_classifier, playwright_runner
+
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_execution_result(db_session, run, case, status="fail")
+
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+        report = {"suites": [{"file": "1428-TC-01.spec.ts", "specs": [
+            {"title": "Login works", "file": "1428-TC-01.spec.ts", "tests": [
+                {"results": [{"status": "failed", "duration": 5, "attachments": [],
+                              "error": {"message": "expected $10 got $0"}}]}]}]}]}
+        (spec_dir_arg / "report.json").write_text(__import__("json").dumps(report), encoding="utf-8")
+        return 1, "failed", ""
+
+    monkeypatch.setattr(
+        failure_classifier, "classify_failure",
+        lambda *a, **k: {"failureClass": "product_defect",
+                         "suspectedProductDefect": True, "reason": "app returned $0"},
+    )
+
+    def boom_fix(*a, **k):
+        raise AssertionError("product defect must NOT reach the fixer")
+
+    monkeypatch.setattr(playwright_runner, "_invoke_playwright", fake_invoke)
+    monkeypatch.setattr(playwright_runner.spec_service, "generate_fixed_spec_code", boom_fix)
+
+    assert client.post(f"/cases/{case.id}/spec/heal").json()["started"] is True
+    _wait_heal_done(client, case.id)
+
+    from app.db import SessionLocal
+    from app.models.execution import ExecutionResult
+    from app.models.testcase import AutomationSpec
+
+    db = SessionLocal()
+    try:
+        spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
+        assert spec.status == "product_defect"
+        result = (
+            db.query(ExecutionResult)
+            .filter(ExecutionResult.test_case_id == case.id)
+            .order_by(ExecutionResult.id.desc())
+            .first()
+        )
+        assert result.failure_class == "product_defect"
+    finally:
+        db.close()
+
+
+def test_generation_gate_blocked_vs_rejected(db_session, monkeypatch):
+    """The placeholder gate at generation time: the SAME placeholder is ``blocked``
+    when the KB has no grounding (missing input) but ``rejected`` when the KB does
+    provide routes/selectors the model should have used."""
+    from app.routers import automation
+    from app.models.run import Run
+    from app.services import spec_service
+
+    placeholder_spec = (
+        "import { test, expect } from '@playwright/test';\n\n"
+        "test('Login works', async ({ page }) => {\n"
+        "  await page.goto('/login'); // TODO real route\n"
+        "  await expect(page).toHaveTitle(/Login/);\n"
+        "});\n"
+    )
+    monkeypatch.setattr(spec_service, "generate_spec_code", lambda *a, **k: placeholder_spec)
+
+    # No KB grounding -> blocked (missing input); no runnable file written.
+    monkeypatch.setattr(spec_service, "build_case_context", lambda *a, **k: {})
+    run, case = _seed_run_and_case(db_session)
+    spec = automation._generate_one(db_session, db_session.get(Run, run.id), case)
+    db_session.commit()
+    assert spec.status == "blocked"
+    assert spec.block_reason
+    from app.config import settings
+
+    assert not (settings.specs_dir / run.code / "1428-TC-01.spec.ts").exists()
+
+    # KB has grounding for the very route/selectors -> the placeholder is a rejection.
+    grounded = {"routes": [{"path": "/login"}], "selectors": ["#user"], "baseUrl": "https://x"}
+    monkeypatch.setattr(spec_service, "build_case_context", lambda *a, **k: grounded)
+    run2, case2 = _seed_run_and_case(db_session)
+    spec2 = automation._generate_one(db_session, db_session.get(Run, run2.id), case2)
+    db_session.commit()
+    # No previous good spec to fall back on -> saved non-runnable, noting the rejection.
+    assert spec2.status == "blocked"
+    import json as _json
+
+    assert _json.loads(spec2.gate_report)["outcome"] == "rejected"
