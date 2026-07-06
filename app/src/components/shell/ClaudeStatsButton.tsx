@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Pill } from "@/components/ui/badges";
 import { useAiStats } from "@/hooks/queries";
-import type { ClaudeStats } from "@/types/api";
+import type { ByModelUsage, ClaudeStats, UsageWindow } from "@/types/api";
 
 const PANEL_WIDTH = 300;
 
@@ -20,23 +20,34 @@ function fmtCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
-/** Latency ms → "1.4s". */
-function fmtLatency(ms: number): string {
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-/** ISO → short "Jul 6"; empty for null. */
-function fmtResetDate(iso: string | null): string {
+/** ISO (UTC) → local time-of-day "3:45 PM"; empty for missing/invalid. */
+function fmtTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/** ISO (UTC) → local "Jul 6, 3:45 PM"; empty for missing/invalid. */
+function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /** Strip the leading "Claude " so the chip/breakdown show the short name. */
 function shortModel(label: string): string {
   return label.replace(/^Claude\s+/i, "").trim() || label;
 }
+
+/** Safe fallback so the panel renders while the endpoint is on the old shape. */
+const EMPTY_WINDOW: UsageWindow = { costUsd: 0, tokens: 0, requests: 0, resetsAt: "" };
 
 /**
  * Top-bar Claude usage chip (`● ⭐ Sonnet 5 ▾`) + a portalled dropdown panel of
@@ -73,6 +84,33 @@ export function ClaudeStatsButton() {
         <StatsPanel open={open} onClose={() => setOpen(false)} anchorRef={btnRef} stats={stats} />
       )}
     </>
+  );
+}
+
+/** One rolling window row (session / week): label + cost, then a sub-line. */
+function UsageRow({
+  label,
+  window,
+  resetsAsDate,
+}: {
+  label: string;
+  window: UsageWindow;
+  resetsAsDate?: boolean;
+}) {
+  const reset = resetsAsDate ? fmtDateTime(window.resetsAt) : fmtTime(window.resetsAt);
+  const sub = `${fmtTokens(window.tokens)} tokens · ${window.requests} requests${
+    reset ? ` · resets ${reset}` : ""
+  }`;
+  return (
+    <div className="mt-[15px]">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-ink-soft">{label}</span>
+        <span className="text-[12px] font-bold text-ink">{fmtCost(window.costUsd)}</span>
+      </div>
+      {/* Thin faint bar — a divider cue, not a % gauge (no budget model). */}
+      <div className="mt-2 h-[3px] w-full rounded-full bg-white/[0.06]" />
+      <div className="mt-1.5 text-[10.5px] text-ink-dim">{sub}</div>
+    </div>
   );
 }
 
@@ -126,21 +164,17 @@ function StatsPanel({
 
   if (!open || !pos) return null;
 
-  const budgeted = stats.weekBudget > 0;
-  const pct = budgeted ? Math.min(1, stats.weekTokens / stats.weekBudget) : 0;
-  const resetDate = fmtResetDate(stats.weekResetsAt);
   const short = shortModel(stats.modelLabel);
-
-  const usageLabel = budgeted ? `${Math.round(pct * 100)}% used` : `${fmtTokens(stats.weekTokens)} used`;
-  const usageSub = budgeted
-    ? `${fmtTokens(stats.weekTokens)} / ${fmtTokens(stats.weekBudget)} tokens${resetDate ? ` · resets ${resetDate}` : ""}`
-    : `${fmtTokens(stats.weekTokens)} tokens${resetDate ? ` · resets ${resetDate}` : ""}`;
+  const session = stats.session ?? EMPTY_WINDOW;
+  const week = stats.week ?? EMPTY_WINDOW;
+  const bd = stats.breakdown ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const byModel: ByModelUsage[] = stats.byModel ?? [];
 
   const breakdown: Array<[string, number, string]> = [
-    ["Input", stats.breakdown.input, "#a78bfa"],
-    ["Output", stats.breakdown.output, "#22d3ee"],
-    ["Cache read", stats.breakdown.cacheRead, "#34d399"],
-    ["Cache write", stats.breakdown.cacheWrite, "#fbbf24"],
+    ["Input", bd.input, "#a78bfa"],
+    ["Output", bd.output, "#22d3ee"],
+    ["Cache read", bd.cacheRead, "#34d399"],
+    ["Cache write", bd.cacheWrite, "#fbbf24"],
   ];
 
   return createPortal(
@@ -163,7 +197,10 @@ function StatsPanel({
             className="flex items-center gap-1.5 text-[11px] font-semibold"
             style={{ color: stats.operational ? "#34d399" : "#f43f5e" }}
           >
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: stats.operational ? "#34d399" : "#f43f5e" }} />
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: stats.operational ? "#34d399" : "#f43f5e" }}
+            />
             {stats.operational ? "Operational" : "Unavailable"}
           </div>
         </div>
@@ -172,40 +209,9 @@ function StatsPanel({
         </Pill>
       </div>
 
-      {/* Tokens this week */}
-      <div className="mt-[15px]">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-ink-soft">Tokens this week</span>
-          <span className="text-[11px] font-semibold text-ink-dim">{usageLabel}</span>
-        </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-          {budgeted ? (
-            <div
-              className="h-full rounded-full"
-              style={{ width: `${pct * 100}%`, background: "linear-gradient(90deg,#8b5cf6,#22d3ee)" }}
-            />
-          ) : (
-            <div className="h-full w-full rounded-full bg-white/[0.06]" />
-          )}
-        </div>
-        <div className="mt-1.5 text-[10.5px] text-ink-dim">{usageSub}</div>
-      </div>
-
-      {/* Stat tiles */}
-      <div className="mt-[15px] grid grid-cols-3 gap-2">
-        {(
-          [
-            [String(stats.requestsToday), "Requests today"],
-            [fmtLatency(stats.avgLatencyMs), "Avg latency"],
-            [fmtCost(stats.costMonth), "Cost · month"],
-          ] as Array<[string, string]>
-        ).map(([value, tileLabel]) => (
-          <div key={tileLabel} className="rounded-[10px] border border-white/[0.07] bg-white/[0.04] px-2 py-2.5">
-            <div className="text-[14px] font-bold text-ink">{value}</div>
-            <div className="mt-0.5 text-[9.5px] leading-tight text-ink-dim">{tileLabel}</div>
-          </div>
-        ))}
-      </div>
+      {/* Rolling windows */}
+      <UsageRow label="Current session" window={session} />
+      <UsageRow label="Current week" window={week} resetsAsDate />
 
       {/* Token breakdown */}
       <div className="mt-[15px] mb-[7px] text-[9px] font-bold tracking-[0.1em] text-ink-dim">
@@ -220,6 +226,30 @@ function StatsPanel({
           </div>
         ))}
       </div>
+
+      {/* By model — only when more than one model has usage */}
+      {byModel.length > 1 && (
+        <>
+          <div className="mt-[15px] mb-[7px] text-[9px] font-bold tracking-[0.1em] text-ink-dim">
+            BY MODEL
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {byModel.map((m) => (
+              <div key={m.model} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[11px] text-ink-soft">
+                  {m.modelLabel}
+                </span>
+                <span className="text-[10px] text-ink-dim">
+                  {fmtTokens(m.input + m.output + m.cacheRead + m.cacheWrite)} tokens
+                </span>
+                <span className="font-mono text-[11px] font-semibold text-ink">
+                  {fmtCost(m.costUsd)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Manage AI settings */}
       <button

@@ -580,19 +580,35 @@ export interface SettingsOut {
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 
+/** A single rolling usage window (session or week) for the top-bar panel. */
+export interface UsageWindow {
+  costUsd: number; // spend in this window, USD
+  tokens: number; // total tokens in this window
+  requests: number; // request count in this window
+  resetsAt: string; // ISO (UTC); render in local tz
+}
+
+/** Per-model usage rollup for the panel's "By model" list. */
+export interface ByModelUsage {
+  model: string; // "claude-sonnet-5"
+  modelLabel: string; // "Claude Sonnet 5"
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  costUsd: number;
+}
+
 /** Claude usage stats for the top-bar chip + panel (GET /ai/stats). */
 export interface ClaudeStats {
   model: string; // "claude-sonnet-5"
   modelLabel: string; // "Claude Sonnet 5"
   operational: boolean;
   ctxWindow: string; // "200K"
-  requestsToday: number;
-  avgLatencyMs: number;
-  costMonth: number; // USD
-  weekTokens: number; // all-model total tokens this week
-  weekBudget: number; // tokens; 0 = no budget set
-  weekResetsAt: string | null; // ISO
+  session: UsageWindow; // current rolling session
+  week: UsageWindow; // current rolling week
   breakdown: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  byModel: ByModelUsage[];
 }
 
 /** Evidence grouped-by-ticket response for GET /runs/{id}/evidence. */
