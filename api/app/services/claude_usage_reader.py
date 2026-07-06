@@ -18,6 +18,9 @@ table (see ``_PRICES``).
 from __future__ import annotations
 
 import json
+import re
+import subprocess
+import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -47,6 +50,89 @@ _CACHE_TTL_S = 60.0
 # scan of the transcripts is comparatively expensive, so we reuse the computed
 # result within a short TTL.
 _cache: tuple[float, dict[str, Any]] | None = None
+
+# --- Plan limit % (from the CLI's own `/usage`) ------------------------------
+# The session/week limit percentages come from the exact same source as the
+# CLI's `/usage` view: a live authenticated call the CLI makes. We can't reach
+# that endpoint ourselves, but we CAN drive the CLI to produce it by piping
+# `/usage` to it and parsing the rendered output. Spawning the CLI is slow
+# (~10–40s), so we cache the parsed result and refresh it in a BACKGROUND thread
+# — `read_stats()` never blocks on it. `limitsStatus` tells the UI whether to
+# show a skeleton ("loading"), the real bars ("ready"), or fall back ("unavailable").
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+_SESSION_RE = re.compile(r"Current session:\s*(\d+)%\s*used(?:[^\n]*?resets\s*([^\n]+))?", re.I)
+_WEEK_RE = re.compile(r"Current week \(all models\):\s*(\d+)%\s*used(?:[^\n]*?resets\s*([^\n]+))?", re.I)
+_LIMITS_TTL_S = 180.0
+_LIMITS_USAGE_TIMEOUT_S = 45
+
+# (monotonic_ts, parsed | None). parsed = {"session": {...}, "week": {...}}.
+_limits_cache: tuple[float, dict[str, Any] | None] | None = None
+_limits_refreshing = False
+_limits_lock = threading.Lock()
+
+
+def _run_cli_usage() -> dict[str, Any] | None:
+    """Drive `claude` to emit its `/usage` view and parse the session/week %.
+
+    Pipes `/usage` to the CLI's stdin (the interactive command), strips ANSI, and
+    regex-parses the two limit lines. Returns None on any failure/parse miss.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603
+            [app_settings.claude_bin],
+            input="/usage\n",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=_LIMITS_USAGE_TIMEOUT_S,
+        )
+    except Exception as exc:  # noqa: BLE001 - never break stats on a CLI hiccup
+        logger.warning("Claude /usage read failed: {}", exc)
+        return None
+    out = _ANSI_RE.sub("", proc.stdout or "")
+    sm = _SESSION_RE.search(out)
+    wm = _WEEK_RE.search(out)
+    if not sm and not wm:
+        return None
+    return {
+        "session": {
+            "pctUsed": int(sm.group(1)) if sm else -1,
+            "resetLabel": (sm.group(2) or "").strip() if sm else "",
+        },
+        "week": {
+            "pctUsed": int(wm.group(1)) if wm else -1,
+            "resetLabel": (wm.group(2) or "").strip() if wm else "",
+        },
+    }
+
+
+def _refresh_limits() -> None:
+    global _limits_cache, _limits_refreshing
+    try:
+        parsed = _run_cli_usage()
+        _limits_cache = (time.monotonic(), parsed)
+    finally:
+        _limits_refreshing = False
+
+
+def _get_limits() -> tuple[dict[str, Any] | None, str]:
+    """Return (parsed_or_None, status). Never blocks — refreshes in the background.
+
+    status: "loading" until the first fetch completes, then "ready" (parsed) or
+    "unavailable" (fetch/parse failed).
+    """
+    global _limits_refreshing
+    now = time.monotonic()
+    stale = _limits_cache is None or (now - _limits_cache[0]) >= _LIMITS_TTL_S
+    if stale:
+        with _limits_lock:
+            if not _limits_refreshing:
+                _limits_refreshing = True
+                threading.Thread(target=_refresh_limits, daemon=True).start()
+    if _limits_cache is None:
+        return None, "loading"
+    parsed = _limits_cache[1]
+    return parsed, ("ready" if parsed else "unavailable")
 
 
 def _int(value: Any) -> int:
@@ -101,6 +187,8 @@ def _window_summary(
         "tokens": total_tokens,
         "requests": requests,
         "resetsAt": resets_at,
+        "pctUsed": -1,  # overlaid from the CLI's /usage in read_stats (-1 = unknown)
+        "resetLabel": "",
     }
 
 
@@ -248,7 +336,7 @@ def _compute_zero() -> dict[str, Any]:
     week_resets = (today_utc + timedelta(days=7 - now_utc.weekday())).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
-    zero = {"costUsd": 0.0, "tokens": 0, "requests": 0}
+    zero = {"costUsd": 0.0, "tokens": 0, "requests": 0, "pctUsed": -1, "resetLabel": ""}
     return {
         "model": cur_model,
         "modelLabel": label,
@@ -271,11 +359,21 @@ def read_stats() -> dict[str, Any]:
     global _cache
     now = time.monotonic()
     if _cache is not None and now - _cache[0] < _CACHE_TTL_S:
-        return _cache[1]
-    try:
-        result = _compute()
-    except Exception as exc:  # noqa: BLE001 - stats must never break the endpoint
-        logger.warning("Claude usage read failed: {}", exc)
-        result = _compute_zero()
-    _cache = (now, result)
-    return result
+        base = _cache[1]
+    else:
+        try:
+            base = _compute()
+        except Exception as exc:  # noqa: BLE001 - stats must never break the endpoint
+            logger.warning("Claude usage read failed: {}", exc)
+            base = _compute_zero()
+        _cache = (now, base)
+
+    # Overlay the real plan-limit % from the CLI's /usage (background-refreshed,
+    # never blocks). Build a shallow copy so the cached compute isn't mutated.
+    limits, status = _get_limits()
+    return {
+        **base,
+        "limitsStatus": status,
+        "session": {**base["session"], **((limits or {}).get("session", {}))},
+        "week": {**base["week"], **((limits or {}).get("week", {}))},
+    }

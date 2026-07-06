@@ -16,9 +16,9 @@ from app.services import ai_usage_service, claude_cli, claude_usage_reader
 
 CONTRACT_KEYS = {
     "model", "modelLabel", "operational", "ctxWindow",
-    "session", "week", "breakdown", "byModel",
+    "session", "week", "breakdown", "byModel", "limitsStatus",
 }
-WINDOW_KEYS = {"costUsd", "tokens", "requests", "resetsAt"}
+WINDOW_KEYS = {"costUsd", "tokens", "requests", "resetsAt", "pctUsed", "resetLabel"}
 
 
 def _iso(dt: datetime) -> str:
@@ -42,6 +42,8 @@ def _fresh(monkeypatch, claude_home):
     monkeypatch.setattr(app_settings, "claude_home", claude_home)
     monkeypatch.setattr(claude_cli, "is_available", lambda: True)
     monkeypatch.setattr(claude_usage_reader, "_cache", None)
+    # Stub the CLI /usage limit fetch so tests stay deterministic and never spawn `claude`.
+    monkeypatch.setattr(claude_usage_reader, "_get_limits", lambda: (None, "unavailable"))
 
 
 def test_read_stats_new_shape(workspace_dir, tmp_path, monkeypatch):
