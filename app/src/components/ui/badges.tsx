@@ -23,6 +23,14 @@ export const execColors: Record<string, [string, string]> = {
   skipped: ["#6b7280", "Skipped"],
 };
 
+/**
+ * Visual token ([color, label]) for a confirmed product defect — a failed case
+ * whose `failureClass === "product_defect"`. Deliberately fuchsia (#d946ef), NOT
+ * the script-fail red (#f43f5e), so a genuine product bug reads distinctly from a
+ * plain test failure. Kept in sync with the Automation slice's product-defect hue.
+ */
+export const productDefectStyle: [string, string] = ["#d946ef", "Product defect"];
+
 export function priorityColor(p: string): string {
   return p === "High" ? "#fb7185" : p === "Medium" ? "#fbbf24" : "#94a3b8";
 }
