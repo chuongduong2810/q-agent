@@ -39,12 +39,16 @@ from app.config import settings
 from app.logging import logger
 from app.models.execution import Evidence, Execution, ExecutionResult
 from app.models.run import Run, RunTicket
+from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
 from app.services import (
     audit_service,
     evidence_analysis,
+    failure_classifier,
+    placeholder_gate,
     project_config_service,
     settings_store,
+    spec_examples,
     spec_service,
 )
 from app.services.claude_cli import ClaudeError
@@ -725,6 +729,23 @@ def run_execution(execution_id: int) -> None:
                 },
             )
 
+        # Reflect each case's run outcome on its spec lifecycle status. On a plain
+        # run we do NOT classify — failure_class stays empty; classification only
+        # happens in the self-heal path (see heal_spec).
+        for result in results:
+            spec = (
+                db.query(AutomationSpec)
+                .filter(AutomationSpec.test_case_id == result.test_case_id)
+                .first()
+            )
+            if spec is None:
+                continue
+            if result.status == "pass":
+                spec.status = "passed"
+            elif result.status == "fail":
+                spec.status = "failed"
+        db.commit()
+
         # Auto-analyze + annotate failure screenshots so the Evidence step yields
         # high-quality, annotated review evidence (client-requested). Each is a
         # Claude vision call, so it's gated by a setting and fully best-effort.
@@ -868,6 +889,19 @@ def _apply_heal_result(
     )
 
 
+def _set_latest_failure_class(db, case: TestCase, failure_class: str) -> None:
+    """Persist a root-cause class onto the case's most recent ExecutionResult."""
+    result = (
+        db.query(ExecutionResult)
+        .filter(ExecutionResult.test_case_id == case.id)
+        .order_by(ExecutionResult.id.desc())
+        .first()
+    )
+    if result is not None:
+        result.failure_class = failure_class or ""
+        db.commit()
+
+
 def heal_spec(case_id: int) -> None:
     """Background worker: self-heal one test case's Playwright spec.
 
@@ -877,8 +911,6 @@ def heal_spec(case_id: int) -> None:
     latest ExecutionResult, and publishes ``heal.progress`` WS events with phase
     running | fixing | passed | failed.
     """
-    from app.models.testcase import AutomationSpec, TestCase
-
     db = db_module.SessionLocal()
     try:
         case = db.get(TestCase, case_id)
@@ -917,6 +949,31 @@ def heal_spec(case_id: int) -> None:
         use_fixtures = bool(manual_auth and storage_state and session_file.exists())
 
         context = spec_service.build_case_context(db, case, env=run.env)
+        # KB view the placeholder gate compares a regenerated fix against.
+        known = {
+            "routes": context.get("routes", []),
+            "selectors": context.get("selectors", []),
+            "base_url": context.get("baseUrl", ""),
+        }
+        # Few-shot grounding for the fixer: proven passing specs, same project+repo.
+        heal_ticket = (
+            db.query(RunTicket)
+            .filter(
+                RunTicket.run_id == run.id,
+                RunTicket.ticket_external_id == case.ticket_external_id,
+            )
+            .first()
+        )
+        heal_repo = heal_ticket.repo if heal_ticket else ""
+        examples = (
+            spec_examples.select_examples(db, project_key, heal_repo, case, limit=2)
+            if project_key
+            else []
+        )
+
+        # A heal pass is now underway — reflect it on the spec lifecycle.
+        spec.status = "running"
+        db.commit()
 
         def emit(phase: str, attempt: int, message: str, error: str = "") -> None:
             if case_id in _healing:
@@ -1011,6 +1068,33 @@ def heal_spec(case_id: int) -> None:
             rec["status"] = "fail"
             rec["error"] = final_error
 
+            # Classify the failure's root cause BEFORE attempting any regenerate.
+            # A product defect means the APP is wrong, not the test — we must not
+            # "heal" it by editing the spec (that would just weaken the check);
+            # instead mark the spec terminal and route it to the report /
+            # ticket-comment stage. product_defect cases never reach the fixer, and
+            # must stay EXCLUDED from any future heal/learning loop.
+            classification = failure_classifier.classify_failure(
+                case, spec.code, final_error, final_output, context
+            )
+            _set_latest_failure_class(db, case, classification["failureClass"])
+            rec["failureClass"] = classification["failureClass"]
+            rec["classificationReason"] = classification.get("reason", "")
+            if classification["suspectedProductDefect"] or (
+                classification["failureClass"] == "product_defect"
+            ):
+                spec.status = "product_defect"  # TERMINAL — assertion kept intact
+                db.commit()
+                rec["productDefect"] = True
+                attempts_log.append(rec)
+                emit(
+                    "product_defect",
+                    attempt,
+                    "Product defect suspected — routing to report, not the fixer",
+                    error=final_error,
+                )
+                break
+
             if attempt >= max_attempts:
                 attempts_log.append(rec)
                 emit("failed", attempt, "Still failing after max attempts", error=final_error)
@@ -1019,7 +1103,7 @@ def heal_spec(case_id: int) -> None:
             emit("fixing", attempt, "Asking Claude to fix the spec", error=final_error)
             try:
                 fixed = spec_service.generate_fixed_spec_code(
-                    case, spec.code, final_error, final_output, context
+                    case, spec.code, final_error, final_output, context, examples
                 )
             except ClaudeError as exc:
                 final_error = f"Heal generation failed: {exc}"
@@ -1028,7 +1112,49 @@ def heal_spec(case_id: int) -> None:
                 emit("failed", attempt, final_error, error=final_error)
                 break
 
-            # Record what Claude changed (unified diff of the spec before -> after).
+            # Anti-cheat: a fix that removes/weakens assertions is NEVER valid — it
+            # only "passes" by checking less. Reject it, keep the previous good spec
+            # (do not overwrite code/path/file), and stop (mark failed).
+            previous_code = spec.code or ""
+            if placeholder_gate.count_assertions(fixed) < placeholder_gate.count_assertions(
+                previous_code
+            ):
+                final_status = "fail"
+                final_error = "Rejected fix: it removed/weakened assertions (anti-cheat)."
+                rec["error"] = final_error
+                rec["rejected"] = "assertion-weakening"
+                attempts_log.append(rec)
+                emit("failed", attempt, "Rejected fix that weakened assertions", error=final_error)
+                break
+
+            # Placeholder / invented-reference gate on the regenerated code.
+            gate = placeholder_gate.gate_spec(fixed, known)
+            if gate["outcome"] == "blocked":
+                # Missing-input: keep the previous spec, mark the spec blocked.
+                spec.status = "blocked"
+                spec.block_reason = f'{gate["reason"]} {gate["unblock_action"]}'.strip()
+                spec.gate_report = json.dumps(gate)
+                db.commit()
+                final_status = "fail"
+                final_error = spec.block_reason
+                rec["error"] = final_error
+                rec["gate"] = "blocked"
+                attempts_log.append(rec)
+                emit("failed", attempt, "Fix blocked by placeholder gate", error=final_error)
+                break
+            if gate["outcome"] == "rejected":
+                # Keep the previous good spec; record the rejection in gate_report.
+                spec.gate_report = json.dumps(gate)
+                db.commit()
+                final_status = "fail"
+                final_error = gate["reason"]
+                rec["error"] = final_error
+                rec["gate"] = "rejected"
+                attempts_log.append(rec)
+                emit("failed", attempt, "Fix rejected by placeholder gate", error=final_error)
+                break
+
+            # Accepted fix — record what Claude changed (unified diff), write it.
             diff = "\n".join(
                 difflib.unified_diff(
                     (spec.code or "").splitlines(),
@@ -1047,6 +1173,14 @@ def heal_spec(case_id: int) -> None:
             )
             spec.code = fixed
             spec.path = str(path)
+            db.commit()
+
+        # Reflect the heal outcome on the spec lifecycle. Terminal states set
+        # inside the loop (product_defect / blocked) win and are left intact; every
+        # other exit maps to passed / failed (attempts exhausted, anti-cheat or
+        # gate rejection all mean the heal did not produce a good spec).
+        if spec.status not in ("product_defect", "blocked"):
+            spec.status = "passed" if final_status == "pass" else "failed"
             db.commit()
 
         # Persist the heal trail on the spec so the UI can show the full process.

@@ -7,13 +7,17 @@ ADR 0001 there is no simulated fallback: failures propagate as ``ClaudeError``.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.logging import logger
 from app.models.run import RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
@@ -23,6 +27,10 @@ from app.services.skills import AUTOMATION_GENERATOR
 
 _FENCE_RE = re.compile(r"```(?:ts|typescript)?\s*(.*?)```", re.DOTALL)
 
+# Few-shot reference specs are truncated to keep the prompt small (context-bloat
+# guard); at most 1-2 examples are ever injected (see select_examples).
+_EXAMPLE_MAX_CHARS = 6000
+
 _SYSTEM_PROMPT = (
     "You are a senior QA automation engineer. You write clean, runnable "
     "Playwright + TypeScript test specs using @playwright/test. Respond with "
@@ -30,6 +38,39 @@ _SYSTEM_PROMPT = (
     "```typescript fenced code block. Do not include any prose before or "
     "after the code block."
 )
+
+
+def _render_examples(examples: list[dict] | None) -> str:
+    """Render up to 2 proven passing specs as a reference block for the prompt.
+
+    Args:
+        examples: ``[{"filename", "code"}]`` from ``spec_examples.select_examples``
+            — real specs that already passed against THIS project + repo. May be
+            None/empty.
+
+    Returns:
+        A clearly-labelled reference section (each example truncated to
+        ``_EXAMPLE_MAX_CHARS``), or "" when there are no usable examples so the
+        prompt is unchanged in the no-grounding case.
+    """
+    if not examples:
+        return ""
+    blocks: list[str] = []
+    for ex in examples[:2]:
+        code = (ex.get("code", "") or "")[:_EXAMPLE_MAX_CHARS].strip()
+        if not code:
+            continue
+        filename = ex.get("filename", "") or "spec.ts"
+        blocks.append(f"// {filename}\n{code}")
+    if not blocks:
+        return ""
+    return (
+        "REFERENCE SPECS — real, already-passing specs from THIS project. Match "
+        "their conventions exactly (fixtures, helpers, import structure, assertion "
+        "style). Do NOT copy their test logic:\n\n"
+        + "\n\n".join(blocks)
+        + "\n\n"
+    )
 
 
 def build_case_context(db: Session, case: TestCase, env: str = "") -> dict[str, Any]:
@@ -57,13 +98,19 @@ def build_case_context(db: Session, case: TestCase, env: str = "") -> dict[str, 
     return project_config_service.context_for_ticket(db, ticket, env=env, repo=repo)
 
 
-def _build_prompt(case: TestCase, context: dict[str, Any] | None = None) -> str:
+def _build_prompt(
+    case: TestCase,
+    context: dict[str, Any] | None = None,
+    examples: list[dict] | None = None,
+) -> str:
     """Render the Claude prompt for a single test case.
 
     Args:
         case: The approved, non-Manual TestCase to generate a spec for.
         context: Resolved project context (base URL, real credentials, selectors,
             routes, auth) used to emit a runnable spec with no placeholders.
+        examples: Optional few-shot reference specs (proven, already-passing) shown
+            so the model matches this project's conventions.
 
     Returns:
         A prompt string describing the case's title, precondition, and steps,
@@ -93,6 +140,7 @@ def _build_prompt(case: TestCase, context: dict[str, Any] | None = None) -> str:
     return (
         f"Generate a Playwright TypeScript test spec for this manual test case.\n\n"
         f"{grounding}"
+        f"{_render_examples(examples)}"
         f"Title: {case.title}\n"
         f"Precondition: {case.precondition or 'None'}\n"
         f"Steps:\n{steps_lines or '  (none provided)'}\n\n"
@@ -108,6 +156,7 @@ def _build_fix_prompt(
     error_message: str,
     run_output: str = "",
     context: dict[str, Any] | None = None,
+    examples: list[dict] | None = None,
 ) -> str:
     """Render a Claude prompt asking it to FIX a spec that failed when executed.
 
@@ -118,6 +167,8 @@ def _build_fix_prompt(
         run_output: Optional tail of Playwright stdout/stderr for extra signal.
         context: Resolved project context (base URL, credentials, selectors, …)
             so fixes use the real, grounded values rather than guesses.
+        examples: Optional few-shot reference specs (proven, already-passing) so the
+            fix keeps this project's conventions.
 
     Returns:
         A prompt instructing Claude to return the complete corrected spec file.
@@ -132,6 +183,7 @@ def _build_fix_prompt(
     return (
         "The following Playwright test FAILED when executed. Fix it so it passes.\n\n"
         f"{grounding}"
+        f"{_render_examples(examples)}"
         f"Test case being automated:\n"
         f"Title: {case.title}\n"
         f"Precondition: {case.precondition or 'None'}\n"
@@ -156,6 +208,7 @@ def generate_fixed_spec_code(
     error_message: str,
     run_output: str = "",
     context: dict[str, Any] | None = None,
+    examples: list[dict] | None = None,
 ) -> str:
     """Ask Claude to repair a failing spec, given its code and the failure.
 
@@ -165,6 +218,7 @@ def generate_fixed_spec_code(
         error_message: The Playwright failure/assertion message.
         run_output: Optional tail of the Playwright process output.
         context: Resolved project context for grounded fixes.
+        examples: Optional few-shot reference specs (proven, already-passing).
 
     Returns:
         The corrected TypeScript spec source code.
@@ -173,7 +227,7 @@ def generate_fixed_spec_code(
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
     raw = claude_cli.run_prompt(
-        _build_fix_prompt(case, current_code, error_message, run_output, context),
+        _build_fix_prompt(case, current_code, error_message, run_output, context, examples),
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
         label=f"Heal: {case.ticket_external_id} {case.code}",
@@ -196,13 +250,19 @@ def _extract_code(raw: str) -> str:
     return (match.group(1) if match else raw).strip() + "\n"
 
 
-def generate_spec_code(case: TestCase, context: dict[str, Any] | None = None) -> str:
+def generate_spec_code(
+    case: TestCase,
+    context: dict[str, Any] | None = None,
+    examples: list[dict] | None = None,
+) -> str:
     """Ask Claude to generate Playwright TypeScript source for a test case.
 
     Args:
         case: The TestCase to generate automation for.
         context: Resolved project context (base URL, credentials, selectors, …)
             so the generated spec runs with little to no manual modification.
+        examples: Optional few-shot reference specs (proven, already-passing) shown
+            so the generated spec matches this project's conventions.
 
     Returns:
         The generated TypeScript spec source code.
@@ -211,7 +271,7 @@ def generate_spec_code(case: TestCase, context: dict[str, Any] | None = None) ->
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
     raw = claude_cli.run_prompt(
-        _build_prompt(case, context),
+        _build_prompt(case, context, examples),
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
         label=f"Spec: {case.ticket_external_id} {case.code}",
@@ -251,3 +311,67 @@ def write_spec_file(run_code: str, ticket_external_id: str, case_code: str, code
     path = run_dir / spec_filename(ticket_external_id, case_code)
     path.write_text(code, encoding="utf-8")
     return path
+
+
+def _resolve_list_bin() -> str | None:
+    """Path to the locally-installed Playwright binary, or None if not installed.
+
+    We deliberately do NOT fall back to ``npx`` here (unlike execution): a bare
+    ``npx playwright`` could trigger a network fetch/install and hang, and this
+    parse check must never block generation. Absent a local install we skip.
+    """
+    nm = settings.playwright_node_modules
+    for candidate in (nm / ".bin" / "playwright.cmd", nm / ".bin" / "playwright"):
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def playwright_list_ok(code: str) -> bool:
+    """Best-effort ``playwright test --list`` parse gate for a generated spec.
+
+    Writes ``code`` to a throwaway spec in a temp dir under the specs workspace and
+    runs ``playwright test --list`` against it.
+
+    Args:
+        code: The generated Playwright/TypeScript spec source to parse-check.
+
+    Returns:
+        ``False`` only when Playwright ran but FAILED to parse/collect the spec (a
+        definitive syntax/collection error) — the caller then treats the spec like
+        a gate rejection and keeps any previous good spec. Returns ``True`` when the
+        spec lists cleanly OR when the check cannot run at all (no local Playwright
+        install, timeout, OS error): the check is an optimization and must never
+        block generation when it is simply unavailable.
+    """
+    bin_path = _resolve_list_bin()
+    if bin_path is None:
+        return True  # skip: nothing to parse with
+    try:
+        settings.specs_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=str(settings.specs_dir)) as tmp:
+            tmp_dir = Path(tmp)
+            (tmp_dir / "playwright.config.ts").write_text(
+                "import { defineConfig } from '@playwright/test';\n"
+                "export default defineConfig({ testDir: '.' });\n",
+                encoding="utf-8",
+            )
+            (tmp_dir / "_gate.spec.ts").write_text(code, encoding="utf-8")
+            nm = str(settings.playwright_node_modules)
+            env = os.environ.copy()
+            env["NODE_PATH"] = nm + (
+                os.pathsep + env["NODE_PATH"] if env.get("NODE_PATH") else ""
+            )
+            proc = subprocess.run(  # noqa: S603
+                [bin_path, "test", "--list", "_gate.spec.ts"],
+                cwd=str(tmp_dir),
+                capture_output=True,
+                text=True,
+                timeout=60,
+                shell=True,  # noqa: S602 - .cmd resolution on Windows
+                env=env,
+            )
+            return proc.returncode == 0
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("playwright_list_ok skipped ({}): {}", type(exc).__name__, exc)
+        return True  # skip on any inability to run
