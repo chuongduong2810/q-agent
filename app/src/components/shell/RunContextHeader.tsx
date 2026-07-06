@@ -1,5 +1,6 @@
 import { CheckSquare, ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
+import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import { runRateLabel } from "@/components/dashboard/runStatus";
@@ -52,13 +53,18 @@ export function RunContextHeader({ runId }: { runId: number }) {
         </>
       )}
 
-      <button
-        ref={btnRef}
-        onClick={() => setSwitcherOpen((o) => !o)}
-        className="ml-auto flex items-center gap-1.5 rounded-[9px] border border-white/[0.1] bg-white/[0.05] px-[11px] py-1.5 text-[11px] font-semibold text-ink-soft hover:bg-white/[0.09]"
-      >
-        Switch run <ChevronDown size={12} strokeWidth={2} />
-      </button>
+      <div className="ml-auto flex items-center gap-2.5">
+        {/* Claude CLI activity indicator — also present in the global TopBar, so it
+            stays visible when the run-context header replaces it on run screens. */}
+        <AiActivityIndicator />
+        <button
+          ref={btnRef}
+          onClick={() => setSwitcherOpen((o) => !o)}
+          className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.1] bg-white/[0.05] px-[11px] py-1.5 text-[11px] font-semibold text-ink-soft hover:bg-white/[0.09]"
+        >
+          Switch run <ChevronDown size={12} strokeWidth={2} />
+        </button>
+      </div>
 
       <RunSwitcher
         open={switcherOpen}
