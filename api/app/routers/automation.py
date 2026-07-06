@@ -31,6 +31,7 @@ from app.services import (
     placeholder_gate,
     playwright_runner,
     project_config_service,
+    run_context,
     spec_examples,
     spec_service,
 )
@@ -182,6 +183,8 @@ def _run_generation(run_id: int, force: bool = False) -> None:
             hand-edited — specs are preserved. When True every eligible case is
             (re)generated, overwriting existing specs.
     """
+    # Attribute this thread's Claude spend to the run (see run_context).
+    run_context.set_run(run_id)
     db = db_module.SessionLocal()
     try:
         run = db.get(Run, run_id)
@@ -230,6 +233,7 @@ def _run_generation(run_id: int, force: bool = False) -> None:
             hub.publish(str(run_id), "run.status", {"status": run.status})
         _generating.discard(run_id)
         db.close()
+        run_context.clear()
 
 
 @router.post("/runs/{run_id}/automation/generate")

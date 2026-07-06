@@ -31,7 +31,7 @@ from app.schemas import (
     RunTicketOut,
     RunTicketRepoUpdate,
 )
-from app.services import audit_service, project_config_service
+from app.services import ai_usage_service, audit_service, project_config_service
 from app.services.ai_service import run_generation_pipeline
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -158,6 +158,13 @@ def list_run_tickets(run_id: int, db: Session = Depends(get_db)) -> list[RunTick
         .order_by(RunTicket.position)
         .all()
     )
+
+
+@router.get("/{run_id}/ai-usage")
+def get_run_ai_usage(run_id: int, db: Session = Depends(get_db)) -> dict:
+    """Per-run Claude cost/token attribution, grouped by process (see contract)."""
+    _get_run_or_404(db, run_id)
+    return ai_usage_service.run_breakdown(db, run_id)
 
 
 @router.get("/{run_id}/repos", response_model=list[RunRepoOptionOut])
