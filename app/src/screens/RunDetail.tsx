@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Brain,
   Check,
+  Clock,
   Cpu,
   FileText,
   Image as ImageIcon,
@@ -248,8 +249,13 @@ function RunTicketRow({
 }) {
   const [glyph, color] = providerGlyph[providerKind] ?? ["?", "#8b8b9e"];
   const done = runTicket.genStatus === "done";
-  const current = runTicket.genStatus === "analyzing" || runTicket.genStatus === "generating";
+  const analyzing = runTicket.genStatus === "analyzing";
+  const generating = runTicket.genStatus === "generating";
+  const current = analyzing || generating;
   const queued = runTicket.genStatus === "queued";
+  const errored = runTicket.genStatus === "error";
+  // Prefer the live phase message; else a status-specific default per the design.
+  const statusText = phaseMsg ?? (generating ? "Generating test cases…" : "Reading ticket…");
 
   return (
     <motion.div
@@ -258,11 +264,26 @@ function RunTicketRow({
       transition={{ duration: 0.4, delay: Math.min(index * 0.04, 0.3), ease: "easeOut" }}
       className="glass flex items-center gap-[14px] rounded-2xl p-[16px_18px]"
     >
-      <div
-        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[14px] font-black text-white"
-        style={{ background: color }}
-      >
-        {glyph}
+      {/* Provider avatar; a violet ring spins around it while this ticket is being processed. */}
+      <div className="relative h-[34px] w-[34px] shrink-0">
+        {current && (
+          <span
+            className="absolute rounded-[13px]"
+            style={{
+              inset: "-3px",
+              border: "2px solid transparent",
+              borderTopColor: "#c4b5fd",
+              borderRightColor: "#c4b5fd",
+              animation: "spin 1s linear infinite",
+            }}
+          />
+        )}
+        <div
+          className="flex h-full w-full items-center justify-center rounded-[10px] text-[14px] font-black text-white"
+          style={{ background: color }}
+        >
+          {glyph}
+        </div>
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-center gap-[9px]">
@@ -274,7 +295,7 @@ function RunTicketRow({
       {current && (
         <div className="flex items-center gap-[9px] text-[12.5px] font-semibold text-[#c4b5fd]">
           <Spinner size={15} />
-          {phaseMsg ?? "Generating test cases…"}
+          {statusText}
         </div>
       )}
       {done && (
@@ -283,7 +304,13 @@ function RunTicketRow({
           Review
         </Button>
       )}
-      {queued && <span className="text-[12px] font-semibold text-[#6b7280]">Queued</span>}
+      {queued && (
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[#6b7280]">
+          <Clock size={13} strokeWidth={2} />
+          Queued
+        </span>
+      )}
+      {errored && <span className="text-[12px] font-semibold text-[#fb7185]">Analysis failed</span>}
     </motion.div>
   );
 }
