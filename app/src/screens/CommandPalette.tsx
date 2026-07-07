@@ -91,7 +91,11 @@ export function CommandPalette() {
         className="w-[min(600px,92vw)] overflow-hidden rounded-[20px] border border-white/[0.11] shadow-[0_40px_90px_-20px_rgba(0,0,0,.8)]"
         style={{ background: "rgba(24,24,32,.9)", backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)" }}
       >
-        <Command shouldFilter value={query} onValueChange={setQuery} label="Command palette">
+        {/* NB: the search text is controlled on `Command.Input` only. The root
+            `Command`'s `value`/`onValueChange` is the *selected item*, not the
+            query — binding it to `query` fed the highlighted item's label back
+            into the search box, collapsing the list to a single result. */}
+        <Command shouldFilter label="Command palette">
           <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z" />
