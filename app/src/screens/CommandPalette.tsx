@@ -24,6 +24,8 @@ interface PaletteCommand {
   section: string;
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
   run: () => void;
+  /** Reachable only from within a run (workspace mode) — hidden off run routes. */
+  runScoped?: boolean;
 }
 
 /** Command palette overlay (⌘K) — cmdk-driven, matching Q-Agent.dc.html lines
@@ -48,17 +50,18 @@ export function CommandPalette() {
     navigate(path);
     closePalette();
   };
-  // Run-scoped commands target the resolved run, else fall back to the runs list.
-  const runPath = (seg: string) => (runId != null ? `/runs/${runId}/${seg}` : "/runs");
+  // Run-scoped commands only exist inside a run, so `runId` is always set when
+  // they're reachable (they're filtered out off run routes below).
+  const runPath = (seg: string) => `/runs/${runId}/${seg}`;
 
   const commands: PaletteCommand[] = [
     { id: "dashboard", label: "Go to Dashboard", section: "Navigate", icon: LayoutDashboard, run: go("/") },
     { id: "tickets", label: "Go to Tickets", section: "Navigate", icon: Ticket, run: go("/tickets") },
     { id: "runs", label: "Go to Runs", section: "Navigate", icon: SquareStack, run: go("/runs") },
-    { id: "review", label: "Go to Review Center", section: "Navigate", icon: CheckSquare, run: go(runPath("review")) },
-    { id: "automation", label: "Go to Automation", section: "Navigate", icon: Terminal, run: go(runPath("automation")) },
-    { id: "console", label: "Go to Execution", section: "Navigate", icon: ListChecks, run: go(runPath("execution")) },
-    { id: "evidence", label: "Go to Evidence", section: "Navigate", icon: Image, run: go(runPath("evidence")) },
+    { id: "review", label: "Go to Review Center", section: "Navigate", icon: CheckSquare, run: go(runPath("review")), runScoped: true },
+    { id: "automation", label: "Go to Automation", section: "Navigate", icon: Terminal, run: go(runPath("automation")), runScoped: true },
+    { id: "console", label: "Go to Execution", section: "Navigate", icon: ListChecks, run: go(runPath("execution")), runScoped: true },
+    { id: "evidence", label: "Go to Evidence", section: "Navigate", icon: Image, run: go(runPath("evidence")), runScoped: true },
     { id: "reports", label: "Go to Reports", section: "Navigate", icon: BarChart3, run: go("/reports") },
     { id: "settings", label: "Go to Settings", section: "Navigate", icon: SettingsIcon, run: go("/settings") },
     {
@@ -71,8 +74,12 @@ export function CommandPalette() {
         closePalette();
       },
     },
-    { id: "run-execution", label: "Run execution", section: "Action", icon: Terminal, run: go(runPath("execution")) },
+    { id: "run-execution", label: "Run execution", section: "Action", icon: Terminal, run: go(runPath("execution")), runScoped: true },
   ];
+
+  // Run-scoped screens (Review/Automation/Execution/Evidence) are reachable only
+  // from within a run — hide them unless the URL already resolves a run.
+  const visibleCommands = commands.filter((c) => !c.runScoped || runId != null);
 
   // Also route "Projects" — not in the design's default list but keeps
   // parity with the sidebar; kept out of the frozen command set above.
@@ -111,7 +118,7 @@ export function CommandPalette() {
           </div>
           <Command.List className="max-h-[340px] overflow-y-auto p-2">
             <Command.Empty className="px-3 py-6 text-center text-[13px] text-ink-dim">No matching commands.</Command.Empty>
-            {commands.map((cmd) => {
+            {visibleCommands.map((cmd) => {
               const Icon = cmd.icon;
               return (
                 <Command.Item
