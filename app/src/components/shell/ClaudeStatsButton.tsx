@@ -64,10 +64,12 @@ const EMPTY_WINDOW: UsageWindow = {
  * with an opaque background, and closes on outside-click or Escape.
  */
 export function ClaudeStatsButton() {
-  const { data: stats } = useAiStats();
+  const { data: stats, isPending } = useAiStats();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
+  // Loading = the model setting hasn't arrived yet on first page load.
+  const loading = isPending && !stats;
   const label = stats ? shortModel(stats.modelLabel) : "Claude";
   const operational = stats?.operational ?? false;
 
@@ -75,16 +77,27 @@ export function ClaudeStatsButton() {
     <>
       <button
         ref={btnRef}
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-[9px] border border-white/[0.1] bg-white/[0.05] px-[11px] py-1.5 text-[11px] font-semibold text-ink-soft hover:bg-white/[0.09]"
+        onClick={() => !loading && setOpen((o) => !o)}
+        disabled={loading}
+        className="flex h-[38px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 text-[12.5px] font-semibold text-ink-soft hover:bg-white/[0.09] disabled:hover:bg-white/[0.04]"
       >
-        <span
-          className="h-1.5 w-1.5 rounded-full"
-          style={{ background: operational ? "#34d399" : "#f43f5e" }}
-        />
-        <Star size={12} strokeWidth={2} style={{ color: "#fbbf24" }} fill="#fbbf24" />
-        {label}
-        <ChevronDown size={12} strokeWidth={2} />
+        {loading ? (
+          <>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/25" />
+            <Star size={12} strokeWidth={2} className="text-ink-dim" />
+            <span className="h-3 w-16 animate-pulse rounded bg-white/[0.14]" />
+          </>
+        ) : (
+          <>
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: operational ? "#34d399" : "#f43f5e" }}
+            />
+            <Star size={12} strokeWidth={2} style={{ color: "#fbbf24" }} fill="#fbbf24" />
+            {label}
+            <ChevronDown size={12} strokeWidth={2} />
+          </>
+        )}
       </button>
 
       {stats && (

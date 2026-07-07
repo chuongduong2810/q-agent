@@ -19,11 +19,12 @@ export function TopBar() {
   if (runId != null) return <RunContextHeader runId={runId} />;
 
   // Project label: the project from the URL when on a project route, else the
-  // first project from the query.
+  // first connected project. Empty when none are connected yet.
   const projMatch = pathname.match(/^\/projects\/([^/]+)/);
   const activeProject = projMatch
     ? decodeURIComponent(projMatch[1])
     : (projects?.[0]?.name ?? "");
+  const projectLabel = activeProject || "No project";
 
   return (
     <header className="glass-strong flex h-[56px] shrink-0 items-center gap-3.5 rounded-[18px] px-[18px]">
@@ -35,7 +36,11 @@ export function TopBar() {
           className="h-5 w-5 rounded-md"
           style={{ background: "linear-gradient(135deg,#22d3ee,#6366f1)" }}
         />
-        <span className="text-[13px] font-semibold text-ink">{activeProject}</span>
+        <span
+          className={`whitespace-nowrap text-[13px] font-semibold ${activeProject ? "text-ink" : "text-ink-dim"}`}
+        >
+          {projectLabel}
+        </span>
         <ChevronDown size={14} color="#8a8a9c" strokeWidth={2} />
       </button>
 
