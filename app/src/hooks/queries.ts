@@ -38,9 +38,21 @@ export const useCapabilities = () =>
 export const useAiStats = () =>
   useQuery({
     queryKey: queryKeys.aiStats,
-    queryFn: api.aiStats,
+    // Wrap so react-query's fetch context isn't passed as the `force` arg.
+    queryFn: () => api.aiStats(),
     refetchInterval: (q) => (q.state.data?.limitsStatus === "loading" ? 3_000 : 30_000),
   });
+
+// Manual reload for the stats panel: forces the server to bypass its caches and
+// re-read the CLI `/usage`. The fresh result (often `limitsStatus: "loading"`)
+// is written straight into the cache so `useAiStats`'s fast poll takes over.
+export const useRefreshAiStats = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.aiStats(true),
+    onSuccess: (data) => qc.setQueryData(queryKeys.aiStats, data),
+  });
+};
 
 // -------------------------------------------------------------- providers + settings
 export const useProviders = () =>

@@ -107,7 +107,7 @@ export const api = {
   // health / observability
   capabilities: () => get<{ claude: boolean; version: string }>("/capabilities"),
   aiActivity: () => get<AiActivity>("/ai/activity"),
-  aiStats: () => get<ClaudeStats>("/ai/stats"),
+  aiStats: (force = false) => get<ClaudeStats>(`/ai/stats${force ? "?refresh=true" : ""}`),
   aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai`,
 
   // providers + settings

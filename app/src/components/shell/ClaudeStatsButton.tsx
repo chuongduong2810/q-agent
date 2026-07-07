@@ -1,9 +1,9 @@
-import { ChevronDown, Info, SlidersHorizontal, Star } from "lucide-react";
+import { ChevronDown, Info, RefreshCw, SlidersHorizontal, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Pill } from "@/components/ui/badges";
-import { useAiStats } from "@/hooks/queries";
+import { useAiStats, useRefreshAiStats } from "@/hooks/queries";
 import type { ByModelUsage, ClaudeStats, UsageWindow } from "@/types/api";
 
 const PANEL_WIDTH = 300;
@@ -174,6 +174,7 @@ function StatsPanel({
   stats: ClaudeStats;
 }) {
   const navigate = useNavigate();
+  const refresh = useRefreshAiStats();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
@@ -256,6 +257,20 @@ function StatsPanel({
         <Pill color="#c4b5fd" bg="rgba(139,92,246,.16)">
           {stats.ctxWindow} ctx
         </Pill>
+        <button
+          type="button"
+          onClick={() => refresh.mutate()}
+          disabled={refresh.isPending}
+          title="Refresh stats"
+          aria-label="Refresh stats"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.05] text-ink-soft hover:bg-white/[0.1] disabled:opacity-70"
+        >
+          <RefreshCw
+            size={13}
+            strokeWidth={2}
+            className={refresh.isPending || limitsStatus === "loading" ? "animate-spin" : ""}
+          />
+        </button>
       </div>
 
       {/* Rolling windows */}
