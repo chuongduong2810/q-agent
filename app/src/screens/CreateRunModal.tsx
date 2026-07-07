@@ -52,11 +52,16 @@ export function CreateRunModal() {
     { id: "assigned" as const, label: "My assigned tickets", sub: "All tickets assigned to you", count: `${assignedN} tickets` },
   ].filter((o) => o.id !== "assigned" || !!userName);
 
+  // Tickets the chosen scope resolves to — a run can't start with none.
+  const scopeTicketCount = runScope === "selected" ? selN : runScope === "sprint" ? sprintN : assignedN;
+  const canStart = scopeTicketCount > 0;
+
   const createSummary =
     (runScope === "selected" ? `${selN} selected tickets` : runScope === "sprint" ? `${sprintN} sprint tickets` : `${assignedN} assigned tickets`) +
     ` · ${runFramework} · ${runEnv}`;
 
   const handleStart = () => {
+    if (!canStart) return;
     createRun.mutate(
       {
         scope: runScope,
@@ -181,7 +186,12 @@ export function CreateRunModal() {
           <Button variant="glass" onClick={closeCreateRun}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleStart} disabled={createRun.isPending}>
+          <Button
+            variant="primary"
+            onClick={handleStart}
+            disabled={createRun.isPending || !canStart}
+            title={!canStart ? "Select at least one ticket to run" : undefined}
+          >
             {createRun.isPending ? "Starting…" : "Start Run"}
           </Button>
         </div>
