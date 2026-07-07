@@ -3,18 +3,33 @@ import { Spinner } from "@/components/ui/misc";
 import { ProviderCard } from "@/components/settings/ProviderCard";
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
-import type { ProviderKind } from "@/types/api";
+import type { ProviderKind, ProviderOut } from "@/types/api";
 
 /** Card order matches the design's provider list — ADO, Jira, GitHub. */
 const PROVIDER_ORDER: ProviderKind[] = ["ado", "jira", "github"];
+
+/** A never-configured provider: the backend has no row yet (fresh machine), so
+ * synthesize an empty "not connected" card the user can fill in and save. */
+const placeholderProvider = (kind: ProviderKind): ProviderOut => ({
+  id: 0,
+  kind,
+  name: kind.toUpperCase(),
+  connected: false,
+  config: {},
+  secretFields: [],
+  lastSync: null,
+});
 
 export function Settings() {
   const { data: providers, isLoading: providersLoading } = useProviders();
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
-  const orderedProviders = PROVIDER_ORDER.map((kind) => providers?.find((p) => p.kind === kind)).filter(
-    (p): p is NonNullable<typeof p> => !!p,
+  // Always render one card per known kind — fall back to a placeholder when the
+  // backend has no persisted row for it yet, so connections are configurable on
+  // a fresh machine (the DB is seeded with rows only after the first save).
+  const orderedProviders = PROVIDER_ORDER.map(
+    (kind) => providers?.find((p) => p.kind === kind) ?? placeholderProvider(kind),
   );
 
   return (
