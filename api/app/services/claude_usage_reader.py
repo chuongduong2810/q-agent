@@ -115,14 +115,18 @@ def _refresh_limits() -> None:
         _limits_refreshing = False
 
 
-def _get_limits() -> tuple[dict[str, Any] | None, str]:
+def _get_limits(force: bool = False) -> tuple[dict[str, Any] | None, str]:
     """Return (parsed_or_None, status). Never blocks — refreshes in the background.
 
     status: "loading" until the first fetch completes, then "ready" (parsed) or
-    "unavailable" (fetch/parse failed).
+    "unavailable" (fetch/parse failed). ``force`` (manual refresh) drops the
+    cached value so a fresh CLI `/usage` read is kicked off and the status flips
+    back to "loading" until it lands.
     """
-    global _limits_refreshing
+    global _limits_refreshing, _limits_cache
     now = time.monotonic()
+    if force:
+        _limits_cache = None
     stale = _limits_cache is None or (now - _limits_cache[0]) >= _LIMITS_TTL_S
     if stale:
         with _limits_lock:
@@ -349,15 +353,18 @@ def _compute_zero() -> dict[str, Any]:
     }
 
 
-def read_stats() -> dict[str, Any]:
+def read_stats(force: bool = False) -> dict[str, Any]:
     """Return real local Claude usage as the ``GET /ai/stats`` contract dict.
 
     Never raises: a malformed transcript, missing log directory, or unreadable
     file yields a well-formed (all-zero if necessary) stats dict. Results are
-    cached in-process for ~60s.
+    cached in-process for ~60s; ``force`` (manual refresh) bypasses both the
+    transcript-scan cache and the plan-limit cache.
     """
     global _cache
     now = time.monotonic()
+    if force:
+        _cache = None
     if _cache is not None and now - _cache[0] < _CACHE_TTL_S:
         base = _cache[1]
     else:
@@ -370,7 +377,7 @@ def read_stats() -> dict[str, Any]:
 
     # Overlay the real plan-limit % from the CLI's /usage (background-refreshed,
     # never blocks). Build a shallow copy so the cached compute isn't mutated.
-    limits, status = _get_limits()
+    limits, status = _get_limits(force=force)
     return {
         **base,
         "limitsStatus": status,

@@ -16,6 +16,10 @@ def ai_activity() -> dict:
 
 
 @router.get("/ai/stats")
-def ai_stats() -> dict:
-    """Real Claude usage read from the local Claude Code session logs (like /usage)."""
-    return claude_usage_reader.read_stats()
+def ai_stats(refresh: bool = False) -> dict:
+    """Real Claude usage read from the local Claude Code session logs (like /usage).
+
+    ``refresh=true`` (manual reload) bypasses the in-process caches and kicks off
+    a fresh CLI `/usage` read for the plan-limit %.
+    """
+    return claude_usage_reader.read_stats(force=refresh)
