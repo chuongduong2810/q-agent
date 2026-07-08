@@ -1,12 +1,12 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { MoreVertical, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { Copy, MoreVertical, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { isTerminalRun } from "@/components/dashboard/runStatus";
 import { ApiError } from "@/lib/api";
-import { useCancelRun, useDeleteRun, useRetryRun } from "@/hooks/queries";
+import { useCancelRun, useCreateRun, useDeleteRun, useRetryRun } from "@/hooks/queries";
 import type { RunOut } from "@/types/api";
 
 const MENU_WIDTH = 190;
@@ -37,6 +37,7 @@ export function RunActionsMenu({
   const cancelRun = useCancelRun();
   const retryRun = useRetryRun();
   const deleteRun = useDeleteRun();
+  const createRun = useCreateRun();
 
   const terminal = isTerminalRun(run.status);
 
@@ -90,6 +91,28 @@ export function RunActionsMenu({
       onSuccess: () => toast.success("Retrying run"),
       onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to retry run"),
     });
+  };
+
+  const handleDuplicate = () => {
+    setOpen(false);
+    // Re-send the run's config; pass explicit ticketIds (even for sprint scope)
+    // since sprint/sprintPath aren't on RunOut — the API accepts ticketIds for
+    // any scope and only falls back to sprint resolution when they're empty.
+    createRun.mutate(
+      {
+        scope: run.scope as "single" | "selected" | "assigned" | "sprint",
+        ticketIds: run.ticketIds,
+        framework: run.framework,
+        browser: run.browser,
+        env: run.env,
+        workers: run.workers,
+        retryPolicy: run.retryPolicy,
+      },
+      {
+        onSuccess: (created) => toast.success(`Duplicated to ${created.code}`),
+        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to duplicate run"),
+      },
+    );
   };
 
   const handleDelete = () => {
@@ -165,6 +188,16 @@ export function RunActionsMenu({
                   Retry run
                 </button>
               )}
+              <button
+                type="button"
+                onClick={handleDuplicate}
+                disabled={createRun.isPending}
+                className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-semibold text-ink-soft hover:bg-white/[0.06] disabled:opacity-50"
+              >
+                <Copy size={14} strokeWidth={2} />
+                Duplicate
+              </button>
+              <div className="my-1 h-px bg-white/[0.08]" />
               <button
                 type="button"
                 onClick={() => {

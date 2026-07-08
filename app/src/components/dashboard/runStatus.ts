@@ -50,6 +50,52 @@ export function runMeta(run: RunOut): string {
   return `${run.ticketIds.length} ticket${run.ticketIds.length === 1 ? "" : "s"}`;
 }
 
+export type RunFilterGroup = "active" | "review" | "completed" | "failed" | "other";
+
+/** Which summary/filter bucket a run falls into (design tabs). Cancelled runs
+ * are terminal-but-not-failed → "other" (shown only under "All"). */
+export function runGroup(status: RunStatus): RunFilterGroup {
+  if (status === "review") return "review";
+  if (status === "done") return "completed";
+  if (status === "failed") return "failed";
+  if (!isTerminalRun(status)) return "active";
+  return "other";
+}
+
+/** Short status label + accent color for a row's status badge (design palette). */
+const RUN_BADGE: Record<RunStatus, { label: string; color: string }> = {
+  processing: { label: "Analyzing", color: "#a78bfa" },
+  review: { label: "In review", color: "#f59e0b" },
+  sync: { label: "Creating & linking", color: "#a78bfa" },
+  automation: { label: "Automation", color: "#a78bfa" },
+  executing: { label: "Executing", color: "#f59e0b" },
+  evidence: { label: "Evidence", color: "#22d3ee" },
+  comment: { label: "Publishing", color: "#a78bfa" },
+  done: { label: "Completed", color: "#10b981" },
+  cancelled: { label: "Cancelled", color: "#9ca3af" },
+  failed: { label: "Failed", color: "#fb7185" },
+};
+
+export function runBadge(status: RunStatus): { label: string; color: string } {
+  return RUN_BADGE[status] ?? { label: status, color: "#a0a0b2" };
+}
+
+/** A run that is actively computing (renders a spinner) vs. waiting/terminal. */
+export function isWorkingRun(status: RunStatus): boolean {
+  return !isTerminalRun(status) && status !== "review";
+}
+
+/** Compact relative time for dense rows: "now" / "5m" / "1h" / "1d". */
+export function timeAgoShort(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "now";
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  return `${Math.floor(hr / 24)}d`;
+}
+
 /** Coarse "how long ago" label from an ISO timestamp, matching the design's
  * short relative strings ("now", "2h ago", "1 day ago"). */
 export function timeAgo(iso: string): string {
