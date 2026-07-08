@@ -48,11 +48,13 @@ from app.services import (
     placeholder_gate,
     project_config_service,
     run_context,
+    run_control,
     settings_store,
     spec_examples,
     spec_service,
 )
 from app.services.claude_cli import ClaudeError
+from app.services.run_status import set_run_status
 from app.ws import hub
 
 _PLAYWRIGHT_CONFIG_TEMPLATE = """\
@@ -402,7 +404,7 @@ def _playwright_command(workers: int) -> list[str]:
 
 
 def _invoke_playwright(
-    spec_dir: Path, workers: int, timeout_s: int, spec_file: str = ""
+    spec_dir: Path, workers: int, timeout_s: int, spec_file: str = "", run_id: int | None = None
 ) -> tuple[int, str, str]:
     """Run Playwright in spec_dir. Returns (returncode, stdout, stderr).
 
@@ -413,6 +415,10 @@ def _invoke_playwright(
         spec_file: When non-empty, only this spec file (relative to spec_dir) is
             run — used by the self-heal loop to re-run a single case. Empty runs
             the whole suite.
+        run_id: When given, the subprocess is registered with
+            ``app.services.run_control`` for the duration of the call, so a
+            concurrent ``kill_processes(run_id)`` (mid-run cancel) can terminate
+            it. Omitted (default) preserves the plain, unregistered invocation.
     """
     cmd = _playwright_command(workers)
     if spec_file:
@@ -423,16 +429,36 @@ def _invoke_playwright(
     env = os.environ.copy()
     env["NODE_PATH"] = nm + (os.pathsep + env["NODE_PATH"] if env.get("NODE_PATH") else "")
     logger.info("Playwright: {} (cwd={}, NODE_PATH={})", " ".join(cmd), spec_dir, nm)
-    proc = subprocess.run(  # noqa: S603
+
+    if run_id is None:
+        proc = subprocess.run(  # noqa: S603
+            cmd,
+            cwd=str(spec_dir),
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            shell=True,  # noqa: S602 - .cmd resolution on Windows
+            env=env,
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+
+    # Registered path: use Popen (not the blocking subprocess.run) so a
+    # concurrent cancel can kill the live process via run_control.
+    popen = subprocess.Popen(  # noqa: S603, S602 - .cmd resolution on Windows
         cmd,
         cwd=str(spec_dir),
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout_s,
-        shell=True,  # noqa: S602 - .cmd resolution on Windows
+        shell=True,
         env=env,
     )
-    return proc.returncode, proc.stdout, proc.stderr
+    run_control.register_process(run_id, popen)
+    try:
+        stdout, stderr = popen.communicate(timeout=timeout_s)
+    finally:
+        run_control.unregister_process(run_id, popen)
+    return popen.returncode, stdout, stderr
 
 
 def _match_result(
@@ -541,11 +567,10 @@ def _fail_all_results(
     execution.status = "done"
     execution.log = message
     execution.finished_at = datetime.now(timezone.utc)
-    run.status = "evidence"
     db.commit()
     hub.publish(run_id_str, "exec.progress", {"progress": 100, "passed": 0, "failed": total, "remaining": 0})
     hub.publish(run_id_str, "exec.done", {"passed": 0, "failed": total})
-    hub.publish(run_id_str, "run.status", {"status": run.status})
+    set_run_status(db, run, "evidence")
     audit_service.record(
         category="execution", actor_type="ai", action="Executed test run",
         target=f"{run.code} · {total} cases", status="error", meta=message,
@@ -570,221 +595,244 @@ def run_execution(execution_id: int) -> None:
         if run is None:
             return
 
-        results = (
-            db.query(ExecutionResult)
-            .filter(ExecutionResult.execution_id == execution_id)
-            .order_by(ExecutionResult.id)
-            .all()
-        )
-        total = len(results)
-        run_id_str = str(run.id)
-
-        for index, result in enumerate(results, start=1):
-            result.status = "running"
-            db.commit()
-            hub.publish(
-                run_id_str,
-                "exec.case.running",
-                {
-                    "ticket": result.ticket_external_id,
-                    "caseCode": result.case_code,
-                    "index": index,
-                    "total": total,
-                },
+        try:
+            results = (
+                db.query(ExecutionResult)
+                .filter(ExecutionResult.execution_id == execution_id)
+                .order_by(ExecutionResult.id)
+                .all()
             )
+            total = len(results)
+            run_id_str = str(run.id)
 
-        spec_dir = settings.specs_dir / run.code
-        spec_dir.mkdir(parents=True, exist_ok=True)
-        headless = bool(settings_store.load_settings().get("headless", True))
+            if run_control.is_cancelled(run.id, db):
+                logger.info("Run {} cancelled — skipping execution", run.code)
+                return
 
-        # Resolve project auth: inject baseURL always (fixes relative goto), and
-        # when manual login is enabled ensure a saved storageState exists first —
-        # capturing one via a headed browser if needed, else failing cleanly.
-        project_key, base_url, manual_auth, _provider = _resolve_project_for_run(
-            db, run, execution.env
-        )
-        storage_state = ""
-        if manual_auth and project_key:
-            session_path = project_config_service.auth_path(project_key)
-            if session_path.exists() and session_path.stat().st_size > 0:
-                storage_state = str(session_path)
-            elif base_url:
-                hub.publish(run_id_str, "exec.auth.waiting", {"url": base_url})
-                captured = capture_storage_state(base_url, session_path)
-                if captured:
+            for index, result in enumerate(results, start=1):
+                result.status = "running"
+                db.commit()
+                hub.publish(
+                    run_id_str,
+                    "exec.case.running",
+                    {
+                        "ticket": result.ticket_external_id,
+                        "caseCode": result.case_code,
+                        "index": index,
+                        "total": total,
+                    },
+                )
+
+            spec_dir = settings.specs_dir / run.code
+            spec_dir.mkdir(parents=True, exist_ok=True)
+            headless = bool(settings_store.load_settings().get("headless", True))
+
+            # Resolve project auth: inject baseURL always (fixes relative goto), and
+            # when manual login is enabled ensure a saved storageState exists first —
+            # capturing one via a headed browser if needed, else failing cleanly.
+            project_key, base_url, manual_auth, _provider = _resolve_project_for_run(
+                db, run, execution.env
+            )
+            storage_state = ""
+            if manual_auth and project_key:
+                session_path = project_config_service.auth_path(project_key)
+                if session_path.exists() and session_path.stat().st_size > 0:
                     storage_state = str(session_path)
-                    hub.publish(run_id_str, "exec.auth.captured", {})
+                elif base_url:
+                    hub.publish(run_id_str, "exec.auth.waiting", {"url": base_url})
+                    captured = capture_storage_state(base_url, session_path)
+                    if captured:
+                        storage_state = str(session_path)
+                        hub.publish(run_id_str, "exec.auth.captured", {})
+                    else:
+                        message = "Manual login was not completed — enable/redo login capture"
+                        hub.publish(run_id_str, "exec.auth.error", {"message": message})
+                        _fail_all_results(db, run, execution, results, message)
+                        return
                 else:
-                    message = "Manual login was not completed — enable/redo login capture"
+                    message = "Set a base URL for the project first."
                     hub.publish(run_id_str, "exec.auth.error", {"message": message})
                     _fail_all_results(db, run, execution, results, message)
                     return
-            else:
-                message = "Set a base URL for the project first."
-                hub.publish(run_id_str, "exec.auth.error", {"message": message})
-                _fail_all_results(db, run, execution, results, message)
+
+            _write_config(spec_dir, execution.workers, headless, base_url, storage_state)
+
+            # Replay captured sessionStorage (MSAL/SPA tokens) via a generated
+            # fixtures.ts + spec import rewrite, but only when a manual-auth session
+            # (storageState + sessionStorage snapshot) actually exists. Non-auth runs
+            # normalize spec imports back to '@playwright/test' and write no fixtures.
+            session_file = project_config_service.session_path(project_key) if project_key else spec_dir / "sessionStorage.json"
+            use_fixtures = bool(manual_auth and storage_state and session_file.exists())
+            _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
+
+            # A single-result execution targets just that one spec (the "run this
+            # test" action); a multi-case run executes the whole suite.
+            single_spec = ""
+            if len(results) == 1:
+                r0 = results[0]
+                single_spec = f"{r0.ticket_external_id.rsplit('-', 1)[-1]}-{r0.case_code}.spec.ts"
+
+            # Last checkpoint before spawning Playwright — registered with
+            # run_control so a concurrent cancel can kill it mid-run.
+            if run_control.is_cancelled(run.id, db):
+                logger.info("Run {} cancelled — skipping execution", run.code)
                 return
 
-        _write_config(spec_dir, execution.workers, headless, base_url, storage_state)
+            report: dict[str, Any] = {}
+            run_error: str | None = None
+            proc_output = ""
+            started = time.monotonic()
+            try:
+                returncode, stdout, stderr = _invoke_playwright(
+                    spec_dir, execution.workers, settings.exec_timeout_s,
+                    spec_file=single_spec, run_id=run.id,
+                )
+                proc_output = "\n".join(p for p in (stdout, stderr) if p).strip()
+                if returncode != 0:
+                    logger.warning("Playwright exited {}: {}", returncode, proc_output[:1000])
+            except FileNotFoundError as exc:
+                run_error = f"Playwright binary not found ('{settings.playwright_bin}'): {exc}"
+            except subprocess.TimeoutExpired:
+                run_error = f"Playwright run timed out after {settings.exec_timeout_s}s"
+            finally:
+                elapsed_ms = int((time.monotonic() - started) * 1000)
 
-        # Replay captured sessionStorage (MSAL/SPA tokens) via a generated
-        # fixtures.ts + spec import rewrite, but only when a manual-auth session
-        # (storageState + sessionStorage snapshot) actually exists. Non-auth runs
-        # normalize spec imports back to '@playwright/test' and write no fixtures.
-        session_file = project_config_service.session_path(project_key) if project_key else spec_dir / "sessionStorage.json"
-        use_fixtures = bool(manual_auth and storage_state and session_file.exists())
-        _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
+            # The subprocess may have been killed by a mid-run cancel — bail
+            # without finalizing, leaving the 'cancelled' status the cancel
+            # endpoint already set.
+            if run_control.is_cancelled(run.id, db):
+                logger.info("Run {} cancelled — discarding partial execution", run.code)
+                return
 
-        # A single-result execution targets just that one spec (the "run this
-        # test" action); a multi-case run executes the whole suite.
-        single_spec = ""
-        if len(results) == 1:
-            r0 = results[0]
-            single_spec = f"{r0.ticket_external_id.rsplit('-', 1)[-1]}-{r0.case_code}.spec.ts"
+            report_path = spec_dir / "report.json"
+            if run_error is None:
+                if report_path.exists():
+                    try:
+                        report = json.loads(report_path.read_text(encoding="utf-8"))
+                    except json.JSONDecodeError as exc:
+                        run_error = f"Could not parse Playwright report: {exc}"
+                else:
+                    # No report → surface the real Playwright error, not just a generic message.
+                    detail = f" — {proc_output[:600]}" if proc_output else ""
+                    run_error = f"Playwright produced no report.json{detail}"
 
-        report: dict[str, Any] = {}
-        run_error: str | None = None
-        proc_output = ""
-        started = time.monotonic()
-        try:
-            returncode, stdout, stderr = _invoke_playwright(
-                spec_dir, execution.workers, settings.exec_timeout_s, spec_file=single_spec
-            )
-            proc_output = "\n".join(p for p in (stdout, stderr) if p).strip()
-            if returncode != 0:
-                logger.warning("Playwright exited {}: {}", returncode, proc_output[:1000])
-        except FileNotFoundError as exc:
-            run_error = f"Playwright binary not found ('{settings.playwright_bin}'): {exc}"
-        except subprocess.TimeoutExpired:
-            run_error = f"Playwright run timed out after {settings.exec_timeout_s}s"
-        finally:
-            elapsed_ms = int((time.monotonic() - started) * 1000)
+            parsed = parse_playwright_report(report) if report else []
 
-        report_path = spec_dir / "report.json"
-        if run_error is None:
-            if report_path.exists():
-                try:
-                    report = json.loads(report_path.read_text(encoding="utf-8"))
-                except json.JSONDecodeError as exc:
-                    run_error = f"Could not parse Playwright report: {exc}"
-            else:
-                # No report → surface the real Playwright error, not just a generic message.
-                detail = f" — {proc_output[:600]}" if proc_output else ""
-                run_error = f"Playwright produced no report.json{detail}"
+            passed = failed = 0
+            matched_ids: set[int] = set()
+            for entry in parsed:
+                result = _match_result(results, entry)
+                if result is None:
+                    continue
+                matched_ids.add(result.id)
+                result.status = entry["status"]
+                result.duration_ms = entry["duration_ms"] or elapsed_ms
+                result.error_message = entry["error_message"]
+                if result.status == "pass":
+                    passed += 1
+                elif result.status == "fail":
+                    failed += 1
+                db.commit()
+                _store_evidence(db, run, result, entry["attachments"])
+                db.commit()
+                hub.publish(
+                    run_id_str,
+                    "exec.case.result",
+                    {
+                        "ticket": result.ticket_external_id,
+                        "caseCode": result.case_code,
+                        "status": result.status,
+                        "durationMs": result.duration_ms,
+                    },
+                )
+                progress = int(100 * len(matched_ids) / total) if total else 100
+                execution.progress = progress
+                execution.passed = passed
+                execution.failed = failed
+                db.commit()
+                hub.publish(
+                    run_id_str,
+                    "exec.progress",
+                    {"progress": progress, "passed": passed, "failed": failed, "remaining": total - len(matched_ids)},
+                )
 
-        parsed = parse_playwright_report(report) if report else []
-
-        passed = failed = 0
-        matched_ids: set[int] = set()
-        for entry in parsed:
-            result = _match_result(results, entry)
-            if result is None:
-                continue
-            matched_ids.add(result.id)
-            result.status = entry["status"]
-            result.duration_ms = entry["duration_ms"] or elapsed_ms
-            result.error_message = entry["error_message"]
-            if result.status == "pass":
-                passed += 1
-            elif result.status == "fail":
+            # Any result Playwright didn't report on (e.g. run_error) is marked failed.
+            for result in results:
+                if result.id in matched_ids:
+                    continue
+                result.status = "fail"
+                result.error_message = run_error or "No result reported by Playwright"
+                result.duration_ms = elapsed_ms
                 failed += 1
+                db.commit()
+                hub.publish(
+                    run_id_str,
+                    "exec.case.result",
+                    {
+                        "ticket": result.ticket_external_id,
+                        "caseCode": result.case_code,
+                        "status": result.status,
+                        "durationMs": result.duration_ms,
+                    },
+                )
+
+            # Reflect each case's run outcome on its spec lifecycle status. On a plain
+            # run we do NOT classify — failure_class stays empty; classification only
+            # happens in the self-heal path (see heal_spec).
+            for result in results:
+                spec = (
+                    db.query(AutomationSpec)
+                    .filter(AutomationSpec.test_case_id == result.test_case_id)
+                    .first()
+                )
+                if spec is None:
+                    continue
+                if result.status == "pass":
+                    spec.status = "passed"
+                elif result.status == "fail":
+                    spec.status = "failed"
             db.commit()
-            _store_evidence(db, run, result, entry["attachments"])
-            db.commit()
-            hub.publish(
-                run_id_str,
-                "exec.case.result",
-                {
-                    "ticket": result.ticket_external_id,
-                    "caseCode": result.case_code,
-                    "status": result.status,
-                    "durationMs": result.duration_ms,
-                },
-            )
-            progress = int(100 * len(matched_ids) / total) if total else 100
-            execution.progress = progress
+
+            # Auto-analyze + annotate failure screenshots so the Evidence step yields
+            # high-quality, annotated review evidence (client-requested). Each is a
+            # Claude vision call, so it's gated by a setting and fully best-effort.
+            if settings_store.load_settings().get("autoAnnotate", True):
+                for result in results:
+                    if result.status == "fail":
+                        evidence_analysis.auto_annotate_result(db, run, result)
+
+            # Persist the real Playwright output so the UI can show the run log. On
+            # timeout / missing binary there is no stdout/stderr, so fall back to the
+            # run_error text so the log still explains why the run failed. Keep the
+            # LAST ~20000 chars so the failing tail survives truncation.
+            log_text = proc_output or run_error or ""
+            execution.log = log_text[-20000:]
+
             execution.passed = passed
             execution.failed = failed
+            execution.total = total
+            execution.progress = 100
+            execution.status = "done"
+            from datetime import datetime, timezone
+
+            execution.finished_at = datetime.now(timezone.utc)
             db.commit()
-            hub.publish(
-                run_id_str,
-                "exec.progress",
-                {"progress": progress, "passed": passed, "failed": failed, "remaining": total - len(matched_ids)},
+
+            hub.publish(run_id_str, "exec.progress", {"progress": 100, "passed": passed, "failed": failed, "remaining": 0})
+            hub.publish(run_id_str, "exec.done", {"passed": passed, "failed": failed})
+            set_run_status(db, run, "evidence")
+
+            audit_service.record(
+                category="execution", actor_type="ai", action="Executed test run",
+                target=f"{run.code} · {total} cases",
+                status="warning" if failed else "success",
+                meta=f"{passed} passed · {failed} failed",
             )
-
-        # Any result Playwright didn't report on (e.g. run_error) is marked failed.
-        for result in results:
-            if result.id in matched_ids:
-                continue
-            result.status = "fail"
-            result.error_message = run_error or "No result reported by Playwright"
-            result.duration_ms = elapsed_ms
-            failed += 1
-            db.commit()
-            hub.publish(
-                run_id_str,
-                "exec.case.result",
-                {
-                    "ticket": result.ticket_external_id,
-                    "caseCode": result.case_code,
-                    "status": result.status,
-                    "durationMs": result.duration_ms,
-                },
-            )
-
-        # Reflect each case's run outcome on its spec lifecycle status. On a plain
-        # run we do NOT classify — failure_class stays empty; classification only
-        # happens in the self-heal path (see heal_spec).
-        for result in results:
-            spec = (
-                db.query(AutomationSpec)
-                .filter(AutomationSpec.test_case_id == result.test_case_id)
-                .first()
-            )
-            if spec is None:
-                continue
-            if result.status == "pass":
-                spec.status = "passed"
-            elif result.status == "fail":
-                spec.status = "failed"
-        db.commit()
-
-        # Auto-analyze + annotate failure screenshots so the Evidence step yields
-        # high-quality, annotated review evidence (client-requested). Each is a
-        # Claude vision call, so it's gated by a setting and fully best-effort.
-        if settings_store.load_settings().get("autoAnnotate", True):
-            for result in results:
-                if result.status == "fail":
-                    evidence_analysis.auto_annotate_result(db, run, result)
-
-        # Persist the real Playwright output so the UI can show the run log. On
-        # timeout / missing binary there is no stdout/stderr, so fall back to the
-        # run_error text so the log still explains why the run failed. Keep the
-        # LAST ~20000 chars so the failing tail survives truncation.
-        log_text = proc_output or run_error or ""
-        execution.log = log_text[-20000:]
-
-        execution.passed = passed
-        execution.failed = failed
-        execution.total = total
-        execution.progress = 100
-        execution.status = "done"
-        from datetime import datetime, timezone
-
-        execution.finished_at = datetime.now(timezone.utc)
-        run.status = "evidence"
-        db.commit()
-
-        hub.publish(run_id_str, "exec.progress", {"progress": 100, "passed": passed, "failed": failed, "remaining": 0})
-        hub.publish(run_id_str, "exec.done", {"passed": passed, "failed": failed})
-        hub.publish(run_id_str, "run.status", {"status": run.status})
-
-        audit_service.record(
-            category="execution", actor_type="ai", action="Executed test run",
-            target=f"{run.code} · {total} cases",
-            status="warning" if failed else "success",
-            meta=f"{passed} passed · {failed} failed",
-        )
+        except Exception as exc:  # noqa: BLE001 - never crash the worker thread silently
+            logger.error("Execution crashed for run {}: {}", run.code, exc)
+            db.rollback()
+            run.failed_stage = run.status
+            set_run_status(db, run, "failed")
     finally:
         db.close()
         run_context.clear()

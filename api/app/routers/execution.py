@@ -23,7 +23,7 @@ from app.models.execution import Evidence, Execution, ExecutionResult
 from app.models.run import Run
 from app.models.testcase import TestCase
 from app.services.playwright_runner import run_execution
-from app.ws import hub
+from app.services.run_status import set_run_status
 
 router = APIRouter(tags=["execution"])
 
@@ -83,11 +83,8 @@ def start_execution(
             )
         )
 
-    run.status = "executing"
-    db.commit()
+    set_run_status(db, run, "executing")
     db.refresh(execution)
-
-    hub.publish(str(run_id), "run.status", {"status": run.status})
 
     thread = threading.Thread(target=run_execution, args=(execution.id,), daemon=True)
     thread.start()
@@ -138,11 +135,9 @@ def run_single_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
             status="pending",
         )
     )
-    run.status = "executing"
-    db.commit()
+    set_run_status(db, run, "executing")
     db.refresh(execution)
 
-    hub.publish(str(run.id), "run.status", {"status": run.status})
     threading.Thread(target=run_execution, args=(execution.id,), daemon=True).start()
     return _execution_out(db, execution)
 

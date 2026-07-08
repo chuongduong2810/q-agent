@@ -18,8 +18,10 @@ from app.models.provider import Provider
 from app.models.run import Run
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
+from app.services import run_control
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
+from app.services.run_status import set_run_status
 from app.ws import hub
 
 # Runs currently executing a create+link pass (drives the 'running' status).
@@ -86,68 +88,76 @@ def _worker(run_id: int, link: bool, ticket_ids: list[str], dry_run: bool = Fals
         run = db.get(Run, run_id)
         if run is None:
             return
-        run.status = "sync"
-        db.commit()
-        hub.publish(str(run_id), "run.status", {"status": "sync"})
+        try:
+            if not set_run_status(db, run, "sync"):
+                return  # already terminal (e.g. cancelled) — don't overwrite it
 
-        query = db.query(TestCase).filter(
-            TestCase.run_id == run_id, TestCase.approval == "approved"
-        )
-        if ticket_ids:
-            query = query.filter(TestCase.ticket_external_id.in_(ticket_ids))
-        cases = query.order_by(TestCase.ticket_external_id, TestCase.code).all()
-
-        grouped: dict[str, list[TestCase]] = {}
-        for c in cases:
-            grouped.setdefault(c.ticket_external_id, []).append(c)
-
-        adapters: dict[str, Any] = {}
-        for tid, group in grouped.items():
-            ticket = db.query(Ticket).filter(Ticket.external_id == tid).first()
-            kind = ticket.provider_kind if ticket else "ado"
-            created_any = False
-            linked_any = False
-            error = ""
-            try:
-                adapter = None if dry_run else _adapter_for(db, kind, adapters)
-                for case in group:
-                    if dry_run:
-                        # Local mode: record the case locally, never touch the provider.
-                        res = {
-                            "external_id": f"LOCAL-{case.id}",
-                            "status": "Local",
-                            "url": "",
-                            "linked": False,
-                        }
-                    else:
-                        res = adapter.create_test_case(
-                            tid,
-                            title=case.title,
-                            precondition=case.precondition,
-                            steps=case.steps or [],
-                            priority=case.priority,
-                            link=link,
-                        )
-                    _upsert_link(db, run_id, case, kind, res)
-                    created_any = True
-                    linked_any = linked_any or bool(res.get("linked"))
-                db.commit()
-            except Exception as exc:  # noqa: BLE001 - surface per-ticket, don't kill the pass
-                db.rollback()
-                error = str(exc)[:200]
-                logger.error("Create&link failed for {}: {}", tid, error)
-            hub.publish(
-                str(run_id),
-                "sync.progress",
-                {
-                    "ticket": tid,
-                    "created": created_any,
-                    "linked": linked_any,
-                    "local": dry_run,
-                    "error": error,
-                },
+            query = db.query(TestCase).filter(
+                TestCase.run_id == run_id, TestCase.approval == "approved"
             )
-        hub.publish(str(run_id), "sync.done", {})
+            if ticket_ids:
+                query = query.filter(TestCase.ticket_external_id.in_(ticket_ids))
+            cases = query.order_by(TestCase.ticket_external_id, TestCase.code).all()
+
+            grouped: dict[str, list[TestCase]] = {}
+            for c in cases:
+                grouped.setdefault(c.ticket_external_id, []).append(c)
+
+            adapters: dict[str, Any] = {}
+            for tid, group in grouped.items():
+                if run_control.is_cancelled(run_id, db):
+                    logger.info("Run {} cancelled — stopping create+link pass", run.code)
+                    return
+                ticket = db.query(Ticket).filter(Ticket.external_id == tid).first()
+                kind = ticket.provider_kind if ticket else "ado"
+                created_any = False
+                linked_any = False
+                error = ""
+                try:
+                    adapter = None if dry_run else _adapter_for(db, kind, adapters)
+                    for case in group:
+                        if dry_run:
+                            # Local mode: record the case locally, never touch the provider.
+                            res = {
+                                "external_id": f"LOCAL-{case.id}",
+                                "status": "Local",
+                                "url": "",
+                                "linked": False,
+                            }
+                        else:
+                            res = adapter.create_test_case(
+                                tid,
+                                title=case.title,
+                                precondition=case.precondition,
+                                steps=case.steps or [],
+                                priority=case.priority,
+                                link=link,
+                            )
+                        _upsert_link(db, run_id, case, kind, res)
+                        created_any = True
+                        linked_any = linked_any or bool(res.get("linked"))
+                    db.commit()
+                except Exception as exc:  # noqa: BLE001 - surface per-ticket, don't kill the pass
+                    db.rollback()
+                    error = str(exc)[:200]
+                    logger.error("Create&link failed for {}: {}", tid, error)
+                hub.publish(
+                    str(run_id),
+                    "sync.progress",
+                    {
+                        "ticket": tid,
+                        "created": created_any,
+                        "linked": linked_any,
+                        "local": dry_run,
+                        "error": error,
+                    },
+                )
+            hub.publish(str(run_id), "sync.done", {})
+        except Exception as exc:  # noqa: BLE001 - never crash the worker thread silently
+            logger.error("Create+link pass crashed for run {}: {}", run_id, exc)
+            db.rollback()
+            run.failed_stage = run.status
+            set_run_status(db, run, "failed")
     finally:
         _running.discard(run_id)
         db.close()

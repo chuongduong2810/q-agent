@@ -425,6 +425,8 @@ class RunOut(ApiModel):
     retry_policy: int
     status: str
     created_at: datetime
+    finished_at: datetime | None = None
+    failed_stage: str | None = None
     ticket_ids: list[str] = Field(default_factory=list)
 
 

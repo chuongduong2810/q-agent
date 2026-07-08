@@ -43,7 +43,7 @@ def _fresh(monkeypatch, claude_home):
     monkeypatch.setattr(claude_cli, "is_available", lambda: True)
     monkeypatch.setattr(claude_usage_reader, "_cache", None)
     # Stub the CLI /usage limit fetch so tests stay deterministic and never spawn `claude`.
-    monkeypatch.setattr(claude_usage_reader, "_get_limits", lambda: (None, "unavailable"))
+    monkeypatch.setattr(claude_usage_reader, "_get_limits", lambda force=False: (None, "unavailable"))
 
 
 def test_read_stats_new_shape(workspace_dir, tmp_path, monkeypatch):

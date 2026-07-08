@@ -24,9 +24,10 @@ from app.models.provider import Provider
 from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
-from app.services import audit_service, project_config_service, run_context, settings_store
+from app.services import audit_service, project_config_service, run_context, run_control, settings_store
 from app.services.adapters import get_adapter
 from app.services.claude_cli import ClaudeError, run_json
+from app.services.run_status import set_run_status
 from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR
 from app.services.prompts import (
     build_analysis_prompt,
@@ -236,26 +237,33 @@ def _run_pipeline(run_id: int) -> None:
             logger.warning("run_generation_pipeline: run {} not found", run_id)
             return
 
-        run_tickets = (
-            db.query(RunTicket)
-            .filter(RunTicket.run_id == run.id)
-            .order_by(RunTicket.position)
-            .all()
-        )
-        for run_ticket in run_tickets:
-            _process_run_ticket(db, run, run_ticket)
+        try:
+            run_tickets = (
+                db.query(RunTicket)
+                .filter(RunTicket.run_id == run.id)
+                .order_by(RunTicket.position)
+                .all()
+            )
+            for run_ticket in run_tickets:
+                if run_control.is_cancelled(run.id, db):
+                    logger.info("Run {} cancelled — stopping AI pipeline", run.code)
+                    return
+                _process_run_ticket(db, run, run_ticket)
 
-        run.status = "review"
-        db.add(run)
-        db.commit()
-        hub.publish(str(run.id), "run.status", {"status": run.status})
+            if not set_run_status(db, run, "review"):
+                return  # already terminal (e.g. cancelled) — don't overwrite it
 
-        case_total = db.query(TestCase).filter(TestCase.run_id == run.id).count()
-        audit_service.record(
-            category="ai", actor_type="ai", action="Generated test cases",
-            target=f"{run.code} · {case_total} cases",
-            meta=f"{len(run_tickets)} tickets analyzed",
-        )
+            case_total = db.query(TestCase).filter(TestCase.run_id == run.id).count()
+            audit_service.record(
+                category="ai", actor_type="ai", action="Generated test cases",
+                target=f"{run.code} · {case_total} cases",
+                meta=f"{len(run_tickets)} tickets analyzed",
+            )
+        except Exception as exc:  # noqa: BLE001 - never crash the worker thread silently
+            logger.error("AI pipeline crashed for run {}: {}", run.code, exc)
+            db.rollback()
+            run.failed_stage = run.status
+            set_run_status(db, run, "failed")
     finally:
         db.close()
         run_context.clear()

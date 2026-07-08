@@ -32,10 +32,12 @@ from app.services import (
     playwright_runner,
     project_config_service,
     run_context,
+    run_control,
     spec_examples,
     spec_service,
 )
 from app.services.claude_cli import ClaudeError
+from app.services.run_status import set_run_status
 from app.ws import hub
 
 router = APIRouter(tags=["automation"])
@@ -190,47 +192,55 @@ def _run_generation(run_id: int, force: bool = False) -> None:
         run = db.get(Run, run_id)
         if run is None:
             return
-        cases = _eligible_cases_query(db, run_id).all()
-        if not force:
-            existing_case_ids = {
-                case_id
-                for (case_id,) in db.query(AutomationSpec.test_case_id)
-                .join(TestCase, AutomationSpec.test_case_id == TestCase.id)
-                .filter(TestCase.run_id == run_id)
-                .all()
-            }
-            cases = [c for c in cases if c.id not in existing_case_ids]
-        total = len(cases)
-        for index, case in enumerate(cases, start=1):
-            try:
-                spec = _generate_one(db, run, case)
-                db.commit()
-                hub.publish(
-                    str(run_id),
-                    "automation.progress",
-                    {"file": spec.filename, "message": "Generated", "done": index, "total": total},
-                )
-            except Exception as exc:  # noqa: BLE001 - surface per-case, never abort the pass
-                db.rollback()
-                logger.error("Automation generation failed for case {}: {}", case.id, exc)
-                hub.publish(
-                    str(run_id),
-                    "automation.progress",
-                    {
-                        "file": spec_service.spec_filename(case.ticket_external_id, case.code),
-                        "message": f"Error: {exc}",
-                        "done": index,
-                        "total": total,
-                    },
-                )
+        try:
+            cases = _eligible_cases_query(db, run_id).all()
+            if not force:
+                existing_case_ids = {
+                    case_id
+                    for (case_id,) in db.query(AutomationSpec.test_case_id)
+                    .join(TestCase, AutomationSpec.test_case_id == TestCase.id)
+                    .filter(TestCase.run_id == run_id)
+                    .all()
+                }
+                cases = [c for c in cases if c.id not in existing_case_ids]
+            total = len(cases)
+            cancelled = False
+            for index, case in enumerate(cases, start=1):
+                if run_control.is_cancelled(run_id, db):
+                    logger.info("Run {} cancelled — stopping automation generation", run.code)
+                    cancelled = True
+                    break
+                try:
+                    spec = _generate_one(db, run, case)
+                    db.commit()
+                    hub.publish(
+                        str(run_id),
+                        "automation.progress",
+                        {"file": spec.filename, "message": "Generated", "done": index, "total": total},
+                    )
+                except Exception as exc:  # noqa: BLE001 - surface per-case, never abort the pass
+                    db.rollback()
+                    logger.error("Automation generation failed for case {}: {}", case.id, exc)
+                    hub.publish(
+                        str(run_id),
+                        "automation.progress",
+                        {
+                            "file": spec_service.spec_filename(case.ticket_external_id, case.code),
+                            "message": f"Error: {exc}",
+                            "done": index,
+                            "total": total,
+                        },
+                    )
+            # Flip the run to 'automation' and announce it — unless cancelled
+            # mid-pass, in which case the cancel path's terminal status stands.
+            if not cancelled:
+                set_run_status(db, run, "automation")
+        except Exception as exc:  # noqa: BLE001 - never crash the worker thread silently
+            logger.error("Automation generation crashed for run {}: {}", run.code, exc)
+            db.rollback()
+            run.failed_stage = run.status
+            set_run_status(db, run, "failed")
     finally:
-        # Always flip the run to 'automation' and announce it, even if the run
-        # vanished or the loop raised — so the UI's generating state resolves.
-        run = db.get(Run, run_id)
-        if run is not None:
-            run.status = "automation"
-            db.commit()
-            hub.publish(str(run_id), "run.status", {"status": run.status})
         _generating.discard(run_id)
         db.close()
         run_context.clear()
