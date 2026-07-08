@@ -9,6 +9,7 @@ import { create } from "zustand";
 import type { TestStep } from "@/types/api";
 
 export type TicketFilter = "all" | "ready" | "mine" | "sprint";
+export type RunFilter = "all" | "active" | "review" | "completed" | "failed";
 export type ProjectTab = "overview" | "knowledge" | "tickets" | "runs" | "settings";
 export type EvidenceTab = "screenshot" | "video" | "trace" | "console" | "network";
 export type AnnotationTool = "cursor" | "rectangle" | "arrow" | "highlight" | "circle" | "text";
@@ -55,6 +56,13 @@ interface UIState {
   setAreaPath: (p: string | null) => void;
   setStates: (s: string[]) => void;
   setWorkItemTypes: (t: string[]) => void;
+
+  // runs page — status filter tab + multi-select for bulk actions
+  runFilter: RunFilter;
+  runSel: Record<number, boolean>;
+  setRunFilter: (f: RunFilter) => void;
+  toggleRunSel: (id: number) => void;
+  clearRunSel: () => void;
 
   // create-run modal
   createRunOpen: boolean;
@@ -128,6 +136,12 @@ export const useUI = create<UIState>((set) => ({
   setAreaPath: (p) => set({ areaPath: p }),
   setStates: (s) => set({ states: s }),
   setWorkItemTypes: (t) => set({ workItemTypes: t }),
+
+  runFilter: "all",
+  runSel: {},
+  setRunFilter: (f) => set({ runFilter: f }),
+  toggleRunSel: (id) => set((s) => ({ runSel: { ...s.runSel, [id]: !s.runSel[id] } })),
+  clearRunSel: () => set({ runSel: {} }),
 
   createRunOpen: false,
   runScope: "selected",
