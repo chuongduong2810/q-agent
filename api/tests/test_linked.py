@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from app.models.provider import Provider
+from app.models.provider_connection import ProviderConnection
 from app.models.run import Run, RunTicket
 from app.models.testcase import TestCase
 from app.services import link_service
@@ -32,7 +32,11 @@ class _FakeAdapter(ProviderAdapter):
 
 
 def _seed_run_with_approved_case(db_session, seed_ticket):
-    db_session.add(Provider(kind="ado", name="ADO", connected=True, config={}, secrets={}))
+    conn = ProviderConnection(kind="ado", name="ADO", connected=True, config={}, secrets={})
+    db_session.add(conn)
+    db_session.flush()
+    seed_ticket.connection_id = conn.id  # stamp the work-item origin
+    db_session.add(seed_ticket)
     run = Run(code="RUN-900", name="Linked", scope="selected", scope_label="Selected", status="review")
     db_session.add(run)
     db_session.flush()

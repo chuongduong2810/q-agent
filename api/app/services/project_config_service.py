@@ -11,9 +11,9 @@ Two responsibilities:
 
 A test case only knows its ``ticket_external_id`` and ``provider_kind``; tickets
 are not reliably linked to a Project row, so we resolve the project **key** from
-the provider's configured project name (which equals the Project Knowledge key,
-e.g. ADO ``config.project = "Surency Platform"``), falling back to the sole
-configured project when only one exists.
+the ticket's **work-item connection** config (its configured project name, which
+equals the Project Knowledge key, e.g. ADO ``config.project = "Surency Platform"``),
+falling back to the sole configured project when only one exists.
 """
 
 from __future__ import annotations
@@ -29,8 +29,10 @@ from app import crypto
 from app.config import settings
 from app.models.knowledge import ProjectKnowledge, compose_key
 from app.models.project_config import ProjectConfig
-from app.models.provider import Provider
+from app.models.provider_connection import ProviderConnection
 from app.models.ticket import Ticket
+from app.services import connection_service
+from app.services.adapters.base import ProviderError
 
 
 # --------------------------------------------------------------- persistence
@@ -62,6 +64,11 @@ def upsert_config(db: Session, key: str, patch: dict[str, Any]) -> ProjectConfig
         db.add(row)
     if "name" in patch and patch["name"]:
         row.name = patch["name"]
+    # Per-project provider bindings (ADR 0006). Present-but-null clears the binding.
+    if "work_item_connection_id" in patch:
+        row.work_item_connection_id = patch["work_item_connection_id"]
+    if "repository_connection_id" in patch:
+        row.repository_connection_id = patch["repository_connection_id"]
     if "base_url" in patch and patch["base_url"] is not None:
         row.base_url = patch["base_url"].strip()
     if "local_repo_path" in patch and patch["local_repo_path"] is not None:
@@ -167,6 +174,8 @@ def public_config(row: ProjectConfig | None, key: str, name: str = "") -> dict[s
         return {
             "key": key,
             "name": name or key,
+            "workItemConnectionId": None,
+            "repositoryConnectionId": None,
             "baseUrl": "",
             "repos": [],
             "localRepoPath": "",
@@ -179,6 +188,8 @@ def public_config(row: ProjectConfig | None, key: str, name: str = "") -> dict[s
     return {
         "key": row.key,
         "name": row.name or row.key,
+        "workItemConnectionId": row.work_item_connection_id,
+        "repositoryConnectionId": row.repository_connection_id,
         "baseUrl": row.base_url,
         "repos": get_repos(row),
         "localRepoPath": row.local_repo_path,
@@ -248,25 +259,25 @@ def clear_auth(project_key: str) -> dict[str, Any]:
     return auth_state(project_key)
 
 
-def base_url_for(db: Session, provider_kind: str, env: str = "") -> str:
-    """Resolve the base URL a run should target for a provider's project.
+def base_url_for(db: Session, ticket: Ticket, env: str = "") -> str:
+    """Resolve the base URL a run should target for a ticket's project.
 
     Reuses :func:`build_context` so per-environment URL selection stays consistent
     with the rest of the pipeline. Returns "" when no project/base URL resolves.
     """
-    return build_context(db, provider_kind, env=env).get("baseUrl", "") or ""
+    return build_context(db, ticket, env=env).get("baseUrl", "") or ""
 
 
 # --------------------------------------------------------------- resolution
-def resolve_project_key(db: Session, provider_kind: str) -> str | None:
-    """Best-effort map a provider to the project key its tickets belong to.
+def resolve_project_key(db: Session, connection: ProviderConnection | None) -> str | None:
+    """Best-effort map a **work-item connection** to its project key (ADR 0006).
 
-    Order: (1) the provider's configured project name if it has a config/knowledge
-    row; (2) the sole configured project when exactly one exists; else None.
+    Order: (1) the connection's configured project name if it has a config/knowledge
+    row; (2) the sole configured project when exactly one exists; else None. Reads
+    ``connection.config`` directly — no fragile ``config.project == key`` scan.
     """
-    provider = db.query(Provider).filter(Provider.kind == provider_kind).first()
-    if provider:
-        cfg = provider.config or {}
+    if connection is not None:
+        cfg = connection.config or {}
         candidate = cfg.get("project") or cfg.get("repo") or cfg.get("org") or ""
         if candidate and (
             get_config(db, candidate)
@@ -281,6 +292,19 @@ def resolve_project_key(db: Session, provider_kind: str) -> str | None:
     if len(keys) == 1:
         return next(iter(keys))
     return None
+
+
+def project_key_for_ticket(db: Session, ticket: Ticket) -> str | None:
+    """Resolve the project key a ticket belongs to via its work-item connection.
+
+    Best-effort: an un-configured work-item connection degrades to the sole-project
+    fallback in :func:`resolve_project_key` (never raises).
+    """
+    try:
+        connection = connection_service.resolve_work_item_for_ticket(db, ticket)
+    except ProviderError:
+        connection = None
+    return resolve_project_key(db, connection)
 
 
 def repo_options(db: Session, project_key: str) -> list[dict[str, Any]]:
@@ -317,7 +341,7 @@ def repo_options(db: Session, project_key: str) -> list[dict[str, Any]]:
 
 
 def build_context(
-    db: Session, provider_kind: str, env: str = "", repo: str | None = None
+    db: Session, ticket: Ticket, env: str = "", repo: str | None = None
 ) -> dict[str, Any]:
     """Assemble the full project context downstream AI actions consume.
 
@@ -329,7 +353,7 @@ def build_context(
 
     Args:
         db: Active session.
-        provider_kind: The ticket's provider (ado/jira/github).
+        ticket: The ticket whose work-item connection resolves the project key.
         env: Optional environment name to pick a matching per-env base URL.
         repo: Optional target repository NAME. When it is a non-empty configured
             repo name, that repo's per-repo knowledge base is loaded (instead of
@@ -343,7 +367,7 @@ def build_context(
         architecture, locator, routes, selectors, auth, businessEntities, stack,
         pageObjects/fixtures counts).
     """
-    key = resolve_project_key(db, provider_kind)
+    key = project_key_for_ticket(db, ticket)
     context: dict[str, Any] = {"projectKey": key or ""}
     if not key:
         return context
@@ -417,4 +441,4 @@ def context_for_ticket(
     ``repo`` (a target repository name) is threaded through so the context loads
     that repo's per-repo knowledge base rather than the project default repo's.
     """
-    return build_context(db, ticket.provider_kind, env=env, repo=repo)
+    return build_context(db, ticket, env=env, repo=repo)

@@ -7,14 +7,14 @@ storing a validated ``RunTicket.repo`` from Claude's ``suggestedRepo`` guess.
 from __future__ import annotations
 
 from app.models.knowledge import ProjectKnowledge, compose_key
-from app.models.provider import Provider
+from app.models.provider_connection import ProviderConnection
 from app.models.run import Run, RunTicket
 from app.services import ai_service, project_config_service
 
 
 def _seed_provider(db):
-    db.add(Provider(kind="ado", name="ADO", connected=True,
-                    config={"project": "Surency Platform"}, secrets={}))
+    db.add(ProviderConnection(kind="ado", name="ADO", connected=True,
+                              config={"project": "Surency Platform"}, secrets={}))
     db.commit()
 
 
@@ -110,19 +110,24 @@ def test_set_run_ticket_repo_404(client, db_session, seed_ticket):
 
 
 def test_build_context_loads_target_repo_knowledge(client, db_session):
+    from app.models.ticket import Ticket
+
     _seed_provider(db_session)
     _seed_repos(client)
     _seed_knowledge(db_session, "Surency Platform", "surency-web", "WEB-DOMAIN")
     _seed_knowledge(db_session, "Surency Platform", "surency-api", "API-DOMAIN")
+    ticket = Ticket(external_id="SUR-1", provider_kind="ado", title="t")
+    db_session.add(ticket)
+    db_session.commit()
 
     # Default (no repo) -> the default repo's KB (surency-web).
-    ctx_default = project_config_service.build_context(db_session, "ado")
+    ctx_default = project_config_service.build_context(db_session, ticket)
     assert ctx_default["repo"] == "surency-web"
     assert ctx_default["domain"] == "WEB-DOMAIN"
     assert {o["name"] for o in ctx_default["repoOptions"]} == {"surency-web", "surency-api"}
 
     # Explicit repo -> that repo's KB.
-    ctx_api = project_config_service.build_context(db_session, "ado", repo="surency-api")
+    ctx_api = project_config_service.build_context(db_session, ticket, repo="surency-api")
     assert ctx_api["repo"] == "surency-api"
     assert ctx_api["domain"] == "API-DOMAIN"
 

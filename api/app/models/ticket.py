@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Integer, String, Text
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, timestamp_column
@@ -21,6 +21,11 @@ class Ticket(Base):
     external_id: Mapped[str] = mapped_column(String(64), index=True)  # e.g. "SUR-1428"
     provider_kind: Mapped[str] = mapped_column(String(16), index=True)
     project_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    # The work-item connection this ticket was synced from (ADR 0006). Nullable —
+    # legacy rows and un-stamped tickets fall back to first-of-kind resolution.
+    connection_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("provider_connections.id"), index=True, nullable=True
+    )
 
     title: Mapped[str] = mapped_column(String(500))
     work_item_type: Mapped[str] = mapped_column(String(32), default="User Story")

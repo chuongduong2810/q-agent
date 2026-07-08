@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, String
+from sqlalchemy import JSON, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, timestamp_column, utcnow
@@ -28,6 +28,16 @@ class ProjectConfig(Base):
     # Keyed by project name (the UI's project identifier), matching ProjectKnowledge.key.
     key: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200), default="")
+
+    # Per-project provider bindings (ADR 0006). A project's tickets can come from
+    # one work-item connection while its code lives on a separate repository
+    # connection. Both nullable — un-bound projects degrade to first-of-category.
+    work_item_connection_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("provider_connections.id"), nullable=True
+    )
+    repository_connection_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("provider_connections.id"), nullable=True
+    )
 
     # Primary application URL the generated automation targets.
     base_url: Mapped[str] = mapped_column(String(500), default="")

@@ -8,8 +8,10 @@ back to metadata inference):
    provider + repo identifier) is cloned/pulled into ``workspace/repos/<slug>`` and
    that checkout is traversed.
 
-Private repos are authenticated by injecting the matching provider's PAT
-(``secrets['pat']``) into the HTTPS URL. Tokens are redacted from all logs.
+Private repos are authenticated by injecting the project's **repository
+connection** PAT (``secrets['pat']``) into the HTTPS URL (ADR 0006 — repository
+credentials come from the project's bound repository connection, not from
+host-guessing). Tokens are redacted from all logs.
 """
 
 from __future__ import annotations
@@ -24,7 +26,8 @@ from sqlalchemy.orm import Session
 from app import crypto
 from app.config import settings
 from app.logging import logger
-from app.models.provider import Provider
+from app.services import connection_service
+from app.services.adapters.base import ProviderError
 
 _CLONE_TIMEOUT_S = 180
 
@@ -36,15 +39,6 @@ def _slug(key: str) -> str:
 def _redact(url: str) -> str:
     """Hide any embedded credentials before logging a URL."""
     return re.sub(r"://[^@/]+@", "://***@", url)
-
-
-def _provider_kind_for_host(host: str) -> str | None:
-    host = host.lower()
-    if "github" in host:
-        return "github"
-    if "azure.com" in host or "visualstudio.com" in host:
-        return "ado"
-    return None
 
 
 def _derive_url(repo: str, provider_display: str) -> str:
@@ -63,13 +57,17 @@ def _derive_url(repo: str, provider_display: str) -> str:
     return ""
 
 
-def _pat_for(db: Session, kind: str | None) -> str:
-    if not kind:
+def _repo_pat_for_project(db: Session, project_key: str) -> str:
+    """PAT of the project's bound repository connection (ADR 0006), or "".
+
+    Best-effort: an un-bound project (no repository connection resolvable) yields
+    an empty PAT, so a public clone still proceeds without credentials.
+    """
+    try:
+        connection = connection_service.resolve_repository_for_project(db, project_key)
+    except ProviderError:
         return ""
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
-        return ""
-    return crypto.decrypt((provider.secrets or {}).get("pat", "")) or ""
+    return crypto.decrypt((connection.secrets or {}).get("pat", "")) or ""
 
 
 def _authenticated_url(url: str, pat: str) -> str:
@@ -123,8 +121,7 @@ def materialize_remote(
     if not url:
         return None
 
-    host = urlparse(url).hostname or ""
-    pat = _pat_for(db, _provider_kind_for_host(host))
+    pat = _repo_pat_for_project(db, key)
     authed = _authenticated_url(url, pat)
 
     dest = settings.repos_dir / _slug(key)

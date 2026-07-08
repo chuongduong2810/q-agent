@@ -14,33 +14,40 @@ from sqlalchemy.orm import Session
 
 from app import crypto
 from app.models.comment import TicketComment
-from app.models.provider import Provider
 from app.models.ticket import Ticket
-from app.services import audit_service
+from app.services import audit_service, connection_service
 from app.services.adapters import ProviderError, get_adapter
 from app.ws import hub
 
 
-def _build_adapter(db: Session, provider_kind: str):
-    """Load the Provider row for ``provider_kind``, decrypt secrets, build an adapter."""
-    provider = db.execute(select(Provider).where(Provider.kind == provider_kind)).scalars().first()
-    if provider is None:
-        raise ProviderError(f"Provider '{provider_kind}' is not configured")
-    decrypted_secrets = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
-    return get_adapter(provider_kind, provider.config or {}, decrypted_secrets)
+def _resolve_connection(db: Session, comment: TicketComment):
+    """Resolve the work-item connection a comment publishes through (ADR 0006).
 
-
-def _resolve_provider_kind(db: Session, comment: TicketComment) -> str:
-    if comment.provider_kind:
-        return comment.provider_kind
+    Routes by the comment's ticket → its work-item connection. Falls back to the
+    first connection of the comment's stamped ``provider_kind`` when the ticket
+    row is missing.
+    """
     ticket = (
         db.execute(select(Ticket).where(Ticket.external_id == comment.ticket_external_id))
         .scalars()
         .first()
     )
-    if ticket is None:
-        raise ProviderError(f"Ticket '{comment.ticket_external_id}' not found")
-    return ticket.provider_kind
+    if ticket is not None:
+        return connection_service.resolve_work_item_for_ticket(db, ticket)
+    if comment.provider_kind:
+        conn = connection_service.first_of_kind(db, comment.provider_kind)
+        if conn is not None:
+            return conn
+    raise ProviderError(
+        f"Work-item provider for '{comment.ticket_external_id}' is not configured"
+    )
+
+
+def _build_adapter(db: Session, comment: TicketComment):
+    """Resolve the comment's connection, decrypt secrets, and build a live adapter."""
+    connection = _resolve_connection(db, comment)
+    decrypted_secrets = {k: crypto.decrypt(v) for k, v in (connection.secrets or {}).items()}
+    return get_adapter(connection.kind, connection.config or {}, decrypted_secrets)
 
 
 def publish_one(db: Session, comment: TicketComment) -> TicketComment:
@@ -58,8 +65,7 @@ def publish_one(db: Session, comment: TicketComment) -> TicketComment:
     )
 
     try:
-        provider_kind = _resolve_provider_kind(db, comment)
-        adapter = _build_adapter(db, provider_kind)
+        adapter = _build_adapter(db, comment)
         external_id = adapter.publish_comment(
             comment.ticket_external_id, comment.body, attachments=comment.attachments or None
         )

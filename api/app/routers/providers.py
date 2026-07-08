@@ -1,41 +1,62 @@
 """Providers + Settings router.
 
-Endpoints to implement (see docs/API-CONTRACT.md):
-  GET    /providers                       -> list[ProviderOut]
-  GET    /providers/{kind}                -> ProviderOut
-  PUT    /providers/{kind}                -> ProviderOut          (save config + secrets, encrypted)
-  POST   /providers/{kind}/test           -> TestConnectionResult (live adapter check)
-  GET    /settings                        -> SettingsOut
-  PUT    /settings                        -> SettingsOut
+Provider connections (ADR 0006) — a provider *kind* holds many named
+``ProviderConnection`` rows across two categories (work_item / repository):
 
-Note: `/settings` is not nested under `/providers`, so this router has no
-prefix — provider paths spell out `/providers` explicitly. `app/main.py`
-includes this single `router` object.
+  GET    /providers                          -> list[ProviderGroupOut]  (grouped catalog)
+  POST   /providers/{kind}/connections        -> ConnectionOut           (create empty)
+  PUT    /connections/{id}                     -> ConnectionOut           (save config + secrets)
+  DELETE /connections/{id}                     -> 204                     (null referencing FKs)
+  POST   /connections/{id}/test                -> TestConnectionResult    (live probe)
+  GET    /connections/{id}/sprints             -> list[SprintOut]         (work-item)
+  GET    /connections/{id}/work-item-metadata  -> WorkItemMetadataOut     (work-item)
+  GET    /connections/{id}/repos               -> list[AvailableRepoOut]  (repository)
+  GET    /settings                             -> SettingsOut
+  PUT    /settings                             -> SettingsOut
+
+This router has no prefix — provider/connection paths are spelled out explicitly.
+``app/main.py`` includes this single ``router`` object.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app import crypto
-from app.db import get_db
+from app.db import get_db, utcnow
 from app.logging import logger
-from app.models.provider import PROVIDER_KINDS, Provider
+from app.models.project import Project
+from app.models.project_config import ProjectConfig
+from app.models.provider import PROVIDER_KINDS
+from app.models.provider_connection import (
+    PROVIDER_DISPLAY_NAMES,
+    REPOSITORY,
+    WORK_ITEM,
+    ProviderConnection,
+    category_for,
+)
+from app.models.ticket import Ticket
 from app.schemas import (
-    ProviderFieldsIn,
-    ProviderOut,
+    AvailableRepoOut,
+    ConnectionCreate,
+    ConnectionOut,
+    ConnectionUpdate,
+    ProviderGroupOut,
     SettingsOut,
     SettingsUpdate,
     SprintOut,
     TestConnectionResult,
     WorkItemMetadataOut,
 )
-from app.services import audit_service, settings_store
+from app.services import audit_service, connection_service, settings_store
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
 
 router = APIRouter(tags=["providers"])
+
+# Work-item kinds first, then repository (drives the grouped catalog order).
+_KIND_ORDER = sorted(PROVIDER_KINDS, key=lambda k: (category_for(k) != WORK_ITEM, k))
 
 
 def _validate_kind(kind: str) -> None:
@@ -43,87 +64,152 @@ def _validate_kind(kind: str) -> None:
         raise HTTPException(status_code=404, detail=f"Unknown provider kind '{kind}'")
 
 
-def _to_provider_out(provider: Provider) -> ProviderOut:
-    """Build a ProviderOut with secrets replaced by their field names only."""
-    return ProviderOut(
-        id=provider.id,
-        kind=provider.kind,
-        name=provider.name,
-        connected=provider.connected,
-        config=provider.config or {},
-        secret_fields=sorted((provider.secrets or {}).keys()),
-        last_sync=provider.last_sync,
+def _to_connection_out(conn: ProviderConnection) -> ConnectionOut:
+    """Build a ConnectionOut with secrets replaced by their field names only."""
+    return ConnectionOut(
+        id=conn.id,
+        kind=conn.kind,
+        category=category_for(conn.kind),
+        name=conn.name,
+        connected=conn.connected,
+        config=conn.config or {},
+        secret_fields=sorted((conn.secrets or {}).keys()),
+        last_sync=conn.last_sync,
+        last_tested_at=conn.last_tested_at,
     )
 
 
-@router.get("/providers", response_model=list[ProviderOut])
-def list_providers(db: Session = Depends(get_db)) -> list[ProviderOut]:
-    providers = db.query(Provider).all()
-    return [_to_provider_out(p) for p in providers]
+def _get_connection_or_404(db: Session, connection_id: int) -> ProviderConnection:
+    conn = connection_service.get_connection(db, connection_id)
+    if conn is None:
+        raise HTTPException(status_code=404, detail=f"Connection '{connection_id}' not found")
+    return conn
 
 
-@router.get("/providers/{kind}", response_model=ProviderOut)
-def get_provider(kind: str, db: Session = Depends(get_db)) -> ProviderOut:
+def _require_category(conn: ProviderConnection, category: str) -> None:
+    if category_for(conn.kind) != category:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Connection '{conn.id}' ({conn.kind}) is not a {category} provider",
+        )
+
+
+@router.get("/providers", response_model=list[ProviderGroupOut])
+def list_providers(db: Session = Depends(get_db)) -> list[ProviderGroupOut]:
+    """Grouped catalog: one group per kind (work-item kinds first, then repository)."""
+    by_kind: dict[str, list[ProviderConnection]] = {k: [] for k in _KIND_ORDER}
+    for conn in db.query(ProviderConnection).order_by(ProviderConnection.id).all():
+        by_kind.setdefault(conn.kind, []).append(conn)
+    groups: list[ProviderGroupOut] = []
+    for kind in _KIND_ORDER:
+        conns = by_kind.get(kind, [])
+        groups.append(
+            ProviderGroupOut(
+                kind=kind,
+                category=category_for(kind),
+                name=PROVIDER_DISPLAY_NAMES.get(kind, kind.upper()),
+                connection_count=len(conns),
+                connected_count=sum(1 for c in conns if c.connected),
+                connections=[_to_connection_out(c) for c in conns],
+            )
+        )
+    return groups
+
+
+@router.post("/providers/{kind}/connections", response_model=ConnectionOut, status_code=201)
+def create_connection(
+    kind: str, body: ConnectionCreate, db: Session = Depends(get_db)
+) -> ConnectionOut:
+    """Create an empty connection under a provider kind."""
     _validate_kind(kind)
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
-        raise HTTPException(status_code=404, detail=f"Provider '{kind}' is not configured")
-    return _to_provider_out(provider)
+    conn = ProviderConnection(
+        kind=kind,
+        name=body.name or PROVIDER_DISPLAY_NAMES.get(kind, kind.upper()),
+        connected=False,
+        config={},
+        secrets={},
+    )
+    db.add(conn)
+    db.commit()
+    db.refresh(conn)
+    audit_service.record(
+        category="integration", actor_type="user", action="Added provider connection",
+        target=conn.name or kind,
+    )
+    return _to_connection_out(conn)
 
 
-@router.put("/providers/{kind}", response_model=ProviderOut)
-def upsert_provider(kind: str, body: ProviderFieldsIn, db: Session = Depends(get_db)) -> ProviderOut:
-    """Save non-secret config + encrypt and persist secrets. Upserts the single row per kind."""
-    _validate_kind(kind)
-
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
-        provider = Provider(kind=kind, name=kind.upper(), connected=False, config={}, secrets={})
-        db.add(provider)
-
-    if body.config:
-        provider.config = {**(provider.config or {}), **body.config}
+@router.put("/connections/{connection_id}", response_model=ConnectionOut)
+def update_connection(
+    connection_id: int, body: ConnectionUpdate, db: Session = Depends(get_db)
+) -> ConnectionOut:
+    """Save non-secret config + encrypt and persist secrets. Untouched secrets kept."""
+    conn = _get_connection_or_404(db, connection_id)
+    if body.name is not None:
+        conn.name = body.name
+    if body.config is not None:
+        conn.config = {**(conn.config or {}), **body.config}
     if body.secrets:
-        encrypted = {**(provider.secrets or {})}
+        encrypted = {**(conn.secrets or {})}
         for key, value in body.secrets.items():
             encrypted[key] = crypto.encrypt(value)
-        provider.secrets = encrypted
-
+        conn.secrets = encrypted
     db.commit()
-    db.refresh(provider)
+    db.refresh(conn)
     audit_service.record(
         category="integration", actor_type="user", action="Saved provider connection",
-        target=provider.name or kind,
+        target=conn.name or conn.kind,
     )
-    return _to_provider_out(provider)
+    return _to_connection_out(conn)
 
 
-@router.post("/providers/{kind}/test", response_model=TestConnectionResult)
-def test_provider_connection(kind: str, db: Session = Depends(get_db)) -> TestConnectionResult:
+@router.delete("/connections/{connection_id}", status_code=204)
+def delete_connection(connection_id: int, db: Session = Depends(get_db)) -> Response:
+    """Delete a connection and null out every FK that referenced it."""
+    conn = _get_connection_or_404(db, connection_id)
+    db.query(Ticket).filter(Ticket.connection_id == connection_id).update(
+        {Ticket.connection_id: None}, synchronize_session=False
+    )
+    db.query(Project).filter(Project.connection_id == connection_id).update(
+        {Project.connection_id: None}, synchronize_session=False
+    )
+    db.query(ProjectConfig).filter(ProjectConfig.work_item_connection_id == connection_id).update(
+        {ProjectConfig.work_item_connection_id: None}, synchronize_session=False
+    )
+    db.query(ProjectConfig).filter(ProjectConfig.repository_connection_id == connection_id).update(
+        {ProjectConfig.repository_connection_id: None}, synchronize_session=False
+    )
+    name = conn.name or conn.kind
+    db.delete(conn)
+    db.commit()
+    audit_service.record(
+        category="integration", actor_type="user", action="Removed provider connection",
+        target=name,
+    )
+    return Response(status_code=204)
+
+
+@router.post("/connections/{connection_id}/test", response_model=TestConnectionResult)
+def test_connection(connection_id: int, db: Session = Depends(get_db)) -> TestConnectionResult:
     """Instantiate the live adapter with decrypted config/secrets and probe connectivity."""
-    _validate_kind(kind)
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
-        raise HTTPException(status_code=404, detail=f"Provider '{kind}' is not configured")
-
-    decrypted_secrets = {key: crypto.decrypt(value) for key, value in (provider.secrets or {}).items()}
-
+    conn = _get_connection_or_404(db, connection_id)
+    decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
-        adapter = get_adapter(kind, provider.config or {}, decrypted_secrets)
+        adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
         result = adapter.test_connection()
     except ProviderError as exc:
         result = {"ok": False, "message": str(exc), "detail": {}}
 
-    provider.connected = bool(result.get("ok"))
+    conn.connected = bool(result.get("ok"))
+    conn.last_tested_at = utcnow()
     db.commit()
 
     audit_service.record(
         category="integration", actor_type="user", action="Tested connection",
-        target=provider.name or kind,
+        target=conn.name or conn.kind,
         status="success" if result.get("ok") else "error",
         meta=result.get("message", ""),
     )
-
     return TestConnectionResult(
         ok=result.get("ok", False),
         message=result.get("message", ""),
@@ -131,48 +217,63 @@ def test_provider_connection(kind: str, db: Session = Depends(get_db)) -> TestCo
     )
 
 
-@router.get("/providers/{kind}/sprints", response_model=list[SprintOut])
-def list_provider_sprints(kind: str, db: Session = Depends(get_db)) -> list[SprintOut]:
-    """Return the provider's real sprints/iterations for the configured project.
+@router.get("/connections/{connection_id}/sprints", response_model=list[SprintOut])
+def list_connection_sprints(connection_id: int, db: Session = Depends(get_db)) -> list[SprintOut]:
+    """Real sprints/iterations for a work-item connection's project.
 
-    Resilient: an unconfigured/unsupported provider yields an empty list so the
+    Resilient: an unconfigured/unsupported connection yields an empty list so the
     sprint picker degrades gracefully rather than erroring the UI.
     """
-    _validate_kind(kind)
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
-        return []
-    decrypted = {key: crypto.decrypt(value) for key, value in (provider.secrets or {}).items()}
+    conn = _get_connection_or_404(db, connection_id)
+    _require_category(conn, WORK_ITEM)
+    decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
-        adapter = get_adapter(kind, provider.config or {}, decrypted)
+        adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
         sprints = adapter.list_sprints()
-    except ProviderError as exc:
-        logger.warning("Sprint list for '{}' unavailable: {}", kind, exc)
-        return []
     except Exception as exc:  # noqa: BLE001 - upstream/API hiccup shouldn't 500 the picker
-        logger.warning("Sprint list for '{}' failed: {}", kind, exc)
+        logger.warning("Sprint list for connection {} unavailable: {}", connection_id, exc)
         return []
     return [SprintOut.model_validate(s) for s in sprints]
 
 
-@router.get("/providers/{kind}/work-item-metadata", response_model=WorkItemMetadataOut)
-def work_item_metadata(kind: str, db: Session = Depends(get_db)) -> WorkItemMetadataOut:
-    """Filter options (area paths, work item types, states) for the ticket query.
+@router.get("/connections/{connection_id}/work-item-metadata", response_model=WorkItemMetadataOut)
+def connection_work_item_metadata(
+    connection_id: int, db: Session = Depends(get_db)
+) -> WorkItemMetadataOut:
+    """Filter options (area paths, work item types, states) for a work-item connection.
 
-    Resilient: unconfigured/unsupported providers yield empty lists.
+    Resilient: unconfigured/unsupported connections yield empty lists.
     """
-    _validate_kind(kind)
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
-        return WorkItemMetadataOut()
-    decrypted = {key: crypto.decrypt(value) for key, value in (provider.secrets or {}).items()}
+    conn = _get_connection_or_404(db, connection_id)
+    _require_category(conn, WORK_ITEM)
+    decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
-        adapter = get_adapter(kind, provider.config or {}, decrypted)
+        adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
         meta = adapter.list_work_item_metadata()
     except Exception as exc:  # noqa: BLE001 - never error the filter UI
-        logger.warning("Work-item metadata for '{}' unavailable: {}", kind, exc)
+        logger.warning("Work-item metadata for connection {} unavailable: {}", connection_id, exc)
         return WorkItemMetadataOut()
     return WorkItemMetadataOut.model_validate(meta)
+
+
+@router.get("/connections/{connection_id}/repos", response_model=list[AvailableRepoOut])
+def list_connection_repos(
+    connection_id: int, db: Session = Depends(get_db)
+) -> list[AvailableRepoOut]:
+    """Discover the repositories a repository connection exposes (for the picker).
+
+    Resilient: unconfigured/unsupported connections yield an empty list.
+    """
+    conn = _get_connection_or_404(db, connection_id)
+    _require_category(conn, REPOSITORY)
+    decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
+    try:
+        adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
+        repos = adapter.list_repos()
+    except Exception as exc:  # noqa: BLE001 - never 500 the picker on an upstream hiccup
+        logger.warning("Repo list for connection {} unavailable: {}", connection_id, exc)
+        return []
+    return [AvailableRepoOut.model_validate(r) for r in repos]
 
 
 @router.get("/settings", response_model=SettingsOut, tags=["settings"])

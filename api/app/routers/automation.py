@@ -74,7 +74,7 @@ def _select_examples_for_case(db: Session, case: TestCase) -> list[dict]:
     ticket = db.query(Ticket).filter(Ticket.external_id == case.ticket_external_id).first()
     if ticket is None:
         return []
-    project_key = project_config_service.resolve_project_key(db, ticket.provider_kind)
+    project_key = project_config_service.project_key_for_ticket(db, ticket)
     if not project_key:
         return []
     run_ticket = (

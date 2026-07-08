@@ -1,4 +1,4 @@
-"""API tests for /providers and /settings endpoints."""
+"""API tests for /providers (grouped catalog) + /connections CRUD/test + /settings."""
 
 from __future__ import annotations
 
@@ -6,15 +6,56 @@ import httpx
 import respx
 
 
-def test_list_providers_empty(client):
+def _create(client, kind: str, name: str = "") -> dict:
+    resp = client.post(f"/providers/{kind}/connections", json={"name": name or kind})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_list_providers_grouped_and_empty(client):
     resp = client.get("/providers")
     assert resp.status_code == 200
-    assert resp.json() == []
+    groups = resp.json()
+    # One group per kind; work-item kinds first, then repository.
+    kinds = [g["kind"] for g in groups]
+    assert kinds == ["ado", "jira", "github"]
+    categories = {g["kind"]: g["category"] for g in groups}
+    assert categories == {"ado": "work_item", "jira": "work_item", "github": "repository"}
+    assert all(g["connectionCount"] == 0 for g in groups)
+    assert all(g["connections"] == [] for g in groups)
 
 
-def test_put_provider_encrypts_secrets_and_never_returns_plaintext(client, db_session):
+def test_create_connection_and_group_counts(client):
+    conn = _create(client, "ado", "Prod ADO")
+    assert conn["kind"] == "ado"
+    assert conn["category"] == "work_item"
+    assert conn["name"] == "Prod ADO"
+    assert conn["connected"] is False
+
+    groups = {g["kind"]: g for g in client.get("/providers").json()}
+    assert groups["ado"]["connectionCount"] == 1
+    assert groups["ado"]["connectedCount"] == 0
+    assert groups["ado"]["connections"][0]["id"] == conn["id"]
+
+
+def test_create_connection_unknown_kind_404(client):
+    resp = client.post("/providers/bogus/connections", json={"name": "x"})
+    assert resp.status_code == 404
+
+
+def test_multiple_connections_of_one_kind(client):
+    a = _create(client, "ado", "ADO One")
+    b = _create(client, "ado", "ADO Two")
+    assert a["id"] != b["id"]
+    group = {g["kind"]: g for g in client.get("/providers").json()}["ado"]
+    assert group["connectionCount"] == 2
+    assert {c["name"] for c in group["connections"]} == {"ADO One", "ADO Two"}
+
+
+def test_update_connection_encrypts_secrets_and_never_returns_plaintext(client, db_session):
+    conn = _create(client, "ado")
     resp = client.put(
-        "/providers/ado",
+        f"/connections/{conn['id']}",
         json={
             "config": {"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
             "secrets": {"pat": "super-secret-pat-value"},
@@ -22,70 +63,87 @@ def test_put_provider_encrypts_secrets_and_never_returns_plaintext(client, db_se
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["kind"] == "ado"
     assert body["config"] == {"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"}
     assert body["secretFields"] == ["pat"]
-    # plaintext secret must never appear anywhere in the response
     assert "super-secret-pat-value" not in resp.text
 
-    # Confirm it's actually encrypted at rest in the DB, not stored plaintext.
-    from app.models.provider import Provider
+    from app.models.provider_connection import ProviderConnection
 
-    provider = db_session.query(Provider).filter(Provider.kind == "ado").first()
-    assert provider is not None
-    assert provider.secrets["pat"] != "super-secret-pat-value"
-    assert provider.secrets["pat"].startswith("enc::")
+    row = db_session.get(ProviderConnection, conn["id"])
+    assert row.secrets["pat"] != "super-secret-pat-value"
+    assert row.secrets["pat"].startswith("enc::")
 
 
-def test_get_provider_after_put(client):
-    client.put(
-        "/providers/jira",
-        json={
-            "config": {"baseUrl": "https://myorg.atlassian.net"},
-            "secrets": {"email": "qa@myorg.com", "apiToken": "tok-123"},
-        },
-    )
-    resp = client.get("/providers/jira")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["kind"] == "jira"
-    assert sorted(body["secretFields"]) == ["apiToken", "email"]
-    assert "tok-123" not in resp.text
+def test_update_connection_preserves_untouched_secrets(client, db_session):
+    conn = _create(client, "jira")
+    client.put(f"/connections/{conn['id']}", json={"secrets": {"apiToken": "tok-123"}})
+    # A later config-only PUT must not blank the stored secret.
+    client.put(f"/connections/{conn['id']}", json={"config": {"baseUrl": "https://x.atlassian.net"}})
+
+    from app.models.provider_connection import ProviderConnection
+
+    row = db_session.get(ProviderConnection, conn["id"])
+    assert row.secrets["apiToken"].startswith("enc::")
+    assert row.config["baseUrl"] == "https://x.atlassian.net"
 
 
-def test_get_unknown_provider_kind_404(client):
-    resp = client.get("/providers/bogus")
+def test_update_unknown_connection_404(client):
+    resp = client.put("/connections/9999", json={"name": "x"})
     assert resp.status_code == 404
 
 
-def test_get_provider_not_configured_404(client):
-    resp = client.get("/providers/github")
-    assert resp.status_code == 404
+def test_delete_connection_nulls_referencing_fks(client, db_session):
+    from app.models.project_config import ProjectConfig
+    from app.models.ticket import Ticket
+
+    conn = _create(client, "ado")
+    db_session.add(Ticket(external_id="T-1", provider_kind="ado", title="t", connection_id=conn["id"]))
+    db_session.add(ProjectConfig(key="P", name="P", work_item_connection_id=conn["id"]))
+    db_session.commit()
+
+    resp = client.delete(f"/connections/{conn['id']}")
+    assert resp.status_code == 204
+
+    db_session.expire_all()
+    assert db_session.query(Ticket).filter(Ticket.external_id == "T-1").first().connection_id is None
+    cfg = db_session.query(ProjectConfig).filter(ProjectConfig.key == "P").first()
+    assert cfg.work_item_connection_id is None
 
 
 @respx.mock
-def test_provider_test_connection_ok(client):
+def test_connection_test_sets_connected_and_last_tested(client):
+    conn = _create(client, "github")
     client.put(
-        "/providers/github",
+        f"/connections/{conn['id']}",
         json={"config": {"org": "acme", "repo": "webapp"}, "secrets": {"pat": "ghp_xxx"}},
     )
     respx.get("https://api.github.com/user").mock(
         return_value=httpx.Response(200, json={"login": "duna"})
     )
 
-    resp = client.post("/providers/github/test")
+    resp = client.post(f"/connections/{conn['id']}/test")
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["ok"] is True
+    assert resp.json()["ok"] is True
 
-    # connected flag should now be persisted true
-    resp2 = client.get("/providers/github")
-    assert resp2.json()["connected"] is True
+    group = {g["kind"]: g for g in client.get("/providers").json()}["github"]
+    c = group["connections"][0]
+    assert c["connected"] is True
+    assert c["lastTestedAt"] is not None
 
 
-def test_provider_test_connection_not_configured_404(client):
-    resp = client.post("/providers/ado/test")
-    assert resp.status_code == 404
+def test_connection_test_unknown_404(client):
+    assert client.post("/connections/9999/test").status_code == 404
+
+
+def test_repos_endpoint_rejects_work_item_connection(client):
+    conn = _create(client, "ado")
+    # /repos is a repository-category route; an ADO (work-item) connection is 400.
+    assert client.get(f"/connections/{conn['id']}/repos").status_code == 400
+
+
+def test_sprints_endpoint_rejects_repository_connection(client):
+    conn = _create(client, "github")
+    assert client.get(f"/connections/{conn['id']}/sprints").status_code == 400
 
 
 def test_settings_default_and_update(client):

@@ -35,23 +35,27 @@ def _reset_fake_adapter():
 
 
 def _seed_report(db_session, run_id: int = 1, second_ticket_fails: bool = False):
-    from app.models.provider import Provider
+    from app.models.provider_connection import ProviderConnection
     from app.models.report import Report
     from app.models.run import Run
     from app.models.ticket import Ticket
     from app import crypto
 
+    conn = ProviderConnection(
+        kind="ado",
+        name="Azure DevOps",
+        connected=True,
+        config={"org_url": "https://dev.azure.com/acme"},
+        secrets={"pat": crypto.encrypt("super-secret-pat")},
+    )
+    db_session.add(conn)
+    db_session.flush()
     db_session.add(Run(id=run_id, code="RUN-1", name="Run 1", status="comment"))
-    db_session.add(Ticket(external_id="SUR-1", provider_kind="ado", title="Login works"))
-    db_session.add(Ticket(external_id="SUR-2", provider_kind="ado", title="Logout works"))
     db_session.add(
-        Provider(
-            kind="ado",
-            name="Azure DevOps",
-            connected=True,
-            config={"org_url": "https://dev.azure.com/acme"},
-            secrets={"pat": crypto.encrypt("super-secret-pat")},
-        )
+        Ticket(external_id="SUR-1", provider_kind="ado", title="Login works", connection_id=conn.id)
+    )
+    db_session.add(
+        Ticket(external_id="SUR-2", provider_kind="ado", title="Logout works", connection_id=conn.id)
     )
 
     ticket_summary = [

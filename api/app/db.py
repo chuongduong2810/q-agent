@@ -68,7 +68,22 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _sync_columns()
+    _backfill_connections()
     _backfill_audit()
+
+
+def _backfill_connections() -> None:
+    """Migrate legacy providers → provider_connections + bindings (best-effort)."""
+    try:
+        from app.services import connection_service
+
+        db = SessionLocal()
+        try:
+            connection_service.backfill_from_providers(db)
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001 - never block startup on the migration
+        pass
 
 
 def _backfill_audit() -> None:
