@@ -386,6 +386,14 @@ export interface RunOut {
   cancelledAt?: string;
   failedStage?: string;
   ticketIds: string[];
+  /** Number of test cases in the run. */
+  caseCount: number;
+  /** Cases in the latest execution (the "passed / N" denominator). */
+  total: number;
+  /** Passed cases in the latest execution. */
+  passed: number;
+  /** Pass rate (0..100) from the latest report; null until finalized. */
+  passRate: number | null;
 }
 export interface RunDetailOut extends RunOut {
   runTickets: RunTicketOut[];

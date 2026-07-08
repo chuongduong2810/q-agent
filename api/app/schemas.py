@@ -429,6 +429,12 @@ class RunOut(ApiModel):
     cancelled_at: datetime | None = None
     failed_stage: str | None = None
     ticket_ids: list[str] = Field(default_factory=list)
+    # Aggregates for the runs list (attached in the router; default 0/None so
+    # mutation responses that don't compute them still serialize).
+    case_count: int = 0
+    total: int = 0  # cases in the latest execution (the "/N" denominator)
+    passed: int = 0  # passed in the latest execution
+    pass_rate: float | None = None  # 0..100 from the latest report; None until finalized
 
 
 class RunDetailOut(RunOut):
