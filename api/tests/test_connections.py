@@ -55,17 +55,46 @@ def test_resolve_repository_prefers_project_binding(db_session):
     assert connection_service.resolve_repository_for_project(db_session, "P").id == gh2.id
 
 
-def test_connections_by_category(db_session):
+def test_connections_with_capability(db_session):
     db_session.add_all([
         ProviderConnection(kind="ado", name="a"),
         ProviderConnection(kind="jira", name="j"),
         ProviderConnection(kind="github", name="g"),
     ])
     db_session.commit()
-    wi = {c.kind for c in connection_service.connections_by_category(db_session, "work_item")}
-    repo = {c.kind for c in connection_service.connections_by_category(db_session, "repository")}
+    wi = {c.kind for c in connection_service.connections_with_capability(db_session, "work_item")}
+    repo = {c.kind for c in connection_service.connections_with_capability(db_session, "repository")}
     assert wi == {"ado", "jira"}
-    assert repo == {"github"}
+    assert repo == {"ado", "github"}
+
+
+def test_ado_connection_is_dual_capability(db_session):
+    """Azure DevOps carries both work_item and repository capabilities (ADR 0006 rev 2)."""
+    ado = ProviderConnection(kind="ado", name="ADO")
+    db_session.add(ado)
+    db_session.commit()
+
+    wi_ids = {c.id for c in connection_service.connections_with_capability(db_session, "work_item")}
+    repo_ids = {c.id for c in connection_service.connections_with_capability(db_session, "repository")}
+    assert ado.id in wi_ids
+    assert ado.id in repo_ids
+
+
+def test_repository_resolution_accepts_ado_connection(client, db_session):
+    """A project's repository_connection_id may point at an ADO connection."""
+    ado = ProviderConnection(kind="ado", name="ADO")
+    db_session.add(ado)
+    db_session.commit()
+
+    resp = client.put(
+        "/projects/Surency Platform/config",
+        json={"repositoryConnectionId": ado.id},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["repositoryConnectionId"] == ado.id
+
+    resolved = connection_service.resolve_repository_for_project(db_session, "Surency Platform")
+    assert resolved.id == ado.id
 
 
 # ------------------------------------------------------- project-config bindings
@@ -110,7 +139,10 @@ def test_backfill_from_legacy_provider_rows(db_session):
 
     cfg = db_session.query(ProjectConfig).filter(ProjectConfig.key == "Surency Platform").first()
     assert cfg.work_item_connection_id == ado.id
-    assert cfg.repository_connection_id == github.id
+    # ADO is repository-capable too (revision 2) and comes first by id, so the
+    # first-of-capability fallback binds repository to it, not the (unused) GitHub row.
+    assert cfg.repository_connection_id == ado.id
+    assert cfg.repository_connection_id != github.id
 
     ticket = db_session.query(Ticket).filter(Ticket.external_id == "SUR-1").first()
     assert ticket.connection_id == ado.id

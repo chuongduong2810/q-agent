@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from app.models.knowledge import compose_key
+from app.models.project_config import ProjectConfig
 from app.models.provider_connection import ProviderConnection
 from app.services import knowledge_service, repo_service
 from app.services.adapters.base import ProviderAdapter
@@ -42,11 +43,18 @@ class _FakeAdapter(ProviderAdapter):
 
 def _seed_provider(db):
     """Seed a work-item (ADO) connection for project-key resolution and a
-    repository (GitHub) connection for repo discovery (ADR 0006)."""
-    db.add(ProviderConnection(kind="ado", name="ADO", connected=True,
-                              config={"project": "Surency Platform"}, secrets={}))
-    db.add(ProviderConnection(kind="github", name="GitHub", connected=True,
-                              config={"org": "surency-eng"}, secrets={}))
+    repository (GitHub) connection for repo discovery (ADR 0006), and bind the
+    project explicitly to the GitHub repository connection — ADO is also
+    repository-capable (revision 2), so the binding must be explicit rather
+    than relying on first-of-capability fallback ordering."""
+    ado = ProviderConnection(kind="ado", name="ADO", connected=True,
+                              config={"project": "Surency Platform"}, secrets={})
+    github = ProviderConnection(kind="github", name="GitHub", connected=True,
+                                config={"org": "surency-eng"}, secrets={})
+    db.add_all([ado, github])
+    db.flush()
+    db.add(ProjectConfig(key="Surency Platform", name="Surency Platform",
+                         repository_connection_id=github.id))
     db.commit()
 
 

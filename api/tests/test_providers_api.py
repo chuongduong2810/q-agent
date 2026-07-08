@@ -16,11 +16,15 @@ def test_list_providers_grouped_and_empty(client):
     resp = client.get("/providers")
     assert resp.status_code == 200
     groups = resp.json()
-    # One group per kind; work-item kinds first, then repository.
+    # One group per kind, fixed order.
     kinds = [g["kind"] for g in groups]
     assert kinds == ["ado", "jira", "github"]
-    categories = {g["kind"]: g["category"] for g in groups}
-    assert categories == {"ado": "work_item", "jira": "work_item", "github": "repository"}
+    categories = {g["kind"]: g["categories"] for g in groups}
+    assert categories == {
+        "ado": ["work_item", "repository"],
+        "jira": ["work_item"],
+        "github": ["repository"],
+    }
     assert all(g["connectionCount"] == 0 for g in groups)
     assert all(g["connections"] == [] for g in groups)
 
@@ -28,7 +32,7 @@ def test_list_providers_grouped_and_empty(client):
 def test_create_connection_and_group_counts(client):
     conn = _create(client, "ado", "Prod ADO")
     assert conn["kind"] == "ado"
-    assert conn["category"] == "work_item"
+    assert conn["categories"] == ["work_item", "repository"]
     assert conn["name"] == "Prod ADO"
     assert conn["connected"] is False
 
@@ -135,13 +139,19 @@ def test_connection_test_unknown_404(client):
     assert client.post("/connections/9999/test").status_code == 404
 
 
-def test_repos_endpoint_rejects_work_item_connection(client):
-    conn = _create(client, "ado")
-    # /repos is a repository-category route; an ADO (work-item) connection is 400.
+def test_repos_endpoint_rejects_work_item_only_connection(client):
+    conn = _create(client, "jira")
+    # /repos is a repository-capability route; Jira has no repository capability.
     assert client.get(f"/connections/{conn['id']}/repos").status_code == 400
 
 
-def test_sprints_endpoint_rejects_repository_connection(client):
+def test_repos_endpoint_accepts_ado_connection(client):
+    # ADO is dual-capability, so the repository routes accept it too.
+    conn = _create(client, "ado")
+    assert client.get(f"/connections/{conn['id']}/repos").status_code == 200
+
+
+def test_sprints_endpoint_rejects_repository_only_connection(client):
     conn = _create(client, "github")
     assert client.get(f"/connections/{conn['id']}/sprints").status_code == 400
 
