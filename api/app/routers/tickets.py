@@ -10,7 +10,7 @@ Endpoints to implement:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db, utcnow
@@ -35,16 +35,19 @@ def list_tickets(
     status: str | None = None,
     assignee: str | None = None,
     sprint: str | None = None,
-    area_path: str | None = None,
+    # Multi-word query params are camelCase on the wire (matching the rest of the
+    # API: request bodies + responses). FastAPI needs an explicit alias to bind
+    # snake_case handler args to those camelCase names.
+    area_path: str | None = Query(None, alias="areaPath"),
     states: str | None = None,  # comma-separated
-    work_item_types: str | None = None,  # comma-separated
+    work_item_types: str | None = Query(None, alias="workItemTypes"),  # comma-separated
     q: str | None = None,
-    connection_id: int | None = None,
-    provider_kind: str | None = None,
+    connection_id: int | None = Query(None, alias="connectionId"),
+    provider_kind: str | None = Query(None, alias="providerKind"),
     priority: str | None = None,
     epic: str | None = None,
     page: int = 1,
-    page_size: int = 25,
+    page_size: int = Query(25, alias="pageSize"),
     db: Session = Depends(get_db),
 ) -> TicketPageOut:
     query = db.query(Ticket)
