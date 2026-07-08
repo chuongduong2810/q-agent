@@ -285,6 +285,39 @@ export const useRegenerateRun = (runId: number | string) => {
   });
 };
 
+export const useCancelRun = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: number | string) => api.cancelRun(runId),
+    onSuccess: (run) => {
+      qc.invalidateQueries({ queryKey: queryKeys.runs });
+      qc.invalidateQueries({ queryKey: queryKeys.run(run.id) });
+    },
+  });
+};
+
+export const useRetryRun = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: number | string) => api.retryRun(runId),
+    onSuccess: (run) => {
+      qc.invalidateQueries({ queryKey: queryKeys.runs });
+      qc.invalidateQueries({ queryKey: queryKeys.run(run.id) });
+    },
+  });
+};
+
+export const useDeleteRun = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: number | string) => api.deleteRun(runId),
+    onSuccess: (_data, runId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.runs });
+      qc.invalidateQueries({ queryKey: queryKeys.run(runId) });
+    },
+  });
+};
+
 export const useRunRepos = (runId: number | string | null) =>
   useQuery({
     queryKey: queryKeys.runRepos(runId ?? 0),

@@ -11,6 +11,8 @@ const statusColor: Record<RunStatus, string> = {
   evidence: "#a78bfa",
   comment: "#a78bfa",
   done: "#6ee7b7",
+  cancelled: "#9ca3af",
+  failed: "#fb7185",
 };
 
 const statusLabel: Record<RunStatus, string> = {
@@ -22,6 +24,8 @@ const statusLabel: Record<RunStatus, string> = {
   evidence: "Evidence",
   comment: "Publishing",
   done: "Done",
+  cancelled: "Cancelled",
+  failed: "Failed",
 };
 
 export function runColor(status: RunStatus): string {
@@ -30,6 +34,15 @@ export function runColor(status: RunStatus): string {
 
 export function runRateLabel(status: RunStatus): string {
   return statusLabel[status] ?? status;
+}
+
+/** Terminal statuses — a run in one of these will never be advanced further by
+ * a worker (see ADR 0005). Used to split the Runs list into Active vs History
+ * and to decide which lifecycle actions (cancel vs retry) apply. */
+const TERMINAL_STATUSES: readonly RunStatus[] = ["done", "cancelled", "failed"];
+
+export function isTerminalRun(status: RunStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
 }
 
 /** `"3 tickets · 21 cases"` style meta line for a run card. */

@@ -351,7 +351,9 @@ export type RunStatus =
   | "executing"
   | "evidence"
   | "comment"
-  | "done";
+  | "done"
+  | "cancelled"
+  | "failed";
 
 export interface RunTicketOut {
   ticketExternalId: string;
@@ -380,6 +382,8 @@ export interface RunOut {
   retryPolicy: number;
   status: RunStatus;
   createdAt: string;
+  finishedAt?: string;
+  failedStage?: string;
   ticketIds: string[];
 }
 export interface RunDetailOut extends RunOut {
