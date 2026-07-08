@@ -6,17 +6,37 @@
 
 export type ProviderKind = "ado" | "jira" | "github";
 
-export interface ProviderOut {
+/** Providers split into two categories: work-item sources (tickets) vs
+ * repository sources (code). A project binds one connection of each. */
+export type ProviderCategory = "work_item" | "repository";
+
+/** A single named connection under a provider kind (ADR 0006). */
+export interface ConnectionOut {
   id: number;
   kind: ProviderKind;
+  category: ProviderCategory;
   name: string;
   connected: boolean;
   config: Record<string, string>;
   secretFields: string[];
   lastSync: string | null;
+  lastTestedAt: string | null;
 }
 
-export interface ProviderFieldsIn {
+/** Grouped provider catalog entry: one kind with its N connections. */
+export interface ProviderGroupOut {
+  kind: ProviderKind;
+  category: ProviderCategory;
+  name: string;
+  connectionCount: number;
+  connectedCount: number;
+  connections: ConnectionOut[];
+}
+
+/** Body for PUT /connections/{id}. Untouched secrets are omitted so the backend
+ * keeps the existing encrypted value. */
+export interface ConnectionUpdate {
+  name?: string;
   config?: Record<string, string>;
   secrets?: Record<string, string>;
 }
@@ -129,6 +149,10 @@ export interface ProjectConfigOut {
   testAccounts: TestAccountOut[];
   extra: Record<string, string>;
   manualAuth: boolean;
+  /** The work-item connection this project's tickets come from (ADR 0006). */
+  workItemConnectionId: number | null;
+  /** The repository connection this project's code lives on (ADR 0006). */
+  repositoryConnectionId: number | null;
 }
 export interface ProjectConfigUpdate {
   baseUrl?: string;
@@ -139,6 +163,8 @@ export interface ProjectConfigUpdate {
   testAccounts?: TestAccountIn[];
   extra?: Record<string, string>;
   manualAuth?: boolean;
+  workItemConnectionId?: number | null;
+  repositoryConnectionId?: number | null;
 }
 
 /** Saved manual-login session state for a project (GET/DELETE /projects/{key}/auth). */
@@ -242,7 +268,10 @@ export interface SprintOut {
 }
 
 export interface SyncRequest {
-  providerKind: ProviderKind;
+  /** The work-item connection to sync from (ADR 0006). Falls back on the
+   * backend to the project binding, then first-of-kind. */
+  connectionId?: number;
+  providerKind?: ProviderKind;
   mode?: string;
   sprint?: string | null;
   sprintPath?: string | null;

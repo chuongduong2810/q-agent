@@ -14,9 +14,9 @@ import { queryKeys } from "@/lib/queryKeys";
 import type {
   AnnotationShape,
   AutomationSpecOut,
+  ConnectionUpdate,
   KnowledgeBuildRequest,
   ProjectConfigUpdate,
-  ProviderFieldsIn,
   ProviderKind,
   RunCreate,
   SettingsUpdate,
@@ -54,40 +54,68 @@ export const useRefreshAiStats = () => {
   });
 };
 
-// -------------------------------------------------------------- providers + settings
+// -------------------------------------------------------------- providers + connections
+// Grouped provider catalog (ADR 0006): one entry per kind with its N connections.
 export const useProviders = () =>
   useQuery({ queryKey: queryKeys.providers, queryFn: api.listProviders });
 
-export const useSaveProvider = () => {
+export const useCreateConnection = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ kind, body }: { kind: ProviderKind; body: ProviderFieldsIn }) =>
-      api.saveProvider(kind, body),
+    mutationFn: ({ kind, name }: { kind: ProviderKind; name: string }) =>
+      api.createConnection(kind, { name }),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.providers }),
   });
 };
 
-export const useTestConnection = () => {
+export const useUpdateConnection = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (kind: ProviderKind) => api.testConnection(kind),
+    mutationFn: ({ id, body }: { id: number; body: ConnectionUpdate }) =>
+      api.updateConnection(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.providers }),
   });
 };
 
-export const useSprints = (kind: ProviderKind | null) =>
+export const useDeleteConnection = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteConnection(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.providers }),
+  });
+};
+
+// Test a single connection (probe → set connected/last_tested_at). Bound to a
+// connection id so each row's Test button drives its own connection.
+export const useTestConnection = (id: number) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.testConnection(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.providers }),
+  });
+};
+
+export const useConnectionSprints = (id: number | null) =>
   useQuery({
-    queryKey: queryKeys.sprints(kind ?? ""),
-    queryFn: () => api.listSprints(kind as ProviderKind),
-    enabled: !!kind,
+    queryKey: queryKeys.connectionSprints(id ?? 0),
+    queryFn: () => api.connectionSprints(id as number),
+    enabled: id != null,
     staleTime: 60_000,
   });
 
-export const useWorkItemMetadata = (kind: ProviderKind | null) =>
+export const useConnectionWorkItemMetadata = (id: number | null) =>
   useQuery({
-    queryKey: queryKeys.workItemMetadata(kind ?? ""),
-    queryFn: () => api.workItemMetadata(kind as ProviderKind),
-    enabled: !!kind,
+    queryKey: queryKeys.connectionWorkItemMetadata(id ?? 0),
+    queryFn: () => api.connectionWorkItemMetadata(id as number),
+    enabled: id != null,
+    staleTime: 60_000,
+  });
+
+export const useConnectionRepos = (id: number | null, enabled: boolean) =>
+  useQuery({
+    queryKey: queryKeys.connectionRepos(id ?? 0),
+    queryFn: () => api.connectionRepos(id as number),
+    enabled: id != null && enabled,
     staleTime: 60_000,
   });
 
@@ -196,14 +224,6 @@ export const useProjectRepos = (key: string | null) =>
     queryFn: () => api.listProjectRepos(key as string),
     enabled: !!key,
     refetchInterval: (q) => (q.state.data?.some((r) => r.status === "indexing") ? 2000 : false),
-  });
-
-export const useAvailableRepos = (key: string | null, enabled: boolean) =>
-  useQuery({
-    queryKey: queryKeys.availableRepos(key ?? ""),
-    queryFn: () => api.availableRepos(key as string),
-    enabled: !!key && enabled,
-    staleTime: 60_000,
   });
 
 export const useRepoKnowledge = (key: string | null, repo: string | null) =>

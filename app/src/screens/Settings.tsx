@@ -1,23 +1,20 @@
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Spinner } from "@/components/ui/misc";
-import { ProviderCard } from "@/components/settings/ProviderCard";
+import { ProviderGroup } from "@/components/settings/ProviderGroup";
+import { CATEGORY_SECTIONS, PROVIDER_META } from "@/components/settings/providerMeta";
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
-import type { ProviderKind, ProviderOut } from "@/types/api";
+import type { ProviderGroupOut, ProviderKind } from "@/types/api";
 
-/** Card order matches the design's provider list — ADO, Jira, GitHub. */
-const PROVIDER_ORDER: ProviderKind[] = ["ado", "jira", "github"];
-
-/** A never-configured provider: the backend has no row yet (fresh machine), so
- * synthesize an empty "not connected" card the user can fill in and save. */
-const placeholderProvider = (kind: ProviderKind): ProviderOut => ({
-  id: 0,
+/** A never-configured provider: the backend catalog omits it (fresh machine),
+ * so synthesize an empty group the user can add a first connection under. */
+const emptyGroup = (kind: ProviderKind): ProviderGroupOut => ({
   kind,
-  name: kind.toUpperCase(),
-  connected: false,
-  config: {},
-  secretFields: [],
-  lastSync: null,
+  category: PROVIDER_META[kind].category,
+  name: PROVIDER_META[kind].name,
+  connectionCount: 0,
+  connectedCount: 0,
+  connections: [],
 });
 
 export function Settings() {
@@ -25,12 +22,10 @@ export function Settings() {
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
-  // Always render one card per known kind — fall back to a placeholder when the
-  // backend has no persisted row for it yet, so connections are configurable on
-  // a fresh machine (the DB is seeded with rows only after the first save).
-  const orderedProviders = PROVIDER_ORDER.map(
-    (kind) => providers?.find((p) => p.kind === kind) ?? placeholderProvider(kind),
-  );
+  // Always render one group per known kind — synthesize an empty group when the
+  // backend catalog omits it, so a fresh machine can still add connections.
+  const groupFor = (kind: ProviderKind): ProviderGroupOut =>
+    providers?.find((g) => g.kind === kind) ?? emptyGroup(kind);
 
   return (
     <div className="max-w-[900px] px-1 pb-10 pt-0.5">
@@ -39,16 +34,24 @@ export function Settings() {
         <h1 className="m-0 text-[28px] font-black tracking-tight">Settings</h1>
       </div>
 
-      <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PROVIDER CONNECTIONS</div>
-      <div className="mb-[26px] flex flex-col gap-3.5">
-        {providersLoading ? (
-          <div className="flex justify-center py-10">
-            <Spinner />
+      {providersLoading ? (
+        <div className="mb-[26px] flex justify-center py-10">
+          <Spinner />
+        </div>
+      ) : (
+        CATEGORY_SECTIONS.map((section) => (
+          <div key={section.category} className="mb-[26px]">
+            <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
+              {section.label.toUpperCase()}
+            </div>
+            <div className="flex flex-col gap-3.5">
+              {section.kinds.map((kind) => (
+                <ProviderGroup key={kind} group={groupFor(kind)} />
+              ))}
+            </div>
           </div>
-        ) : (
-          orderedProviders.map((p) => <ProviderCard key={p.kind} provider={p} />)
-        )}
-      </div>
+        ))
+      )}
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PROFILE</div>
       <GlassCard className="mb-[26px] p-[22px]">

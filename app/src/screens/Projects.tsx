@@ -63,7 +63,7 @@ export function Projects() {
     return m;
   }, [knowledgeList]);
 
-  const connectedCount = (providers ?? []).filter((p) => p.connected).length;
+  const connectedCount = (providers ?? []).reduce((sum, g) => sum + g.connectedCount, 0);
 
   // Auto-pull projects from connected providers once, if none are cached yet.
   const triedRefresh = useRef(false);

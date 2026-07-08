@@ -19,18 +19,21 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Dropdown";
 import { ToggleRow } from "@/components/settings/ToggleRow";
+import { PROVIDER_META } from "@/components/settings/providerMeta";
 import { providerGlyph } from "@/components/ui/badges";
 import { confidenceColor, knowledgeStatusStyle, providerLabel } from "@/data/projects";
 import {
-  useAvailableRepos,
   useBuildRepoKnowledge,
   useCaptureProjectAuth,
   useClearProjectAuth,
+  useConnectionRepos,
   useProjectAuth,
   useProjectConfig,
   useProjectRepos,
   useProjects,
+  useProviders,
   useRepoKnowledge,
   useRuns,
   useSaveProjectConfig,
@@ -179,7 +182,7 @@ export function ProjectDetail() {
           {projectTab === "overview" ? (
             <Overview meta={meta} confidence={confidence} onView={() => setProjectTab("knowledge")} />
           ) : projectTab === "settings" ? (
-            <ProjectSettingsTab projectKey={key} providerKind={providerKind} />
+            <ProjectSettingsTab projectKey={key} />
           ) : (
             <KnowledgeTab
               projectKey={key}
@@ -656,14 +659,9 @@ const labelCls = "mb-1.5 block text-[12px] font-semibold text-[#9494a6]";
  * with little to no manual editing. Passwords are write-only: blank preserves the
  * securely stored secret.
  */
-function ProjectSettingsTab({
-  projectKey,
-  providerKind,
-}: {
-  projectKey: string;
-  providerKind: ProviderKind;
-}) {
+function ProjectSettingsTab({ projectKey }: { projectKey: string }) {
   const { data: config, isLoading } = useProjectConfig(projectKey);
+  const { data: providers } = useProviders();
   const save = useSaveProjectConfig(projectKey);
 
   const [baseUrl, setBaseUrl] = useState("");
@@ -672,11 +670,30 @@ function ProjectSettingsTab({
   const [environments, setEnvironments] = useState<EnvironmentCfg[]>([]);
   const [extra, setExtra] = useState<{ k: string; v: string }[]>([]);
   const [manualAuth, setManualAuth] = useState(false);
+  const [workItemConnectionId, setWorkItemConnectionId] = useState<number | null>(null);
+  const [repositoryConnectionId, setRepositoryConnectionId] = useState<number | null>(null);
+
+  // Work-item vs repository connections, from the grouped provider catalog.
+  const connOption = (c: { id: number; kind: ProviderKind; name: string }) => ({
+    value: String(c.id),
+    label: `${PROVIDER_META[c.kind].name} · ${c.name}`,
+  });
+  const workItemOptions = (providers ?? [])
+    .filter((g) => g.category === "work_item")
+    .flatMap((g) => g.connections)
+    .map(connOption);
+  const repositoryConnections = (providers ?? [])
+    .filter((g) => g.category === "repository")
+    .flatMap((g) => g.connections);
+  const repositoryOptions = repositoryConnections.map(connOption);
+  const repoConn = repositoryConnections.find((c) => c.id === repositoryConnectionId) ?? null;
 
   useEffect(() => {
     if (!config) return;
     setBaseUrl(config.baseUrl ?? "");
     setManualAuth(config.manualAuth ?? false);
+    setWorkItemConnectionId(config.workItemConnectionId ?? null);
+    setRepositoryConnectionId(config.repositoryConnectionId ?? null);
     setRepos(config.repos ?? []);
     setAccounts(
       (config.testAccounts ?? []).map((a) => ({
@@ -705,6 +722,8 @@ function ProjectSettingsTab({
         environments,
         extra: Object.fromEntries(extra.filter((e) => e.k).map((e) => [e.k, e.v])),
         manualAuth,
+        workItemConnectionId,
+        repositoryConnectionId,
       },
       {
         onSuccess: () => toast.success("Project settings saved"),
@@ -719,6 +738,36 @@ function ProjectSettingsTab({
 
   return (
     <div className="flex flex-col gap-3.5">
+      <GlassCard className="p-5">
+        <div className="mb-1 text-[14px] font-bold">Provider connections</div>
+        <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
+          Bind this project to a work-item source (where its tickets come from) and a repository
+          source (where its code lives) — chosen independently. Manage connections in Settings.
+        </p>
+        <div className="grid max-w-[560px] grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Work Item Provider</label>
+            <Select
+              value={workItemConnectionId != null ? String(workItemConnectionId) : null}
+              options={workItemOptions}
+              placeholder="Select a connection"
+              onChange={(v) => setWorkItemConnectionId(v ? Number(v) : null)}
+              emptyLabel="No work-item connections"
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Repository Provider</label>
+            <Select
+              value={repositoryConnectionId != null ? String(repositoryConnectionId) : null}
+              options={repositoryOptions}
+              placeholder="Select a connection"
+              onChange={(v) => setRepositoryConnectionId(v ? Number(v) : null)}
+              emptyLabel="No repository connections"
+            />
+          </div>
+        </div>
+      </GlassCard>
+
       <GlassCard className="p-5">
         <div className="mb-1 text-[14px] font-bold">Application</div>
         <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
@@ -753,8 +802,8 @@ function ProjectSettingsTab({
       </GlassCard>
 
       <ReposManager
-        projectKey={projectKey}
-        providerKind={providerKind}
+        repoConnectionId={repoConn?.id ?? null}
+        repoConnectionName={repoConn?.name ?? ""}
         repos={repos}
         setRepos={setRepos}
       />
@@ -1050,23 +1099,23 @@ function ManualLoginStatus({
 
 /**
  * Repositories manager — a project can own many repos, each with its own
- * knowledge base. Discover them from the provider (ADO/GitHub) or add manually,
- * pick which repo automation targets by default, and set an optional local path.
- * Remember to Save settings to persist changes.
+ * knowledge base. Discover them from the project's bound repository connection
+ * or add manually, pick which repo automation targets by default, and set an
+ * optional local path. Remember to Save settings to persist changes.
  */
 function ReposManager({
-  projectKey,
-  providerKind,
+  repoConnectionId,
+  repoConnectionName,
   repos,
   setRepos,
 }: {
-  projectKey: string;
-  providerKind: ProviderKind;
+  repoConnectionId: number | null;
+  repoConnectionName: string;
   repos: ProjectRepo[];
   setRepos: (updater: (r: ProjectRepo[]) => ProjectRepo[]) => void;
 }) {
   const [discovering, setDiscovering] = useState(false);
-  const { data: available, isFetching } = useAvailableRepos(projectKey, discovering);
+  const { data: available, isFetching } = useConnectionRepos(repoConnectionId, discovering);
 
   const setDefault = (idx: number) =>
     setRepos((rs) => rs.map((r, i) => ({ ...r, default: i === idx })));
@@ -1092,8 +1141,16 @@ function ReposManager({
     <GlassCard className="p-5">
       <div className="mb-1 flex items-center gap-2">
         <div className="flex-1 text-[14px] font-bold">Repositories</div>
-        <Button variant="glass" onClick={() => setDiscovering(true)} disabled={isFetching}>
-          <Search size={14} strokeWidth={2.4} /> {isFetching ? "Discovering…" : `Discover from ${providerLabel[providerKind]}`}
+        <Button
+          variant="glass"
+          onClick={() => setDiscovering(true)}
+          disabled={isFetching || !repoConnectionId}
+          title={repoConnectionId ? undefined : "Bind a repository provider above first"}
+        >
+          <Search size={14} strokeWidth={2.4} />{" "}
+          {isFetching
+            ? "Discovering…"
+            : `Discover from ${repoConnectionName || "repository provider"}`}
         </Button>
         <Button
           variant="glass"

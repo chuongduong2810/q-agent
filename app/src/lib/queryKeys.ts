@@ -4,9 +4,10 @@ export const queryKeys = {
   capabilities: ["capabilities"] as const,
   aiStats: ["aiStats"] as const,
   providers: ["providers"] as const,
-  provider: (kind: string) => ["providers", kind] as const,
-  sprints: (kind: string) => ["providers", kind, "sprints"] as const,
-  workItemMetadata: (kind: string) => ["providers", kind, "work-item-metadata"] as const,
+  connectionSprints: (id: number) => ["connections", id, "sprints"] as const,
+  connectionWorkItemMetadata: (id: number) =>
+    ["connections", id, "work-item-metadata"] as const,
+  connectionRepos: (id: number) => ["connections", id, "repos"] as const,
   settings: ["settings"] as const,
   projects: ["projects"] as const,
   knowledgeList: ["projects", "knowledge"] as const,
@@ -14,7 +15,6 @@ export const queryKeys = {
   projectConfig: (key: string) => ["projects", key, "config"] as const,
   projectAuth: (key: string) => ["projects", key, "auth"] as const,
   projectRepos: (key: string) => ["projects", key, "repos"] as const,
-  availableRepos: (key: string) => ["projects", key, "repos", "available"] as const,
   repoKnowledge: (key: string, repo: string) =>
     ["projects", key, "repos", repo, "knowledge"] as const,
   tickets: (filters?: Record<string, string | undefined>) =>

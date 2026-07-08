@@ -1,22 +1,23 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Plus, RefreshCw, Search } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect, Select } from "@/components/ui/Dropdown";
 import { StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
+import { PROVIDER_META } from "@/components/settings/providerMeta";
 import {
+  useConnectionSprints,
+  useConnectionWorkItemMetadata,
   useProviders,
   useSettings,
-  useSprints,
   useSyncTickets,
   useTickets,
-  useWorkItemMetadata,
 } from "@/hooks/queries";
 import { useUI, type TicketFilter } from "@/store/ui";
-import type { ProviderKind, TicketFilters, TicketOut } from "@/types/api";
+import type { TicketFilters, TicketOut } from "@/types/api";
 
 const FILTERS: { id: TicketFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -52,18 +53,28 @@ export function Tickets() {
   const workItemTypes = useUI((s) => s.workItemTypes);
   const setWorkItemTypes = useUI((s) => s.setWorkItemTypes);
 
-  // Pick the connected provider (ADO preferred, then Jira) for metadata + sync.
+  // Work-item connection to sync metadata + tickets from. Options are every
+  // connection under a work-item provider (ado/jira); default to the first
+  // connected one, else the first available.
   const { data: providers } = useProviders();
-  const providerKind: ProviderKind = useMemo(() => {
-    const connected = (providers ?? []).filter((p) => p.connected);
-    return (
-      connected.find((p) => p.kind === "ado")?.kind ??
-      connected.find((p) => p.kind === "jira")?.kind ??
-      "ado"
-    );
-  }, [providers]);
-  const { data: sprints } = useSprints(providerKind);
-  const { data: metadata } = useWorkItemMetadata(providerKind);
+  const workItemConnections = useMemo(
+    () =>
+      (providers ?? [])
+        .filter((g) => g.category === "work_item")
+        .flatMap((g) => g.connections),
+    [providers],
+  );
+  const connectionOptions = workItemConnections.map((c) => ({
+    value: String(c.id),
+    label: `${PROVIDER_META[c.kind].name} · ${c.name}`,
+  }));
+  const [pickedConnId, setPickedConnId] = useState<number | null>(null);
+  const defaultConnId =
+    workItemConnections.find((c) => c.connected)?.id ?? workItemConnections[0]?.id ?? null;
+  const connectionId = pickedConnId ?? defaultConnId;
+  const selectedConn = workItemConnections.find((c) => c.id === connectionId) ?? null;
+  const { data: sprints } = useConnectionSprints(connectionId);
+  const { data: metadata } = useConnectionWorkItemMetadata(connectionId);
 
   // "Assigned to me" resolves against the configured identity (Settings → Profile).
   const { data: settings } = useSettings();
@@ -102,7 +113,8 @@ export function Tickets() {
   const handleSync = () => {
     syncTickets.mutate(
       {
-        providerKind,
+        connectionId: connectionId ?? undefined,
+        providerKind: selectedConn?.kind,
         mode: selectedSprint ? "sprint" : "all",
         sprint: selectedSprint?.name,
         sprintPath: selectedSprint?.path,
@@ -193,6 +205,14 @@ export function Tickets() {
         )}
 
         <div className="ml-auto flex items-center gap-[9px]">
+          <Select
+            value={connectionId != null ? String(connectionId) : null}
+            options={connectionOptions}
+            placeholder="Sync from"
+            onChange={(v) => setPickedConnId(v ? Number(v) : null)}
+            allowClear={false}
+            emptyLabel="No work-item connections"
+          />
           <Button variant="glass" onClick={handleSync} disabled={syncTickets.isPending}>
             <RefreshCw size={13} className={syncTickets.isPending ? "animate-[spin_.7s_linear_infinite]" : ""} />
             {syncTickets.isPending ? "Syncing…" : "Sync"}

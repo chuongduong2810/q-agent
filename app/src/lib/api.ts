@@ -23,15 +23,16 @@ import type {
   ExecutionOut,
   HealReport,
   AvailableReposOut,
+  ConnectionOut,
+  ConnectionUpdate,
   KnowledgeBuildRequest,
   ProjectConfigOut,
   ProjectConfigUpdate,
   ProjectKnowledgeOut,
   ProjectOut,
   RepoKnowledgeOut,
-  ProviderFieldsIn,
+  ProviderGroupOut,
   ProviderKind,
-  ProviderOut,
   ReportOut,
   RunCreate,
   RunDetailOut,
@@ -110,15 +111,20 @@ export const api = {
   aiStats: (force = false) => get<ClaudeStats>(`/ai/stats${force ? "?refresh=true" : ""}`),
   aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai`,
 
-  // providers + settings
-  listProviders: () => get<ProviderOut[]>("/providers"),
-  getProvider: (kind: ProviderKind) => get<ProviderOut>(`/providers/${kind}`),
-  saveProvider: (kind: ProviderKind, body: ProviderFieldsIn) =>
-    put<ProviderOut>(`/providers/${kind}`, body),
-  testConnection: (kind: ProviderKind) => post<TestConnectionResult>(`/providers/${kind}/test`),
-  listSprints: (kind: ProviderKind) => get<SprintOut[]>(`/providers/${kind}/sprints`),
-  workItemMetadata: (kind: ProviderKind) =>
-    get<WorkItemMetadataOut>(`/providers/${kind}/work-item-metadata`),
+  // providers + connections (ADR 0006)
+  listProviders: () => get<ProviderGroupOut[]>("/providers"),
+  createConnection: (kind: ProviderKind, body: { name: string }) =>
+    post<ConnectionOut>(`/providers/${kind}/connections`, body),
+  updateConnection: (id: number, body: ConnectionUpdate) =>
+    put<ConnectionOut>(`/connections/${id}`, body),
+  deleteConnection: (id: number) => del<void>(`/connections/${id}`),
+  testConnection: (id: number) => post<TestConnectionResult>(`/connections/${id}/test`),
+  connectionSprints: (id: number) => get<SprintOut[]>(`/connections/${id}/sprints`),
+  connectionWorkItemMetadata: (id: number) =>
+    get<WorkItemMetadataOut>(`/connections/${id}/work-item-metadata`),
+  connectionRepos: (id: number) => get<AvailableReposOut>(`/connections/${id}/repos`),
+
+  // settings
   getSettings: () => get<SettingsOut>("/settings"),
   updateSettings: (body: SettingsUpdate) => put<SettingsOut>("/settings", body),
 
@@ -146,8 +152,6 @@ export const api = {
     post<AuthState>(`/projects/${encodeURIComponent(key)}/auth/capture`),
 
   // project repos + per-repo knowledge
-  availableRepos: (key: string) =>
-    get<AvailableReposOut>(`/projects/${encodeURIComponent(key)}/repos/available`),
   listProjectRepos: (key: string) =>
     get<RepoKnowledgeOut[]>(`/projects/${encodeURIComponent(key)}/repos`),
   getRepoKnowledge: (key: string, repo: string) =>
