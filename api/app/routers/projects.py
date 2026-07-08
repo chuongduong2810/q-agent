@@ -54,7 +54,7 @@ def refresh_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
     )
 
     for connection in connections:
-        if connection_service.category_for(connection.kind) != connection_service.WORK_ITEM:
+        if connection_service.WORK_ITEM not in connection_service.categories_for(connection.kind):
             continue
         decrypted_secrets = {
             key: crypto.decrypt(value) for key, value in (connection.secrets or {}).items()

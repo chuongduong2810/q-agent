@@ -1,14 +1,17 @@
-"""Provider-connection resolution — split by category (ADR 0006).
+"""Provider-connection resolution — split by capability (ADR 0006 revision 2).
 
 Credentials are resolved along two independent paths:
 
 - **Work-item** work (ticket fetch, sync, comment publish, work-item linking,
   project-key resolution) routes by the **ticket's** work-item connection
-  (``ticket.connection_id`` → first work-item connection of the ticket's kind).
+  (``ticket.connection_id`` → first work-item-capable connection of the
+  ticket's kind).
 - **Repository** work (repo clone, knowledge build, repo discovery) routes by the
-  **project's** ``repository_connection_id`` → first repository connection.
+  **project's** ``repository_connection_id`` → first repository-capable
+  connection (which may be an Azure DevOps connection — ADO carries both
+  capabilities).
 
-Nullable FKs plus first-of-category fallbacks keep un-bound paths working: a
+Nullable FKs plus first-of-capability fallbacks keep un-bound paths working: a
 legacy row or an un-configured project degrades to the first matching connection
 rather than crashing.
 """
@@ -21,25 +24,25 @@ from app import crypto
 from app.models.project_config import ProjectConfig
 from app.models.provider import Provider
 from app.models.provider_connection import (
-    PROVIDER_CATEGORY,
+    PROVIDER_CAPABILITIES,
     PROVIDER_DISPLAY_NAMES,
     REPOSITORY,
     WORK_ITEM,
     ProviderConnection,
-    category_for,
+    categories_for,
 )
 from app.models.ticket import Ticket
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderAdapter, ProviderError
 
 __all__ = [
-    "PROVIDER_CATEGORY",
+    "PROVIDER_CAPABILITIES",
     "REPOSITORY",
     "WORK_ITEM",
     "adapter_for",
     "backfill_from_providers",
-    "category_for",
-    "connections_by_category",
+    "categories_for",
+    "connections_with_capability",
     "first_of_kind",
     "get_connection",
     "resolve_repository_for_project",
@@ -65,9 +68,14 @@ def first_of_kind(db: Session, kind: str) -> ProviderConnection | None:
     )
 
 
-def connections_by_category(db: Session, category: str) -> list[ProviderConnection]:
-    """All connections whose kind belongs to ``category`` (work_item|repository)."""
-    kinds = [k for k, c in PROVIDER_CATEGORY.items() if c == category]
+def connections_with_capability(db: Session, capability: str) -> list[ProviderConnection]:
+    """All connections whose kind's capabilities include ``capability``.
+
+    A kind may carry more than one capability (e.g. ``ado`` is both
+    ``work_item`` and ``repository``-eligible), so a connection can appear in
+    both capability lists.
+    """
+    kinds = [k for k, caps in PROVIDER_CAPABILITIES.items() if capability in caps]
     if not kinds:
         return []
     return (
@@ -78,8 +86,8 @@ def connections_by_category(db: Session, category: str) -> list[ProviderConnecti
     )
 
 
-def _first_of_category(db: Session, category: str) -> ProviderConnection | None:
-    conns = connections_by_category(db, category)
+def _first_with_capability(db: Session, capability: str) -> ProviderConnection | None:
+    conns = connections_with_capability(db, capability)
     return conns[0] if conns else None
 
 
@@ -100,7 +108,7 @@ def resolve_work_item_for_ticket(db: Session, ticket: Ticket) -> ProviderConnect
     if conn is not None:
         return conn
     conn = first_of_kind(db, ticket.provider_kind)
-    if conn is not None and category_for(conn.kind) == WORK_ITEM:
+    if conn is not None and WORK_ITEM in categories_for(conn.kind):
         return conn
     raise ProviderError(
         f"Work-item provider '{ticket.provider_kind}' is not configured"
@@ -111,8 +119,9 @@ def resolve_work_item_for_ticket(db: Session, ticket: Ticket) -> ProviderConnect
 def resolve_repository_for_project(db: Session, project_key: str | None) -> ProviderConnection:
     """Resolve the repository connection a project's code work routes through.
 
-    Order: the project's bound ``repository_connection_id`` → the first repository
-    connection → :class:`ProviderError`.
+    Order: the project's bound ``repository_connection_id`` (which may be an
+    Azure DevOps connection — ADO is repository-capable) → the first
+    repository-capable connection → :class:`ProviderError`.
     """
     if project_key:
         cfg = db.query(ProjectConfig).filter(ProjectConfig.key == project_key).first()
@@ -120,7 +129,7 @@ def resolve_repository_for_project(db: Session, project_key: str | None) -> Prov
             conn = get_connection(db, cfg.repository_connection_id)
             if conn is not None:
                 return conn
-    conn = _first_of_category(db, REPOSITORY)
+    conn = _first_with_capability(db, REPOSITORY)
     if conn is not None:
         return conn
     raise ProviderError("Repository provider is not configured")
@@ -132,7 +141,7 @@ def backfill_from_providers(db: Session) -> None:
 
     Best-effort (mirrors ``_backfill_audit``): copies each legacy Provider into a
     ProviderConnection when the new table is empty, then binds every ProjectConfig
-    with null bindings to the first connection of each category and stamps each
+    with null bindings to the first connection of each capability and stamps each
     un-stamped ticket's ``connection_id`` from the matching work-item connection.
     Idempotent — the copy is guarded by an emptiness check and only null bindings
     are filled.
@@ -151,8 +160,8 @@ def backfill_from_providers(db: Session) -> None:
             )
         db.commit()
 
-    work_item = _first_of_category(db, WORK_ITEM)
-    repository = _first_of_category(db, REPOSITORY)
+    work_item = _first_with_capability(db, WORK_ITEM)
+    repository = _first_with_capability(db, REPOSITORY)
     for cfg in db.query(ProjectConfig).all():
         if cfg.work_item_connection_id is None and work_item is not None:
             cfg.work_item_connection_id = work_item.id
@@ -161,6 +170,6 @@ def backfill_from_providers(db: Session) -> None:
 
     for ticket in db.query(Ticket).filter(Ticket.connection_id.is_(None)).all():
         conn = first_of_kind(db, ticket.provider_kind)
-        if conn is not None and category_for(conn.kind) == WORK_ITEM:
+        if conn is not None and WORK_ITEM in categories_for(conn.kind):
             ticket.connection_id = conn.id
     db.commit()

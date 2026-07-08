@@ -1,7 +1,8 @@
 """Providers + Settings router.
 
-Provider connections (ADR 0006) — a provider *kind* holds many named
-``ProviderConnection`` rows across two categories (work_item / repository):
+Provider connections (ADR 0006 revision 2) — a provider *kind* holds many named
+``ProviderConnection`` rows, and a kind may carry one or more capabilities
+(work_item / repository — Azure DevOps carries both):
 
   GET    /providers                          -> list[ProviderGroupOut]  (grouped catalog)
   POST   /providers/{kind}/connections        -> ConnectionOut           (create empty)
@@ -34,7 +35,7 @@ from app.models.provider_connection import (
     REPOSITORY,
     WORK_ITEM,
     ProviderConnection,
-    category_for,
+    categories_for,
 )
 from app.models.ticket import Ticket
 from app.schemas import (
@@ -55,8 +56,8 @@ from app.services.adapters.base import ProviderError
 
 router = APIRouter(tags=["providers"])
 
-# Work-item kinds first, then repository (drives the grouped catalog order).
-_KIND_ORDER = sorted(PROVIDER_KINDS, key=lambda k: (category_for(k) != WORK_ITEM, k))
+# Fixed kind order for the grouped catalog: ado, jira, github.
+_KIND_ORDER = list(PROVIDER_KINDS)
 
 
 def _validate_kind(kind: str) -> None:
@@ -69,7 +70,7 @@ def _to_connection_out(conn: ProviderConnection) -> ConnectionOut:
     return ConnectionOut(
         id=conn.id,
         kind=conn.kind,
-        category=category_for(conn.kind),
+        categories=list(categories_for(conn.kind)),
         name=conn.name,
         connected=conn.connected,
         config=conn.config or {},
@@ -86,17 +87,17 @@ def _get_connection_or_404(db: Session, connection_id: int) -> ProviderConnectio
     return conn
 
 
-def _require_category(conn: ProviderConnection, category: str) -> None:
-    if category_for(conn.kind) != category:
+def _require_capability(conn: ProviderConnection, capability: str) -> None:
+    if capability not in categories_for(conn.kind):
         raise HTTPException(
             status_code=400,
-            detail=f"Connection '{conn.id}' ({conn.kind}) is not a {category} provider",
+            detail=f"Connection '{conn.id}' ({conn.kind}) is not a {capability} provider",
         )
 
 
 @router.get("/providers", response_model=list[ProviderGroupOut])
 def list_providers(db: Session = Depends(get_db)) -> list[ProviderGroupOut]:
-    """Grouped catalog: one group per kind (work-item kinds first, then repository)."""
+    """Grouped catalog: one group per kind, in fixed order (ado, jira, github)."""
     by_kind: dict[str, list[ProviderConnection]] = {k: [] for k in _KIND_ORDER}
     for conn in db.query(ProviderConnection).order_by(ProviderConnection.id).all():
         by_kind.setdefault(conn.kind, []).append(conn)
@@ -106,7 +107,7 @@ def list_providers(db: Session = Depends(get_db)) -> list[ProviderGroupOut]:
         groups.append(
             ProviderGroupOut(
                 kind=kind,
-                category=category_for(kind),
+                categories=list(categories_for(kind)),
                 name=PROVIDER_DISPLAY_NAMES.get(kind, kind.upper()),
                 connection_count=len(conns),
                 connected_count=sum(1 for c in conns if c.connected),
@@ -225,7 +226,7 @@ def list_connection_sprints(connection_id: int, db: Session = Depends(get_db)) -
     sprint picker degrades gracefully rather than erroring the UI.
     """
     conn = _get_connection_or_404(db, connection_id)
-    _require_category(conn, WORK_ITEM)
+    _require_capability(conn, WORK_ITEM)
     decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
         adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
@@ -245,7 +246,7 @@ def connection_work_item_metadata(
     Resilient: unconfigured/unsupported connections yield empty lists.
     """
     conn = _get_connection_or_404(db, connection_id)
-    _require_category(conn, WORK_ITEM)
+    _require_capability(conn, WORK_ITEM)
     decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
         adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
@@ -265,7 +266,7 @@ def list_connection_repos(
     Resilient: unconfigured/unsupported connections yield an empty list.
     """
     conn = _get_connection_or_404(db, connection_id)
-    _require_category(conn, REPOSITORY)
+    _require_capability(conn, REPOSITORY)
     decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
         adapter = get_adapter(conn.kind, conn.config or {}, decrypted)

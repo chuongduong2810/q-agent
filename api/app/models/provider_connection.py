@@ -1,12 +1,15 @@
 """Provider connection model — a named account for a provider kind.
 
 Supersedes the singleton :class:`app.models.provider.Provider` for credential
-routing (see ADR 0006). A provider *kind* (ado/jira/github) may now hold **many**
-named ``ProviderConnection`` rows, and each kind belongs to one of two
-**categories**:
+routing (see ADR 0006 revision 2). A provider *kind* (ado/jira/github) may now
+hold **many** named ``ProviderConnection`` rows, and each kind has one or more
+**capabilities**:
 
 - **work_item** (``ado``, ``jira``) — the source of tickets / work items.
-- **repository** (``github``) — the source of code repositories.
+- **repository** (``ado``, ``github``) — the source of code repositories.
+
+A kind can have **both** capabilities — Azure DevOps serves work items *and*
+Git repos, so an ADO connection is eligible for either role.
 
 ``config`` holds non-secret connection fields (org URL, project, org, repo,
 baseUrl…); secret fields (PAT / API token) are stored encrypted in ``secrets``
@@ -23,15 +26,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base, UTCDateTime, timestamp_column, utcnow
 from app.models.provider import ADO, GITHUB, JIRA
 
-# Provider categories.
+# Provider capability categories.
 WORK_ITEM = "work_item"
 REPOSITORY = "repository"
 
-# Code-level classification of each kind (no per-kind DB row).
-PROVIDER_CATEGORY: dict[str, str] = {
-    ADO: WORK_ITEM,
-    JIRA: WORK_ITEM,
-    GITHUB: REPOSITORY,
+# Code-level classification of each kind (no per-kind DB row). A kind may carry
+# more than one capability — Azure DevOps provides both work items and repos.
+PROVIDER_CAPABILITIES: dict[str, tuple[str, ...]] = {
+    ADO: (WORK_ITEM, REPOSITORY),
+    JIRA: (WORK_ITEM,),
+    GITHUB: (REPOSITORY,),
 }
 
 # Human-readable default names per kind (used when creating a connection).
@@ -42,9 +46,9 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
 }
 
 
-def category_for(kind: str) -> str:
-    """Return the category ('work_item' | 'repository') for a provider kind."""
-    return PROVIDER_CATEGORY.get(kind, WORK_ITEM)
+def categories_for(kind: str) -> tuple[str, ...]:
+    """Return the capabilities ('work_item', 'repository', …) for a provider kind."""
+    return PROVIDER_CAPABILITIES.get(kind, (WORK_ITEM,))
 
 
 class ProviderConnection(Base):
@@ -64,5 +68,5 @@ class ProviderConnection(Base):
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)
 
     @property
-    def category(self) -> str:
-        return category_for(self.kind)
+    def categories(self) -> tuple[str, ...]:
+        return categories_for(self.kind)

@@ -28,7 +28,7 @@ class ConnectionOut(ApiModel):
 
     id: int
     kind: str
-    category: str  # work_item | repository
+    categories: list[str]  # work_item, repository — a kind may carry both
     name: str
     connected: bool
     config: dict = Field(default_factory=dict)
@@ -41,7 +41,7 @@ class ProviderGroupOut(ApiModel):
     """A provider kind and its connections (grouped catalog for Settings)."""
 
     kind: str
-    category: str
+    categories: list[str]
     name: str
     connection_count: int = 0
     connected_count: int = 0
