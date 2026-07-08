@@ -23,6 +23,9 @@ AGILE_PREFIX = "/rest/agile/1.0"
 
 # Best-effort custom field id for acceptance criteria (varies by Jira instance).
 ACCEPTANCE_CRITERIA_FIELD = "customfield_10020"
+# Best-effort custom field id for the classic (company-managed) "Epic Link" field
+# (varies by Jira instance; team-managed projects use the `parent` field instead).
+EPIC_LINK_FIELD = "customfield_10014"
 
 
 def _adf_to_text(node: Any) -> str:
@@ -161,9 +164,10 @@ class JiraAdapter(ProviderAdapter):
         return list(sprints.values())
 
     def list_work_item_metadata(self) -> dict[str, Any]:
-        """Jira has no area paths; return issue types + statuses (best-effort)."""
+        """Jira has no area paths; return issue types + statuses + epics (best-effort)."""
         types: list[str] = []
         states: list[str] = []
+        epics: list[dict[str, str]] = []
         try:
             with self._client() as client:
                 it = client.get(f"{API_PREFIX}/issuetype")
@@ -172,9 +176,19 @@ class JiraAdapter(ProviderAdapter):
                 st = client.get(f"{API_PREFIX}/status")
                 if st.status_code < 400:
                     states = sorted({s.get("name", "") for s in st.json() if s.get("name")})
+                jql = f"project = {self.project} AND issuetype = Epic" if self.project else "issuetype = Epic"
+                ep = client.post(
+                    f"{API_PREFIX}/search/jql",
+                    json={"jql": jql, "maxResults": 100, "fields": ["summary"]},
+                )
+                if ep.status_code < 400:
+                    epics = [
+                        {"key": issue.get("key", ""), "name": issue.get("fields", {}).get("summary", "")}
+                        for issue in ep.json().get("issues", [])
+                    ]
         except httpx.HTTPError:
             pass
-        return {"area_paths": [], "work_item_types": types, "states": states}
+        return {"area_paths": [], "work_item_types": types, "states": states, "epics": epics}
 
     def fetch_tickets(
         self,
@@ -213,7 +227,9 @@ class JiraAdapter(ProviderAdapter):
                         "comment",
                         "attachment",
                         "issuetype",
+                        "parent",
                         ACCEPTANCE_CRITERIA_FIELD,
+                        EPIC_LINK_FIELD,
                     ],
                 },
             )
@@ -294,6 +310,15 @@ class JiraAdapter(ProviderAdapter):
         else:
             sprint_name = ""
 
+        epic = ""
+        parent = fields.get("parent")
+        if isinstance(parent, dict):
+            epic = (parent.get("fields") or {}).get("summary", "") or ""
+        if not epic:
+            epic_link = fields.get(EPIC_LINK_FIELD)
+            if isinstance(epic_link, str):
+                epic = epic_link
+
         return NormalizedTicket(
             external_id=issue.get("key", ""),
             provider_kind=self.kind,
@@ -303,6 +328,7 @@ class JiraAdapter(ProviderAdapter):
             priority=self._map_priority(priority),
             assignee=assignee,
             sprint=sprint_name,
+            epic=epic,
             description=description,
             note="",
             labels=fields.get("labels", []) or [],

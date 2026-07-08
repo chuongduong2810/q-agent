@@ -67,7 +67,10 @@ def test_sync_tickets_upserts_and_returns_result(client, db_session):
     # persisted and retrievable via GET /tickets
     list_resp = client.get("/tickets")
     assert list_resp.status_code == 200
-    assert len(list_resp.json()) == 1
+    page = list_resp.json()
+    assert page["total"] == 1
+    assert len(page["items"]) == 1
+    assert page["items"][0]["connectionId"] == connection_id
 
     # The synced ticket is stamped with the work-item connection it came from.
     from app.models.ticket import Ticket
@@ -157,9 +160,90 @@ def test_list_tickets_filters_by_status(client, db_session):
 
     resp = client.get("/tickets", params={"status": "Ready for QA"})
     assert resp.status_code == 200
-    results = resp.json()
+    page = resp.json()
+    results = page["items"]
+    assert page["total"] == 1
     assert len(results) == 1
     assert results[0]["externalId"] == "2"
+
+
+def test_list_tickets_pagination(client, db_session):
+    from app.models.ticket import Ticket
+
+    for i in range(5):
+        db_session.add(
+            Ticket(external_id=str(i), provider_kind="ado", title=f"T{i}", status="Done", priority="Low")
+        )
+    db_session.commit()
+
+    resp = client.get("/tickets", params={"page": 1, "page_size": 2})
+    assert resp.status_code == 200
+    page = resp.json()
+    assert page["total"] == 5
+    assert page["page"] == 1
+    assert page["pageSize"] == 2
+    assert len(page["items"]) == 2
+
+    resp2 = client.get("/tickets", params={"page": 3, "page_size": 2})
+    page2 = resp2.json()
+    assert page2["total"] == 5
+    assert len(page2["items"]) == 1
+
+    # Pages don't overlap.
+    ids_page1 = {t["id"] for t in page["items"]}
+    ids_page2 = {t["id"] for t in page2["items"]}
+    assert ids_page1.isdisjoint(ids_page2)
+
+
+def test_list_tickets_scoped_by_connection(client, db_session):
+    from app.models.ticket import Ticket
+
+    db_session.add(
+        Ticket(external_id="1", provider_kind="ado", connection_id=1, title="A", status="Done", priority="Low")
+    )
+    db_session.add(
+        Ticket(external_id="2", provider_kind="ado", connection_id=2, title="B", status="Done", priority="Low")
+    )
+    db_session.commit()
+
+    resp = client.get("/tickets", params={"connection_id": 1})
+    assert resp.status_code == 200
+    page = resp.json()
+    assert page["total"] == 1
+    assert page["items"][0]["externalId"] == "1"
+
+
+def test_list_tickets_filters_by_priority(client, db_session):
+    from app.models.ticket import Ticket
+
+    db_session.add(Ticket(external_id="1", provider_kind="ado", title="A", status="Done", priority="High"))
+    db_session.add(Ticket(external_id="2", provider_kind="ado", title="B", status="Done", priority="Low"))
+    db_session.commit()
+
+    resp = client.get("/tickets", params={"priority": "High"})
+    assert resp.status_code == 200
+    page = resp.json()
+    assert page["total"] == 1
+    assert page["items"][0]["externalId"] == "1"
+
+
+def test_list_tickets_filters_by_epic(client, db_session):
+    from app.models.ticket import Ticket
+
+    db_session.add(
+        Ticket(external_id="1", provider_kind="ado", title="A", status="Done", priority="Low", epic="Checkout")
+    )
+    db_session.add(
+        Ticket(external_id="2", provider_kind="ado", title="B", status="Done", priority="Low", epic="Billing")
+    )
+    db_session.commit()
+
+    resp = client.get("/tickets", params={"epic": "Checkout"})
+    assert resp.status_code == 200
+    page = resp.json()
+    assert page["total"] == 1
+    assert page["items"][0]["externalId"] == "1"
+    assert page["items"][0]["epic"] == "Checkout"
 
 
 @respx.mock

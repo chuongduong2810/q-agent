@@ -267,6 +267,7 @@ class TicketOut(ApiModel):
     id: int
     external_id: str
     provider_kind: str
+    connection_id: int | None = None
     title: str
     work_item_type: str = "User Story"
     status: str
@@ -274,8 +275,18 @@ class TicketOut(ApiModel):
     assignee: str = ""
     sprint: str = ""
     area_path: str = ""
+    epic: str = ""
     labels: list[str] = Field(default_factory=list)
     ac_count: int = 0
+
+
+class TicketPageOut(ApiModel):
+    """Paged ``GET /tickets`` envelope — ``total`` is computed before limit/offset."""
+
+    items: list[TicketOut] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 25
 
 
 class TicketDetailOut(TicketOut):
@@ -316,12 +327,18 @@ class AreaPathOut(ApiModel):
     path: str
 
 
+class EpicOut(ApiModel):
+    key: str
+    name: str
+
+
 class WorkItemMetadataOut(ApiModel):
     """Filter options for a provider's project (populates the query dropdowns)."""
 
     area_paths: list[AreaPathOut] = Field(default_factory=list)
     work_item_types: list[str] = Field(default_factory=list)
     states: list[str] = Field(default_factory=list)
+    epics: list[EpicOut] = Field(default_factory=list)
 
 
 class SyncResult(ApiModel):

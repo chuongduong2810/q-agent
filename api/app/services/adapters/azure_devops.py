@@ -232,7 +232,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
         """Area paths (classification nodes), work item types + their states."""
         project = self.project
         if not project:
-            return {"area_paths": [], "work_item_types": [], "states": []}
+            return {"area_paths": [], "work_item_types": [], "states": [], "epics": []}
         area_paths: list[dict[str, Any]] = []
         types: list[str] = []
         states: set[str] = set()
@@ -272,6 +272,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
             "area_paths": area_paths,
             "work_item_types": types,
             "states": sorted(states),
+            "epics": [],
         }
 
     # Max work items pulled in a single sync — keeps sync responsive on large sprints.
