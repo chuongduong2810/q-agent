@@ -522,10 +522,10 @@ def _resolve_project_for_run(db, run: Run, env: str) -> tuple[str | None, str, b
         .first()
     )
     provider_kind = ticket.provider_kind if ticket else ""
-    if not provider_kind:
+    if ticket is None or not provider_kind:
         return None, "", False, ""
-    project_key = project_config_service.resolve_project_key(db, provider_kind)
-    base_url = project_config_service.base_url_for(db, provider_kind, env=env)
+    project_key = project_config_service.project_key_for_ticket(db, ticket)
+    base_url = project_config_service.base_url_for(db, ticket, env=env)
     manual_auth = False
     if project_key:
         cfg = project_config_service.get_config(db, project_key)

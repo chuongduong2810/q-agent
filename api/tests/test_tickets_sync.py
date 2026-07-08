@@ -6,19 +6,22 @@ import httpx
 import respx
 
 
-def _configure_ado(client):
+def _configure_ado(client) -> int:
+    """Create + configure an ADO work-item connection; return its id."""
+    conn = client.post("/providers/ado/connections", json={"name": "ADO"}).json()
     client.put(
-        "/providers/ado",
+        f"/connections/{conn['id']}",
         json={
             "config": {"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
             "secrets": {"pat": "secret-pat"},
         },
     )
+    return conn["id"]
 
 
 @respx.mock
-def test_sync_tickets_upserts_and_returns_result(client):
-    _configure_ado(client)
+def test_sync_tickets_upserts_and_returns_result(client, db_session):
+    connection_id = _configure_ado(client)
 
     respx.post("https://dev.azure.com/myorg/MyProj/_apis/wit/wiql").mock(
         return_value=httpx.Response(200, json={"workItems": [{"id": 101}]})
@@ -53,7 +56,7 @@ def test_sync_tickets_upserts_and_returns_result(client):
 
     resp = client.post(
         "/tickets/sync",
-        json={"providerKind": "ado", "mode": "sprint", "sprint": "Sprint 12"},
+        json={"connectionId": connection_id, "mode": "sprint", "sprint": "Sprint 12"},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -66,6 +69,13 @@ def test_sync_tickets_upserts_and_returns_result(client):
     assert list_resp.status_code == 200
     assert len(list_resp.json()) == 1
 
+    # The synced ticket is stamped with the work-item connection it came from.
+    from app.models.ticket import Ticket
+
+    db_session.expire_all()
+    stamped = db_session.query(Ticket).filter(Ticket.external_id == "101").first()
+    assert stamped.connection_id == connection_id
+
 
 @respx.mock
 def test_sync_tickets_unknown_provider_404(client):
@@ -75,7 +85,7 @@ def test_sync_tickets_unknown_provider_404(client):
 
 @respx.mock
 def test_get_ticket_detail(client):
-    _configure_ado(client)
+    connection_id = _configure_ado(client)
     respx.post("https://dev.azure.com/myorg/MyProj/_apis/wit/wiql").mock(
         return_value=httpx.Response(200, json={"workItems": [{"id": 202}]})
     )
@@ -109,7 +119,10 @@ def test_get_ticket_detail(client):
         )
     )
 
-    client.post("/tickets/sync", json={"providerKind": "ado", "mode": "sprint", "sprint": "Sprint 12"})
+    client.post(
+        "/tickets/sync",
+        json={"connectionId": connection_id, "mode": "sprint", "sprint": "Sprint 12"},
+    )
 
     detail_resp = client.get("/tickets/202")
     assert detail_resp.status_code == 200
@@ -151,14 +164,14 @@ def test_list_tickets_filters_by_status(client, db_session):
 
 @respx.mock
 def test_projects_refresh_upserts_from_connected_providers(client):
-    _configure_ado(client)
+    connection_id = _configure_ado(client)
 
     respx.get("https://dev.azure.com/myorg/_apis/projects", params={"api-version": "7.1"}).mock(
         return_value=httpx.Response(200, json={"count": 1, "value": [{"id": "p1", "name": "MyProj"}]})
     )
 
-    # Mark the provider connected via the real test-connection endpoint first.
-    resp_test = client.post("/providers/ado/test")
+    # Mark the connection connected via the real test-connection endpoint first.
+    resp_test = client.post(f"/connections/{connection_id}/test")
     assert resp_test.status_code == 200
 
     resp = client.post("/projects/refresh")

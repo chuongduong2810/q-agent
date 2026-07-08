@@ -14,11 +14,10 @@ from app import crypto
 from app import db as db_module
 from app.logging import logger
 from app.models.linked import LinkedTestCase
-from app.models.provider import Provider
 from app.models.run import Run
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
-from app.services import run_control
+from app.services import connection_service, run_control
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
 from app.services.run_status import set_run_status
@@ -70,15 +69,17 @@ def start_create_link(
     ).start()
 
 
-def _adapter_for(db, kind: str, cache: dict[str, Any]) -> Any:
-    if kind in cache:
-        return cache[kind]
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
-        raise ProviderError(f"Provider '{kind}' is not configured")
-    secrets = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
-    adapter = get_adapter(kind, provider.config or {}, secrets)
-    cache[kind] = adapter
+def _adapter_for(db, connection, cache: dict[int, Any]) -> Any:
+    """Build (and cache, keyed by **connection id**) the adapter for a connection.
+
+    Keying by connection id — not provider kind — lets two connections of the same
+    kind (e.g. two ADO accounts) each get their own adapter within one pass.
+    """
+    if connection.id in cache:
+        return cache[connection.id]
+    secrets = {k: crypto.decrypt(v) for k, v in (connection.secrets or {}).items()}
+    adapter = get_adapter(connection.kind, connection.config or {}, secrets)
+    cache[connection.id] = adapter
     return adapter
 
 
@@ -103,18 +104,25 @@ def _worker(run_id: int, link: bool, ticket_ids: list[str], dry_run: bool = Fals
             for c in cases:
                 grouped.setdefault(c.ticket_external_id, []).append(c)
 
-            adapters: dict[str, Any] = {}
+            adapters: dict[int, Any] = {}
             for tid, group in grouped.items():
                 if run_control.is_cancelled(run_id, db):
                     logger.info("Run {} cancelled — stopping create+link pass", run.code)
                     return
                 ticket = db.query(Ticket).filter(Ticket.external_id == tid).first()
-                kind = ticket.provider_kind if ticket else "ado"
                 created_any = False
                 linked_any = False
                 error = ""
                 try:
-                    adapter = None if dry_run else _adapter_for(db, kind, adapters)
+                    if dry_run:
+                        adapter = None
+                        kind = ticket.provider_kind if ticket else "ado"
+                    elif ticket is None:
+                        raise ProviderError(f"Ticket '{tid}' not found")
+                    else:
+                        connection = connection_service.resolve_work_item_for_ticket(db, ticket)
+                        adapter = _adapter_for(db, connection, adapters)
+                        kind = connection.kind
                     for case in group:
                         if dry_run:
                             # Local mode: record the case locally, never touch the provider.

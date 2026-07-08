@@ -102,7 +102,7 @@ def _resolve_run_project_key(db: Session, run: Run) -> str | None:
     )
     if ticket is None:
         return None
-    return project_config_service.resolve_project_key(db, ticket.provider_kind)
+    return project_config_service.project_key_for_ticket(db, ticket)
 
 
 def _attach_run_aggregates(db: Session, runs: list[Run]) -> list[Run]:

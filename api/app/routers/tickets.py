@@ -11,10 +11,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app import crypto
 from app.db import get_db, utcnow
 from app.models.linked import LinkedTestCase
-from app.models.provider import Provider
 from app.models.ticket import Ticket
 from app.schemas import (
     LinkedTestCaseOut,
@@ -23,8 +21,7 @@ from app.schemas import (
     TicketDetailOut,
     TicketOut,
 )
-from app.services import audit_service
-from app.services.adapters import get_adapter
+from app.services import audit_service, connection_service
 from app.services.adapters.base import ProviderError
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -69,20 +66,19 @@ def get_ticket(external_id: str, db: Session = Depends(get_db)) -> TicketDetailO
     if not ticket:
         raise HTTPException(status_code=404, detail=f"Ticket '{external_id}' not found")
 
-    # Comments are skipped during bulk sync (N+1). Load them lazily on first view.
+    # Comments are skipped during bulk sync (N+1). Load them lazily on first view,
+    # routed through the ticket's work-item connection.
     if not ticket.comments:
-        provider = db.query(Provider).filter(Provider.kind == ticket.provider_kind).first()
-        if provider:
-            decrypted = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
-            try:
-                adapter = get_adapter(provider.kind, provider.config or {}, decrypted)
-                comments = adapter.fetch_comments(external_id)
-                if comments:
-                    ticket.comments = comments
-                    db.commit()
-                    db.refresh(ticket)
-            except Exception:  # noqa: BLE001 - detail must never fail on comment fetch
-                db.rollback()
+        try:
+            connection = connection_service.resolve_work_item_for_ticket(db, ticket)
+            adapter = connection_service.adapter_for(db, connection)
+            comments = adapter.fetch_comments(external_id)
+            if comments:
+                ticket.comments = comments
+                db.commit()
+                db.refresh(ticket)
+        except Exception:  # noqa: BLE001 - detail must never fail on comment fetch
+            db.rollback()
 
     return TicketDetailOut.model_validate(ticket)
 
@@ -106,13 +102,11 @@ def provider_test_cases(external_id: str, db: Session = Depends(get_db)) -> list
     what generation reads to continue the existing numbering/naming convention.
     """
     ticket = db.query(Ticket).filter(Ticket.external_id == external_id).first()
-    kind = ticket.provider_kind if ticket else "ado"
-    provider = db.query(Provider).filter(Provider.kind == kind).first()
-    if not provider:
+    if ticket is None:
         return []
-    decrypted = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
     try:
-        adapter = get_adapter(kind, provider.config or {}, decrypted)
+        connection = connection_service.resolve_work_item_for_ticket(db, ticket)
+        adapter = connection_service.adapter_for(db, connection)
         items = adapter.list_test_cases(external_id)
     except Exception:  # noqa: BLE001 - degrade gracefully (provider/network hiccup)
         return []
@@ -124,15 +118,23 @@ def provider_test_cases(external_id: str, db: Session = Depends(get_db)) -> list
 
 @router.post("/sync", response_model=SyncResult)
 def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult:
-    """Pull tickets from the given provider's adapter and upsert Ticket rows."""
-    provider = db.query(Provider).filter(Provider.kind == body.provider_kind).first()
-    if not provider:
-        raise HTTPException(status_code=404, detail=f"Provider '{body.provider_kind}' is not configured")
+    """Pull tickets from a work-item connection's adapter and upsert Ticket rows.
 
-    decrypted_secrets = {key: crypto.decrypt(value) for key, value in (provider.secrets or {}).items()}
+    Routes by the request's ``connectionId`` (a work-item connection); falls back
+    to the first connection of ``providerKind``. Each synced ticket is stamped with
+    the connection's id so downstream work-item work routes back to the same origin.
+    """
+    connection = connection_service.get_connection(db, body.connection_id)
+    if connection is None and body.provider_kind:
+        connection = connection_service.first_of_kind(db, body.provider_kind)
+    if connection is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No work-item connection is configured for '{body.provider_kind or body.connection_id}'",
+        )
 
     try:
-        adapter = get_adapter(provider.kind, provider.config or {}, decrypted_secrets)
+        adapter = connection_service.adapter_for(db, connection)
         fetched = adapter.fetch_tickets(
             mode=body.mode,
             sprint=body.sprint,
@@ -152,12 +154,13 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
             continue
         ticket = (
             db.query(Ticket)
-            .filter(Ticket.external_id == external_id, Ticket.provider_kind == provider.kind)
+            .filter(Ticket.external_id == external_id, Ticket.provider_kind == connection.kind)
             .first()
         )
         if not ticket:
-            ticket = Ticket(external_id=external_id, provider_kind=provider.kind)
+            ticket = Ticket(external_id=external_id, provider_kind=connection.kind)
             db.add(ticket)
+        ticket.connection_id = connection.id  # stamp the work-item origin
 
         ticket.title = item.get("title", ticket.title if ticket.id else "")
         ticket.work_item_type = item.get("work_item_type", "User Story")
@@ -175,14 +178,14 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
         ticket.linked_prs = item.get("linked_prs", [])
         synced.append(ticket)
 
-    provider.last_sync = utcnow()
+    connection.last_sync = utcnow()
     db.commit()
     for ticket in synced:
         db.refresh(ticket)
 
     audit_service.record(
         category="sync", actor_type="system", action="Synced tickets",
-        target=body.sprint or provider.name or provider.kind,
+        target=body.sprint or connection.name or connection.kind,
         meta=f"{len(synced)} work items",
     )
 

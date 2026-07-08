@@ -85,7 +85,7 @@ def _project_key_for_case(db: Session, test_case: TestCase) -> str | None:
     )
     if ticket is None:
         return None
-    return project_config_service.resolve_project_key(db, ticket.provider_kind)
+    return project_config_service.project_key_for_ticket(db, ticket)
 
 
 def select_examples(

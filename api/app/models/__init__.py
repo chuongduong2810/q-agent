@@ -1,6 +1,7 @@
 """SQLAlchemy models for Q-Agent. Import order registers them on Base.metadata."""
 
 from app.models.provider import Provider
+from app.models.provider_connection import ProviderConnection
 from app.models.project import Project
 from app.models.project_config import ProjectConfig
 from app.models.ticket import Ticket
@@ -18,6 +19,7 @@ __all__ = [
     "AuditLog",
     "ClaudeUsage",
     "Provider",
+    "ProviderConnection",
     "Project",
     "ProjectConfig",
     "Ticket",

@@ -14,7 +14,7 @@ from app import crypto
 from app.db import get_db
 from app.models.knowledge import ProjectKnowledge, compose_key
 from app.models.project import Project
-from app.models.provider import Provider
+from app.models.provider_connection import ProviderConnection
 from app.schemas import (
     AuthStateOut,
     AvailableReposOut,
@@ -25,7 +25,12 @@ from app.schemas import (
     ProjectOut,
     RepoKnowledgeOut,
 )
-from app.services import knowledge_service, playwright_runner, project_config_service
+from app.services import (
+    connection_service,
+    knowledge_service,
+    playwright_runner,
+    project_config_service,
+)
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
 
@@ -39,15 +44,23 @@ def list_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
 
 @router.post("/refresh", response_model=list[ProjectOut])
 def refresh_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
-    """Pull projects from every connected provider's adapter and upsert Project rows."""
-    providers = db.query(Provider).filter(Provider.connected.is_(True)).all()
+    """Pull projects from every connected work-item connection and upsert Project rows.
 
-    for provider in providers:
+    Each project is stamped with the connection that discovered it
+    (``Project.connection_id``) — a convenience reference, not the credential router.
+    """
+    connections = (
+        db.query(ProviderConnection).filter(ProviderConnection.connected.is_(True)).all()
+    )
+
+    for connection in connections:
+        if connection_service.category_for(connection.kind) != connection_service.WORK_ITEM:
+            continue
         decrypted_secrets = {
-            key: crypto.decrypt(value) for key, value in (provider.secrets or {}).items()
+            key: crypto.decrypt(value) for key, value in (connection.secrets or {}).items()
         }
         try:
-            adapter = get_adapter(provider.kind, provider.config or {}, decrypted_secrets)
+            adapter = get_adapter(connection.kind, connection.config or {}, decrypted_secrets)
             fetched = adapter.list_projects()
         except ProviderError:
             continue
@@ -56,23 +69,29 @@ def refresh_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
             external_id = str(item.get("external_id", ""))
             if not external_id:
                 continue
+            meta = {k: v for k, v in item.items() if k not in ("external_id", "name")}
             existing = (
                 db.query(Project)
-                .filter(Project.provider_kind == provider.kind, Project.external_id == external_id)
+                .filter(
+                    Project.provider_kind == connection.kind,
+                    Project.external_id == external_id,
+                )
                 .first()
             )
             if existing:
                 existing.name = item.get("name", existing.name)
                 existing.active = True
-                existing.meta = {k: v for k, v in item.items() if k not in ("external_id", "name")}
+                existing.meta = meta
+                existing.connection_id = connection.id
             else:
                 db.add(
                     Project(
-                        provider_kind=provider.kind,
+                        provider_kind=connection.kind,
                         external_id=external_id,
                         name=item.get("name", external_id),
                         active=True,
-                        meta={k: v for k, v in item.items() if k not in ("external_id", "name")},
+                        connection_id=connection.id,
+                        meta=meta,
                     )
                 )
 
@@ -178,30 +197,29 @@ def clear_project_auth(key: str) -> dict:
 
 
 # --------------------------------------------------------------- Project repos
-def _provider_for_project_key(db: Session, key: str) -> Provider | None:
-    """Find the connected provider whose configured project/org/repo matches a key."""
-    for provider in db.query(Provider).filter(Provider.connected.is_(True)).all():
-        cfg = provider.config or {}
-        if key in (cfg.get("project"), cfg.get("repo"), cfg.get("org")):
-            return provider
-    return None
+def _repository_connection_for_project(db: Session, key: str) -> ProviderConnection | None:
+    """The project's bound repository connection (ADR 0006), or None."""
+    try:
+        return connection_service.resolve_repository_for_project(db, key)
+    except ProviderError:
+        return None
 
 
 @router.get("/{key}/repos/available", response_model=AvailableReposOut)
 def list_available_repos(key: str, db: Session = Depends(get_db)) -> dict:
-    """Discover the repositories the project's provider exposes (for the picker)."""
-    provider = _provider_for_project_key(db, key)
-    if not provider:
-        return {"provider": "", "repos": [], "error": "No connected provider found for this project"}
-    secrets = {k: crypto.decrypt(v) for k, v in (provider.secrets or {}).items()}
+    """Discover the repositories the project's repository connection exposes."""
+    connection = _repository_connection_for_project(db, key)
+    if not connection:
+        return {"provider": "", "repos": [], "error": "No repository connection is bound to this project"}
+    secrets = {k: crypto.decrypt(v) for k, v in (connection.secrets or {}).items()}
     try:
-        adapter = get_adapter(provider.kind, provider.config or {}, secrets)
+        adapter = get_adapter(connection.kind, connection.config or {}, secrets)
         repos = adapter.list_repos()
     except ProviderError as exc:
-        return {"provider": provider.kind, "repos": [], "error": str(exc)}
+        return {"provider": connection.kind, "repos": [], "error": str(exc)}
     except Exception as exc:  # noqa: BLE001 - never 500 the picker on an upstream hiccup
-        return {"provider": provider.kind, "repos": [], "error": f"Could not list repos: {exc}"}
-    return {"provider": provider.kind, "repos": repos, "error": ""}
+        return {"provider": connection.kind, "repos": [], "error": f"Could not list repos: {exc}"}
+    return {"provider": connection.kind, "repos": repos, "error": ""}
 
 
 @router.get("/{key}/repos", response_model=list[RepoKnowledgeOut])
@@ -270,8 +288,8 @@ def build_repo_knowledge(
     if body.provider is not None:
         row.provider = body.provider
     elif not row.provider:
-        provider = _provider_for_project_key(db, key)
-        row.provider = provider.kind if provider else ""
+        connection = _repository_connection_for_project(db, key)
+        row.provider = connection.kind if connection else ""
     if body.framework:
         row.framework = body.framework
 

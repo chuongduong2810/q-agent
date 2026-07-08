@@ -33,10 +33,29 @@ def test_redact_hides_credentials():
     assert "TOKEN" not in repo_service._redact("https://TOKEN@github.com/o/r.git")
 
 
-def test_provider_kind_for_host():
-    assert repo_service._provider_kind_for_host("github.com") == "github"
-    assert repo_service._provider_kind_for_host("dev.azure.com") == "ado"
-    assert repo_service._provider_kind_for_host("example.com") is None
+def test_repo_pat_comes_from_project_repository_connection(db_session):
+    """The clone PAT is the project's bound repository connection's PAT (ADR 0006)."""
+    from app import crypto
+    from app.models.project_config import ProjectConfig
+    from app.models.provider_connection import ProviderConnection
+
+    gh = ProviderConnection(
+        kind="github", name="GitHub", connected=True,
+        config={"org": "acme"}, secrets={"pat": crypto.encrypt("gh-token")},
+    )
+    db_session.add(gh)
+    db_session.flush()
+    db_session.add(
+        ProjectConfig(key="Surency Platform", name="Surency Platform", repository_connection_id=gh.id)
+    )
+    db_session.commit()
+
+    assert repo_service._repo_pat_for_project(db_session, "Surency Platform") == "gh-token"
+
+
+def test_repo_pat_empty_when_no_repository_connection(db_session):
+    # Un-bound project with no repository connection degrades to an empty PAT.
+    assert repo_service._repo_pat_for_project(db_session, "Nope") == ""
 
 
 def test_resolve_prefers_existing_local_path(db_session, tmp_path):

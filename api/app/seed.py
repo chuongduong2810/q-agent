@@ -17,7 +17,7 @@ from app.models import (
     LinkedTestCase,
     ProjectConfig,
     ProjectKnowledge,
-    Provider,
+    ProviderConnection,
     Run,
     RunTicket,
     TestCase,
@@ -85,21 +85,32 @@ def seed() -> None:
     init_db()
     db = SessionLocal()
     try:
-        # Providers
-        db.query(Provider).delete()
-        db.add_all([
-            Provider(kind="ado", name="Azure DevOps", connected=True,
-                     config={"orgUrl": "https://dev.azure.com/surency", "project": "Surency Platform"},
-                     secrets={}, last_sync=utcnow()),
-            Provider(kind="github", name="GitHub", connected=True,
-                     config={"org": "surency-eng", "repo": "surency-web"}, secrets={}, last_sync=utcnow()),
-            Provider(kind="jira", name="Jira", connected=False, config={}, secrets={}),
-        ])
+        # Provider connections — two work-item categories (ADO + Jira) and one
+        # repository category (GitHub). Multiple ADO connections demonstrate the
+        # many-named-connections-per-kind model (ADR 0006).
+        db.query(ProviderConnection).delete()
+        ado_platform = ProviderConnection(
+            kind="ado", name="Azure DevOps — Surency Platform", connected=True,
+            config={"orgUrl": "https://dev.azure.com/surency", "project": "Surency Platform"},
+            secrets={}, last_sync=utcnow())
+        ado_labs = ProviderConnection(
+            kind="ado", name="Azure DevOps — Surency Labs", connected=False,
+            config={"orgUrl": "https://dev.azure.com/surency", "project": "Surency Labs"},
+            secrets={})
+        jira_conn = ProviderConnection(
+            kind="jira", name="Jira Cloud", connected=False,
+            config={"baseUrl": "https://surency.atlassian.net"}, secrets={})
+        github_conn = ProviderConnection(
+            kind="github", name="GitHub — surency-eng", connected=True,
+            config={"org": "surency-eng", "repo": "surency-web"}, secrets={}, last_sync=utcnow())
+        db.add_all([ado_platform, ado_labs, jira_conn, github_conn])
+        db.flush()  # assign ids for ticket stamping + project binding
 
-        # Tickets
+        # Tickets — stamp each with the work-item connection it came from.
         db.query(Ticket).delete()
+        _work_item_conn = {"ado": ado_platform.id, "jira": jira_conn.id}
         for t in TICKETS:
-            db.add(Ticket(**t))
+            db.add(Ticket(connection_id=_work_item_conn.get(t["provider_kind"]), **t))
 
         # Runs (wipe + reseed)
         db.query(TestCase).delete()
@@ -213,6 +224,8 @@ def seed() -> None:
             ProjectConfig(
                 key="Surency Platform",
                 name="Surency Platform",
+                work_item_connection_id=ado_platform.id,
+                repository_connection_id=github_conn.id,
                 base_url="https://staging.surency-web.test",
                 repos=[
                     {"name": "surency-web", "repo_url": "https://dev.azure.com/surency/Surency%20Platform/_git/surency-web",

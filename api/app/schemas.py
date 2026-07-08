@@ -23,22 +23,43 @@ class ApiModel(BaseModel):
 
 
 # ---------------------------------------------------------------- Providers
-class ProviderFieldsIn(ApiModel):
-    """Non-secret + secret provider fields submitted by the Settings screen."""
+class ConnectionOut(ApiModel):
+    """A single named provider connection (secrets masked to field names only)."""
 
-    config: dict[str, str] = Field(default_factory=dict)
-    secrets: dict[str, str] = Field(default_factory=dict)  # plaintext in, encrypted at rest
-
-
-class ProviderOut(ApiModel):
     id: int
     kind: str
+    category: str  # work_item | repository
     name: str
     connected: bool
     config: dict = Field(default_factory=dict)
-    # secrets are returned masked only (has_<field> booleans), never plaintext
     secret_fields: list[str] = Field(default_factory=list)
     last_sync: datetime | None = None
+    last_tested_at: datetime | None = None
+
+
+class ProviderGroupOut(ApiModel):
+    """A provider kind and its connections (grouped catalog for Settings)."""
+
+    kind: str
+    category: str
+    name: str
+    connection_count: int = 0
+    connected_count: int = 0
+    connections: list[ConnectionOut] = Field(default_factory=list)
+
+
+class ConnectionCreate(ApiModel):
+    """Create an empty connection under a provider kind."""
+
+    name: str = ""
+
+
+class ConnectionUpdate(ApiModel):
+    """Patch a connection. Untouched secrets are omitted (not blanked)."""
+
+    name: str | None = None
+    config: dict[str, str] | None = None
+    secrets: dict[str, str] | None = None  # plaintext in, encrypted at rest
 
 
 class TestConnectionResult(ApiModel):
@@ -127,6 +148,9 @@ class ProjectRepo(ApiModel):
 class ProjectConfigOut(ApiModel):
     key: str
     name: str = ""
+    # Per-project provider bindings (ADR 0006).
+    work_item_connection_id: int | None = None
+    repository_connection_id: int | None = None
     base_url: str = ""
     repos: list[ProjectRepo] = Field(default_factory=list)
     # Legacy single-repo fields (kept for backward compatibility).
@@ -140,6 +164,8 @@ class ProjectConfigOut(ApiModel):
 
 
 class ProjectConfigUpdate(ApiModel):
+    work_item_connection_id: int | None = None
+    repository_connection_id: int | None = None
     base_url: str | None = None
     repos: list[ProjectRepo] | None = None
     local_repo_path: str | None = None
@@ -271,7 +297,10 @@ class SprintOut(ApiModel):
 
 
 class SyncRequest(ApiModel):
-    provider_kind: str
+    # A work-item connection to sync from (ADR 0006). Falls back to the first
+    # connection of ``provider_kind`` when omitted.
+    connection_id: int | None = None
+    provider_kind: str | None = None
     mode: str = "sprint"  # sprint | assigned | selected | all
     sprint: str | None = None
     sprint_path: str | None = None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app import crypto
 from app.models.project_config import ProjectConfig
-from app.models.provider import Provider
+from app.models.provider_connection import ProviderConnection
 from app.models.ticket import Ticket
 from app.services import project_config_service
 
@@ -133,11 +133,11 @@ def test_capture_auth_runs_in_background_and_saves_session(client, app_env, monk
     assert state["exists"] is True
 
 
-def test_build_context_resolves_via_provider_and_decrypts(db_session):
-    db_session.add(
-        Provider(kind="ado", name="ADO", connected=True,
-                 config={"project": "Surency Platform"}, secrets={})
-    )
+def test_build_context_resolves_via_connection_and_decrypts(db_session):
+    conn = ProviderConnection(kind="ado", name="ADO", connected=True,
+                              config={"project": "Surency Platform"}, secrets={})
+    db_session.add(conn)
+    db_session.flush()
     db_session.add(
         ProjectConfig(
             key="Surency Platform", name="Surency Platform",
@@ -146,9 +146,11 @@ def test_build_context_resolves_via_provider_and_decrypts(db_session):
             test_accounts=[{"role": "Admin", "username": "u", "password": crypto.encrypt("pw"), "notes": ""}],
         )
     )
+    ticket = Ticket(external_id="SUR-1", provider_kind="ado", title="t", connection_id=conn.id)
+    db_session.add(ticket)
     db_session.commit()
 
-    ctx = project_config_service.build_context(db_session, "ado", env="Staging")
+    ctx = project_config_service.build_context(db_session, ticket, env="Staging")
     assert ctx["projectKey"] == "Surency Platform"
     # Per-environment URL wins when the run env matches.
     assert ctx["baseUrl"] == "https://staging.test"

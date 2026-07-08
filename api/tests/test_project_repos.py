@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from app.models.knowledge import compose_key
-from app.models.provider import Provider
+from app.models.provider_connection import ProviderConnection
 from app.services import knowledge_service, repo_service
 from app.services.adapters.base import ProviderAdapter
 
@@ -17,7 +17,7 @@ def _wait_idle(row_key: str, timeout: float = 5.0) -> None:
 
 
 class _FakeAdapter(ProviderAdapter):
-    kind = "ado"
+    kind = "github"
 
     def test_connection(self):  # pragma: no cover
         return {"ok": True, "message": "", "detail": {}}
@@ -41,8 +41,12 @@ class _FakeAdapter(ProviderAdapter):
 
 
 def _seed_provider(db):
-    db.add(Provider(kind="ado", name="ADO", connected=True,
-                    config={"project": "Surency Platform"}, secrets={}))
+    """Seed a work-item (ADO) connection for project-key resolution and a
+    repository (GitHub) connection for repo discovery (ADR 0006)."""
+    db.add(ProviderConnection(kind="ado", name="ADO", connected=True,
+                              config={"project": "Surency Platform"}, secrets={}))
+    db.add(ProviderConnection(kind="github", name="GitHub", connected=True,
+                              config={"org": "surency-eng"}, secrets={}))
     db.commit()
 
 
@@ -57,7 +61,7 @@ def test_discover_available_repos(client, db_session, monkeypatch):
 
     monkeypatch.setattr(projects_router, "get_adapter", lambda kind, config, secrets: _FakeAdapter({}, {}))
     data = client.get("/projects/Surency Platform/repos/available").json()
-    assert data["provider"] == "ado"
+    assert data["provider"] == "github"  # discovery routes via the repository connection
     assert {r["name"] for r in data["repos"]} == {"surency-web", "surency-api"}
 
 
@@ -134,9 +138,14 @@ def test_build_context_uses_default_repo_knowledge(client, db_session, monkeypat
     client.post("/projects/Surency Platform/repos/surency-web/knowledge/build", json={})
     _wait_idle(compose_key("Surency Platform", "surency-web"))
 
+    from app.models.ticket import Ticket
     from app.services import project_config_service
 
-    ctx = project_config_service.build_context(db_session, "ado")
+    ticket = Ticket(external_id="SUR-1", provider_kind="ado", title="t")
+    db_session.add(ticket)
+    db_session.commit()
+
+    ctx = project_config_service.build_context(db_session, ticket)
     assert ctx["projectKey"] == "Surency Platform"
     assert ctx["repo"] == "surency-web"
     assert ctx["domain"] == "WEB-DOMAIN"  # pulled from the default repo's KB
