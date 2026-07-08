@@ -17,6 +17,9 @@ dependencies = [
     "pillow>=11.0.0",
     "python-multipart>=0.0.20",
     "websockets>=14.1",
+    "argon2-cffi>=23.1.0",
+    "pyjwt>=2.10.0",
+    "pyotp>=2.9.0",
 ]
 
 [project.optional-dependencies]

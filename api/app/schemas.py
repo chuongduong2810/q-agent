@@ -649,3 +649,114 @@ class SettingsUpdate(ApiModel):
     neural_background: bool | None = None
     claude_model: str | None = None
     weekly_token_budget: int | None = None
+
+
+# ---------------------------------------------------------------- Auth (ADR 0007)
+class UserOut(ApiModel):
+    """Public shape of a user account (never carries password_hash/totp_secret)."""
+
+    id: int
+    email: str
+    first_name: str = ""
+    last_name: str = ""
+    role: str = "member"
+    is_active: bool = True
+    totp_enabled: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class LoginRequest(ApiModel):
+    email: str
+    password: str
+    remember: bool = False
+
+
+class LoginResponse(ApiModel):
+    """Successful login, or an MFA challenge when totp is enabled.
+
+    On success: ``{accessToken, user}``. When MFA is required:
+    ``{mfaRequired: true, mfaToken}`` (and accessToken/user are null).
+    """
+
+    access_token: str | None = None
+    user: UserOut | None = None
+    mfa_required: bool = False
+    mfa_token: str | None = None
+
+
+class MfaLoginRequest(ApiModel):
+    mfa_token: str
+    code: str
+
+
+class RefreshResponse(ApiModel):
+    access_token: str
+    user: UserOut
+
+
+class RequestResetRequest(ApiModel):
+    email: str
+
+
+class RequestResetResponse(ApiModel):
+    """Email delivery is a dev stub — ``token`` is only populated when not in prod."""
+
+    ok: bool = True
+    token: str | None = None
+
+
+class ResetRequest(ApiModel):
+    token: str
+    password: str
+
+
+class UpdateMeRequest(ApiModel):
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class ChangePasswordRequest(ApiModel):
+    current_password: str
+    new_password: str
+
+
+class TotpSetupResponse(ApiModel):
+    secret: str
+    otpauth_uri: str
+
+
+class TotpCodeRequest(ApiModel):
+    code: str
+
+
+class TotpDisableRequest(ApiModel):
+    code: str | None = None
+    password: str | None = None
+
+
+class SessionOut(ApiModel):
+    id: str
+    user_agent: str = ""
+    ip: str = ""
+    created_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    expires_at: datetime | None = None
+    current: bool = False
+
+
+class AdminCreateUserRequest(ApiModel):
+    email: str
+    first_name: str = ""
+    last_name: str = ""
+    role: str = "member"
+    password: str
+
+
+class AdminUpdateUserRequest(ApiModel):
+    role: str | None = None
+    is_active: bool | None = None
+
+
+class OkResponse(ApiModel):
+    ok: bool = True
