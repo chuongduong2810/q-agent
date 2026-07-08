@@ -4,9 +4,13 @@
 - **Date:** 2026-07-08
 - **Deciders:** Operator (in-session), Q-Agent build
 - **Extends:** the provider integration model from [ADR 0001](0001-scope-architecture-and-live-integrations.md)
-- **Revision:** revised in-session to separate **Work Item** providers from
-  **Repository** providers and bind each per project (a project's tickets can come
-  from Jira while its code lives on GitHub).
+- **Revision 1:** separate **Work Item** providers from **Repository** providers
+  and bind each per project (a project's tickets can come from Jira while its code
+  lives on GitHub).
+- **Revision 2:** category is a **capability**, not a partition — a provider kind
+  can serve **both** roles (Azure DevOps provides work items *and* Git repos). So
+  Settings shows a single flat provider list; capability only gates which
+  connections each per-project picker offers.
 
 ## Context
 
@@ -26,30 +30,33 @@ where **work items** come from and where **code repositories** live:
 - `ProjectConfig` carries **no** provider reference at all.
 
 We need (a) each provider to hold **multiple named connections**, and (b) an
-explicit split between **Work Item** providers (Azure DevOps, Jira — the source
-of tickets) and **Repository** providers (GitHub — the source of code), bound
-**independently per project**.
+explicit distinction between the **work-item** role (source of tickets) and the
+**repository** role (source of code), bound **independently per project** — where
+a single kind (Azure DevOps) can fill **both** roles.
 
 ## Decision
 
-Model a provider as a **kind** in one of two **categories**, grouping **N
-`ProviderConnection` rows**. A **project** binds to one work-item connection and
-one repository connection (independent). Work-item work routes by ticket origin;
-repository work routes by the project's repository connection.
+Model a provider as a **kind** with one or more **capabilities**, grouping **N
+`ProviderConnection` rows**. A **project** binds one work-item connection and one
+repository connection (independent — and both may be the *same* provider kind,
+e.g. Azure DevOps for both). Work-item work routes by ticket origin; repository
+work routes by the project's repository connection.
 
-### 0. Provider categories
+### 0. Provider capabilities
 
 Code-level classification (no per-kind DB row); each kind keeps its field spec.
+A kind can have **both** capabilities.
 
-| Category | Kinds | Provides | Used by |
+| Capability | Kinds | Provides | Used by |
 |---|---|---|---|
 | **work_item** | `ado`, `jira` | tickets / work items | sync, comment publish, work-item linking |
-| **repository** | `github` | code repositories | repo clone, knowledge build, repo discovery |
+| **repository** | `ado`, `github` | code repositories | repo clone, knowledge build, repo discovery |
 
-`PROVIDER_CATEGORY: dict[kind → "work_item" | "repository"]` lives in the backend
-(and mirrored in the frontend). `category` is surfaced on API payloads so the UI
-can render the two groups. (The mock's "Claims Cloud" is illustrative — kinds
-stay ado/jira/github.)
+`PROVIDER_CAPABILITIES: dict[kind → tuple[category, …]]` lives in the backend and
+is mirrored in the frontend: `ado → (work_item, repository)`, `jira → (work_item,)`,
+`github → (repository,)`. Payloads surface a connection's `categories` list so a
+picker can offer only capability-eligible connections. (The mock's "Claims Cloud"
+is illustrative — kinds stay ado/jira/github.)
 
 ### 1. Data model
 
@@ -82,8 +89,9 @@ New table **`provider_connections`** (`api/app/models/provider_connection.py`):
 New columns/table auto-apply. Add a best-effort `init_db` backfill (mirroring
 `_backfill_audit`): if `provider_connections` is empty and legacy `providers`
 rows exist, copy each → one `ProviderConnection`; then, per `ProjectConfig` with
-null bindings, set `work_item_connection_id` = first **work_item** connection and
-`repository_connection_id` = first **repository** connection (best-effort); stamp
+null bindings, set `work_item_connection_id` = first **work-item-capable**
+connection and `repository_connection_id` = first **repository-capable**
+connection (best-effort); stamp
 `ticket.connection_id` from the matching work-item connection. Update `seed.py`
 to create ≥2 ADO + 1 Jira (work-item) and 1 GitHub (repository) connection, bind
 the seeded project to an ADO + the GitHub connection, and stamp tickets.
@@ -97,8 +105,12 @@ Two distinct resolution paths, both centralized:
   else first work-item connection of `ticket.provider_kind` → else `ProviderError`.
 - **Repository** (repo clone, knowledge build, repo discovery): 
   `resolve_repository_for_project(db, project_key)` → the project's
-  `repository_connection_id` → else first repository connection → else error.
-- Helpers: `get_connection(id)`, `first_of_kind(kind)`, `connections_by_category(cat)`,
+  `repository_connection_id` (which may be an **ADO** or GitHub connection) → else
+  first repository-capable connection → else error.
+- Eligibility is by capability: `connections_with_capability(cat)` returns every
+  connection whose kind's `PROVIDER_CAPABILITIES` includes `cat` (so ADO
+  connections are eligible for **both** the work-item and repository pickers).
+- Helpers: `get_connection(id)`, `first_of_kind(kind)`, `connections_with_capability(cat)`,
   `adapter_for(db, connection)` (decrypt + `get_adapter`).
 
 Refactor consumers accordingly:
@@ -120,11 +132,11 @@ Refactor consumers accordingly:
 
 ### 4. HTTP API contract
 
-`ConnectionOut = { id, kind, category, name, connected, config, secretFields[], lastSync, lastTestedAt }`.
+`ConnectionOut = { id, kind, categories: string[], name, connected, config, secretFields[], lastSync, lastTestedAt }`.
 
 | Method + path | Behavior |
 |---|---|
-| `GET /providers` | grouped catalog `[{ kind, category, name, connectionCount, connectedCount, connections: ConnectionOut[] }]` (work-item kinds first, then repository) |
+| `GET /providers` | grouped catalog `[{ kind, categories: string[], name, connectionCount, connectedCount, connections: ConnectionOut[] }]` (fixed kind order: ado, jira, github) |
 | `POST /providers/{kind}/connections` | `{ name }` → create empty connection |
 | `PUT /connections/{id}` | `{ name?, config?, secrets? }` (untouched secrets omitted) |
 | `DELETE /connections/{id}` | 204 (null the FKs on tickets/projects/config) |
@@ -139,22 +151,26 @@ connection-scoped routes.
 
 ### 5. Frontend
 
-- **Settings** (`Settings.tsx` + new `ProviderGroup` / `ConnectionRow`; retire
-  `ProviderCard`): render under **two category sections** — "Work Item Providers"
-  (Azure DevOps, Jira) and "Repository Providers" (GitHub). Each provider is a
-  group (icon, name, "N connections · N connected", **+ Add connection**) over
-  collapsible connection rows (chevron, name + config-summary/"Not configured",
-  status pill, relative time, delete). Expanded = per-kind form (**Connection
-  name** + kind fields) + **Test** / **Save** + "Credentials encrypted at rest".
-- **Project settings** (`ProjectDetail.tsx` → `ProjectSettingsTab`): add two
-  pickers at the top — **Work Item Provider** (choose a work-item connection) and
-  **Repository Provider** (choose a repository connection) — saved via
+- **Settings** (`Settings.tsx` + `ProviderGroup` / `ConnectionRow`): a **single
+  flat "PROVIDER CONNECTIONS" list** (as in the original mock — **no** work-item /
+  repository section split, since a kind like ADO belongs to both). Each provider
+  is a group (icon, name, "N connections · N connected", **+ Add connection**)
+  over collapsible connection rows (chevron, name + config-summary/"Not
+  configured", status pill, relative time, delete). Expanded = per-kind form
+  (**Connection name** + kind fields) + **Test** / **Save** + "Credentials
+  encrypted at rest".
+- **Project settings** (`ProjectDetail.tsx` → `ProjectSettingsTab`): two pickers —
+  **Work Item Provider** (offers connections with the `work_item` capability) and
+  **Repository Provider** (offers connections with the `repository` capability) —
+  so an ADO connection appears in **both** pickers. Saved via
   `ProjectConfigUpdate`. `ReposManager`'s "Discover from …" uses the project's
   repository connection.
 - **Sync selector** (`Tickets.tsx`): replace the auto-derived provider with a
   **work-item connection** dropdown, defaulted from the project's bound work-item
   connection; send `connectionId`.
-- Types: `ConnectionOut`, `ProviderGroupOut`, `ProviderCategory`. Hooks:
+- Types: `ConnectionOut` (with `categories: string[]`), `ProviderGroupOut`,
+  `ProviderCategory`, and a mirrored `PROVIDER_CAPABILITIES` map for picker
+  filtering. Hooks:
   grouped `useProviders`, `useCreateConnection`, `useUpdateConnection`,
   `useDeleteConnection`, `useTestConnection(id)`, `useConnectionSprints(id)`,
   `useConnectionWorkItemMetadata(id)`, `useConnectionRepos(id)`.
@@ -169,8 +185,9 @@ connection-scoped routes.
   projects, repo/knowledge. Nullable FKs + first-of-category fallbacks keep legacy
   rows and any un-bound project working (degrade, never crash). `link_service`'s
   per-kind adapter cache must become per-connection.
-- **Not in scope:** new provider kinds; ADO-hosted repos (repos come from the
-  repository provider); per-connection RBAC; crypto scheme changes.
+- **Not in scope:** new provider kinds; per-connection RBAC; crypto scheme
+  changes. (ADO-hosted repos are **in** scope — ADO has the `repository`
+  capability.)
 
 ## Slicing
 
@@ -181,9 +198,9 @@ Two file-disjoint slices, built in parallel against the contract above:
   `connection_service` (split resolution), refactor work-item + repository +
   project-key consumers, connection CRUD/test/sprints/metadata/repos endpoints,
   project-config connection bindings, `sync` `connectionId`. Gate: `pytest`.
-- **Frontend** (`app/`) — Settings two-category provider groups + connection CRUD,
-  **project-settings connection pickers**, sync work-item selector, types/hooks.
-  Gate: `typecheck` + `build`.
+- **Frontend** (`app/`) — flat Settings provider-connections list + connection
+  CRUD, **project-settings connection pickers filtered by capability**, sync
+  work-item selector, types/hooks. Gate: `typecheck` + `build`.
 
 Integration (bind a project to a Jira work-item connection + a GitHub repository
 connection; sync a ticket via the work-item connection; confirm repo/knowledge
