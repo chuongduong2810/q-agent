@@ -176,7 +176,7 @@ def test_list_tickets_pagination(client, db_session):
         )
     db_session.commit()
 
-    resp = client.get("/tickets", params={"page": 1, "page_size": 2})
+    resp = client.get("/tickets", params={"page": 1, "pageSize": 2})
     assert resp.status_code == 200
     page = resp.json()
     assert page["total"] == 5
@@ -184,7 +184,7 @@ def test_list_tickets_pagination(client, db_session):
     assert page["pageSize"] == 2
     assert len(page["items"]) == 2
 
-    resp2 = client.get("/tickets", params={"page": 3, "page_size": 2})
+    resp2 = client.get("/tickets", params={"page": 3, "pageSize": 2})
     page2 = resp2.json()
     assert page2["total"] == 5
     assert len(page2["items"]) == 1
@@ -206,7 +206,7 @@ def test_list_tickets_scoped_by_connection(client, db_session):
     )
     db_session.commit()
 
-    resp = client.get("/tickets", params={"connection_id": 1})
+    resp = client.get("/tickets", params={"connectionId": 1})
     assert resp.status_code == 200
     page = resp.json()
     assert page["total"] == 1
