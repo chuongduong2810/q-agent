@@ -54,14 +54,14 @@ export function Tickets() {
   const setWorkItemTypes = useUI((s) => s.setWorkItemTypes);
 
   // Work-item connection to sync metadata + tickets from. Options are every
-  // connection under a work-item provider (ado/jira); default to the first
+  // connection with the work-item capability (ado/jira); default to the first
   // connected one, else the first available.
   const { data: providers } = useProviders();
   const workItemConnections = useMemo(
     () =>
       (providers ?? [])
-        .filter((g) => g.category === "work_item")
-        .flatMap((g) => g.connections),
+        .flatMap((g) => g.connections)
+        .filter((c) => c.categories.includes("work_item")),
     [providers],
   );
   const connectionOptions = workItemConnections.map((c) => ({

@@ -678,13 +678,11 @@ function ProjectSettingsTab({ projectKey }: { projectKey: string }) {
     value: String(c.id),
     label: `${PROVIDER_META[c.kind].name} · ${c.name}`,
   });
-  const workItemOptions = (providers ?? [])
-    .filter((g) => g.category === "work_item")
-    .flatMap((g) => g.connections)
+  const allConnections = (providers ?? []).flatMap((g) => g.connections);
+  const workItemOptions = allConnections
+    .filter((c) => c.categories.includes("work_item"))
     .map(connOption);
-  const repositoryConnections = (providers ?? [])
-    .filter((g) => g.category === "repository")
-    .flatMap((g) => g.connections);
+  const repositoryConnections = allConnections.filter((c) => c.categories.includes("repository"));
   const repositoryOptions = repositoryConnections.map(connOption);
   const repoConn = repositoryConnections.find((c) => c.id === repositoryConnectionId) ?? null;
 

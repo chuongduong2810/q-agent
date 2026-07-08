@@ -10,11 +10,14 @@ export type ProviderKind = "ado" | "jira" | "github";
  * repository sources (code). A project binds one connection of each. */
 export type ProviderCategory = "work_item" | "repository";
 
-/** A single named connection under a provider kind (ADR 0006). */
+/** A single named connection under a provider kind (ADR 0006). `categories`
+ * lists every capability the connection's kind provides — e.g. Azure DevOps
+ * is `["work_item", "repository"]` — so a per-project picker offers it when
+ * its capability is included. */
 export interface ConnectionOut {
   id: number;
   kind: ProviderKind;
-  category: ProviderCategory;
+  categories: ProviderCategory[];
   name: string;
   connected: boolean;
   config: Record<string, string>;
@@ -26,7 +29,7 @@ export interface ConnectionOut {
 /** Grouped provider catalog entry: one kind with its N connections. */
 export interface ProviderGroupOut {
   kind: ProviderKind;
-  category: ProviderCategory;
+  categories: ProviderCategory[];
   name: string;
   connectionCount: number;
   connectedCount: number;
