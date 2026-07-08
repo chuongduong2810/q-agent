@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db, utcnow
@@ -104,9 +105,60 @@ def _resolve_run_project_key(db: Session, run: Run) -> str | None:
     return project_config_service.resolve_project_key(db, ticket.provider_kind)
 
 
+def _attach_run_aggregates(db: Session, runs: list[Run]) -> list[Run]:
+    """Attach list-display aggregates to each run as transient attributes:
+    ``case_count`` (# test cases), ``total``/``passed`` (from the run's latest
+    execution — the "passed / N" progress), and ``pass_rate`` (0..100 from the
+    run's latest report, else None). Batched — three grouped queries total, no
+    per-run N+1.
+    """
+    if not runs:
+        return runs
+    run_ids = [r.id for r in runs]
+
+    case_counts = dict(
+        db.query(TestCase.run_id, func.count(TestCase.id))
+        .filter(TestCase.run_id.in_(run_ids))
+        .group_by(TestCase.run_id)
+        .all()
+    )
+
+    # Latest execution / report per run via max(id) over the run's rows.
+    latest_exec_ids = [
+        eid
+        for (eid,) in db.query(func.max(Execution.id))
+        .filter(Execution.run_id.in_(run_ids))
+        .group_by(Execution.run_id)
+        .all()
+    ]
+    execs = {
+        e.run_id: e for e in db.query(Execution).filter(Execution.id.in_(latest_exec_ids)).all()
+    }
+    latest_report_ids = [
+        rid
+        for (rid,) in db.query(func.max(Report.id))
+        .filter(Report.run_id.in_(run_ids))
+        .group_by(Report.run_id)
+        .all()
+    ]
+    reports = {
+        r.run_id: r for r in db.query(Report).filter(Report.id.in_(latest_report_ids)).all()
+    }
+
+    for run in runs:
+        run.case_count = case_counts.get(run.id, 0)
+        execution = execs.get(run.id)
+        run.total = execution.total if execution else 0
+        run.passed = execution.passed if execution else 0
+        report = reports.get(run.id)
+        run.pass_rate = report.pass_rate if report else None
+    return runs
+
+
 @router.get("", response_model=list[RunOut])
 def list_runs(db: Session = Depends(get_db)) -> list[Run]:
-    return db.query(Run).order_by(Run.created_at.desc()).all()
+    runs = db.query(Run).order_by(Run.created_at.desc()).all()
+    return _attach_run_aggregates(db, runs)
 
 
 @router.post("", response_model=RunDetailOut)
@@ -171,7 +223,9 @@ def create_run(body: RunCreate, db: Session = Depends(get_db)) -> Run:
 
 @router.get("/{run_id}", response_model=RunDetailOut)
 def get_run(run_id: int, db: Session = Depends(get_db)) -> Run:
-    return _get_run_or_404(db, run_id)
+    run = _get_run_or_404(db, run_id)
+    _attach_run_aggregates(db, [run])
+    return run
 
 
 @router.get("/{run_id}/tickets", response_model=list[RunTicketOut])

@@ -47,6 +47,53 @@ def _patch_pipeline_blocking(monkeypatch):
     )
 
 
+def test_list_runs_carries_display_aggregates(client, db_session):
+    """GET /runs enriches each run with caseCount + latest-execution passed/total
+    + latest-report passRate (ADR: runs-list redesign)."""
+    from app.models.execution import Execution
+    from app.models.report import Report
+    from app.models.run import Run
+    from app.models.testcase import TestCase
+
+    run = Run(code="RUN-700", name="Aggregates", scope="selected", status="done")
+    db_session.add(run)
+    db_session.commit()
+    db_session.refresh(run)
+
+    for i in range(3):
+        db_session.add(
+            TestCase(run_id=run.id, ticket_external_id="T-1", code=f"TC-0{i}", title=f"case {i}")
+        )
+    # Two executions — only the latest (higher id) should be reflected.
+    db_session.add(Execution(run_id=run.id, status="done", total=5, passed=1, failed=4))
+    db_session.add(Execution(run_id=run.id, status="done", total=7, passed=7, failed=0))
+    db_session.add(Report(run_id=run.id, overall_result="passed", pass_rate=96.0, passed=7, failed=0))
+    db_session.commit()
+
+    resp = client.get("/runs")
+    assert resp.status_code == 200
+    row = next(r for r in resp.json() if r["code"] == "RUN-700")
+    assert row["caseCount"] == 3
+    assert row["total"] == 7  # latest execution, not the earlier 5
+    assert row["passed"] == 7
+    assert row["passRate"] == 96.0
+
+
+def test_list_runs_aggregates_default_when_no_data(client, db_session):
+    """A run with no cases/executions/reports reports zeroed aggregates + null rate."""
+    from app.models.run import Run
+
+    run = Run(code="RUN-701", name="Bare", scope="selected", status="processing")
+    db_session.add(run)
+    db_session.commit()
+
+    row = next(r for r in client.get("/runs").json() if r["code"] == "RUN-701")
+    assert row["caseCount"] == 0
+    assert row["total"] == 0
+    assert row["passed"] == 0
+    assert row["passRate"] is None
+
+
 def test_create_run_returns_detail_and_generates_cases(client, seed_ticket, monkeypatch):
     _patch_pipeline_blocking(monkeypatch)
 
