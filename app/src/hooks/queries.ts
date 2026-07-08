@@ -247,9 +247,14 @@ export const useBuildRepoKnowledge = (key: string) => {
 };
 
 // -------------------------------------------------------------- tickets
+/** Page size for screens that need "every ticket" for lookups/counts (Automation,
+ * CreateLinkSync, ProjectDetail, RunDetail, CreateRunModal) rather than the
+ * paginated Tickets screen's page-at-a-time list. */
+export const ALL_TICKETS_PAGE_SIZE = 1000;
+
 export const useTickets = (filters: TicketFilters = {}) =>
   useQuery({
-    queryKey: queryKeys.tickets(filters as Record<string, string | undefined>),
+    queryKey: queryKeys.tickets(filters as Record<string, string | number | undefined>),
     queryFn: () => api.listTickets(filters),
   });
 

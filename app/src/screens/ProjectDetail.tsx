@@ -25,6 +25,7 @@ import { PROVIDER_META } from "@/components/settings/providerMeta";
 import { providerGlyph } from "@/components/ui/badges";
 import { confidenceColor, knowledgeStatusStyle, providerLabel } from "@/data/projects";
 import {
+  ALL_TICKETS_PAGE_SIZE,
   useBuildRepoKnowledge,
   useCaptureProjectAuth,
   useClearProjectAuth,
@@ -77,7 +78,8 @@ export function ProjectDetail() {
 
   const { data: projects } = useProjects();
   const { data: repos } = useProjectRepos(key);
-  const { data: tickets } = useTickets();
+  const { data: ticketsPage } = useTickets({ pageSize: ALL_TICKETS_PAGE_SIZE });
+  const tickets = ticketsPage?.items;
   const { data: runs } = useRuns();
 
   const project = projects?.find((p) => p.name === key);

@@ -41,21 +41,33 @@ interface UIState {
   selected: Record<string, boolean>;
   ticketSearch: string;
   ticketFilter: TicketFilter;
+  /** The work-item connection scoping the ticket list, metadata, sprints + sync
+   * (ADR 0006). Null until Tickets.tsx resolves a default. */
+  ticketConnectionId: number | null;
   /** The real sprint chosen in the picker (name + provider-native path/id). */
   selectedSprint: { name: string; path: string } | null;
   /** Additional ADO query filters. */
   areaPath: string | null;
   states: string[];
   workItemTypes: string[];
+  ticketPriority: string | null;
+  /** Jira epic key. */
+  ticketEpic: string | null;
+  /** 1-based current page of the Tickets list. */
+  ticketPage: number;
   toggleSelected: (id: string) => void;
   setSelected: (ids: string[]) => void;
   clearSelected: () => void;
   setTicketSearch: (q: string) => void;
   setTicketFilter: (f: TicketFilter) => void;
+  setTicketConnectionId: (id: number | null) => void;
   setSelectedSprint: (s: { name: string; path: string } | null) => void;
   setAreaPath: (p: string | null) => void;
   setStates: (s: string[]) => void;
   setWorkItemTypes: (t: string[]) => void;
+  setTicketPriority: (p: string | null) => void;
+  setTicketEpic: (e: string | null) => void;
+  setTicketPage: (p: number) => void;
 
   // runs page — status filter tab + multi-select for bulk actions
   runFilter: RunFilter;
@@ -123,19 +135,27 @@ export const useUI = create<UIState>((set) => ({
   selected: {},
   ticketSearch: "",
   ticketFilter: "all",
+  ticketConnectionId: null,
   selectedSprint: null,
   areaPath: null,
   states: [],
   workItemTypes: [],
+  ticketPriority: null,
+  ticketEpic: null,
+  ticketPage: 1,
   toggleSelected: (id) => set((s) => ({ selected: { ...s.selected, [id]: !s.selected[id] } })),
   setSelected: (ids) => set({ selected: Object.fromEntries(ids.map((id) => [id, true])) }),
   clearSelected: () => set({ selected: {} }),
-  setTicketSearch: (q) => set({ ticketSearch: q }),
-  setTicketFilter: (f) => set({ ticketFilter: f }),
-  setSelectedSprint: (s) => set({ selectedSprint: s }),
-  setAreaPath: (p) => set({ areaPath: p }),
-  setStates: (s) => set({ states: s }),
-  setWorkItemTypes: (t) => set({ workItemTypes: t }),
+  setTicketSearch: (q) => set({ ticketSearch: q, ticketPage: 1 }),
+  setTicketFilter: (f) => set({ ticketFilter: f, ticketPage: 1 }),
+  setTicketConnectionId: (id) => set({ ticketConnectionId: id, ticketPage: 1 }),
+  setSelectedSprint: (s) => set({ selectedSprint: s, ticketPage: 1 }),
+  setAreaPath: (p) => set({ areaPath: p, ticketPage: 1 }),
+  setStates: (s) => set({ states: s, ticketPage: 1 }),
+  setWorkItemTypes: (t) => set({ workItemTypes: t, ticketPage: 1 }),
+  setTicketPriority: (p) => set({ ticketPriority: p, ticketPage: 1 }),
+  setTicketEpic: (e) => set({ ticketEpic: e, ticketPage: 1 }),
+  setTicketPage: (p) => set({ ticketPage: p }),
 
   runFilter: "all",
   runSel: {},

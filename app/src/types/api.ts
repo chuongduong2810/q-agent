@@ -230,6 +230,8 @@ export interface TicketOut {
   id: number;
   externalId: string;
   providerKind: ProviderKind;
+  /** The work-item connection this ticket was synced from (ADR 0006). */
+  connectionId: number | null;
   title: string;
   workItemType: string;
   status: string;
@@ -237,8 +239,18 @@ export interface TicketOut {
   assignee: string;
   sprint: string;
   areaPath: string;
+  /** Jira epic key/name (empty for ADO or unlinked tickets). */
+  epic: string;
   labels: string[];
   acCount: number;
+}
+
+/** Paginated envelope for GET /tickets. */
+export interface TicketPage {
+  items: TicketOut[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface AreaPathOut {
@@ -246,10 +258,15 @@ export interface AreaPathOut {
   name: string;
   path: string;
 }
+export interface EpicOut {
+  key: string;
+  name: string;
+}
 export interface WorkItemMetadataOut {
   areaPaths: AreaPathOut[];
   workItemTypes: string[];
   states: string[];
+  epics: EpicOut[];
 }
 
 export interface TicketDetailOut extends TicketOut {
@@ -292,6 +309,16 @@ export interface TicketFilters {
   states?: string;
   workItemTypes?: string;
   q?: string;
+  /** Scope the list to a single work-item connection (ADR 0006). */
+  connectionId?: number;
+  providerKind?: ProviderKind;
+  priority?: string;
+  /** Jira epic key. */
+  epic?: string;
+  /** 1-based page number; defaults to 1 on the backend. */
+  page?: number;
+  /** Page size; defaults to 25 on the backend. */
+  pageSize?: number;
 }
 export interface SyncResult {
   synced: number;

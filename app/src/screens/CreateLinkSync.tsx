@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/misc";
 import { providerLabel } from "@/data/projects";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  ALL_TICKETS_PAGE_SIZE,
   useCreateAndLink,
   useGenerateAutomation,
   useLinkStatus,
@@ -24,7 +25,8 @@ export function CreateLinkSync() {
   const runId = Number(useParams().runId);
   const navigate = useNavigate();
   const { data: run } = useRun(runId);
-  const { data: tickets } = useTickets();
+  const { data: ticketsPage } = useTickets({ pageSize: ALL_TICKETS_PAGE_SIZE });
+  const tickets = ticketsPage?.items;
   const { data: status } = useLinkStatus(runId);
   const createAndLink = useCreateAndLink(runId);
   const generateAutomation = useGenerateAutomation(runId);

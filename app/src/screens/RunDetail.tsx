@@ -19,7 +19,7 @@ import { Spinner } from "@/components/ui/misc";
 import { providerGlyph } from "@/components/ui/badges";
 import { PipelineRail, runStatusToStage } from "@/components/ui/PipelineRail";
 import { useNavigate, useParams } from "react-router-dom";
-import { useRun, useRunAiUsage, useTickets } from "@/hooks/queries";
+import { ALL_TICKETS_PAGE_SIZE, useRun, useRunAiUsage, useTickets } from "@/hooks/queries";
 import { useRunEvents } from "@/hooks/useRunEvents";
 import type { ProgressEvent, RunAiUsage, RunTicketOut } from "@/types/api";
 
@@ -48,7 +48,8 @@ export function RunDetail() {
   const navigate = useNavigate();
 
   const { data: run, isLoading } = useRun(runId);
-  const { data: tickets } = useTickets();
+  const { data: ticketsPage } = useTickets({ pageSize: ALL_TICKETS_PAGE_SIZE });
+  const tickets = ticketsPage?.items;
   const { data: aiUsage } = useRunAiUsage(runId);
 
   // Live phase messages per ticket, keyed by ticket externalId — updated from the

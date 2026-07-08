@@ -1,13 +1,13 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Plus, RefreshCw, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { MultiSelect, Select } from "@/components/ui/Dropdown";
+import { DropdownShell, MultiSelect, Select } from "@/components/ui/Dropdown";
 import { StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
-import { PROVIDER_META } from "@/components/settings/providerMeta";
+import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMeta";
 import {
   useConnectionSprints,
   useConnectionWorkItemMetadata,
@@ -17,12 +17,16 @@ import {
   useTickets,
 } from "@/hooks/queries";
 import { useUI, type TicketFilter } from "@/store/ui";
-import type { TicketFilters, TicketOut } from "@/types/api";
+import type { ConnectionOut, ProviderKind, TicketFilters, TicketOut } from "@/types/api";
 
 const FILTERS: { id: TicketFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "mine", label: "My tickets" },
 ];
+
+const PRIORITY_OPTIONS = ["High", "Medium", "Low"].map((p) => ({ value: p, label: p }));
+
+const PAGE_SIZE = 25;
 
 function initials(name: string): string {
   return name
@@ -32,6 +36,78 @@ function initials(name: string): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+/** Primary left-most filter-bar pill: provider glyph + "Provider · connection".
+ * Dropdown lists every work-item connection, grouped by provider. */
+function ConnectionSelect({
+  groups,
+  value,
+  onChange,
+}: {
+  groups: { kind: ProviderKind; connections: ConnectionOut[] }[];
+  value: number | null;
+  onChange: (id: number) => void;
+}) {
+  const selected = groups.flatMap((g) => g.connections).find((c) => c.id === value) ?? null;
+  const meta = selected ? PROVIDER_META[selected.kind] : null;
+
+  const label = selected && meta ? (
+    <span className="flex min-w-0 items-center gap-2">
+      <span
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-[10.5px] font-black"
+        style={{ background: meta.color, color: meta.glyphColor }}
+      >
+        {meta.glyph}
+      </span>
+      <span className="truncate">
+        {meta.name} &middot; {selected.name}
+      </span>
+    </span>
+  ) : (
+    "Select connection"
+  );
+
+  return (
+    <DropdownShell active={!!selected} label={label} minWidth={240}>
+      {(close) => (
+        <>
+          {groups.length === 0 && (
+            <div className="px-3 py-4 text-center text-[12px] text-ink-dim">
+              No work-item connections
+            </div>
+          )}
+          {groups.map((g) => (
+            <div key={g.kind} className="mb-1 last:mb-0">
+              <div className="px-2.5 pt-2 pb-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-dim">
+                {PROVIDER_META[g.kind].name}
+              </div>
+              {g.connections.map((c) => {
+                const on = c.id === value;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(c.id);
+                      close();
+                    }}
+                    className="flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[13px] hover:bg-white/[0.06] data-[on=true]:bg-[rgba(139,92,246,.16)]"
+                    data-on={on}
+                  >
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                      {on && <Check size={13} className="text-violet" strokeWidth={3} />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </>
+      )}
+    </DropdownShell>
+  );
 }
 
 export function Tickets() {
@@ -52,10 +128,18 @@ export function Tickets() {
   const setStates = useUI((s) => s.setStates);
   const workItemTypes = useUI((s) => s.workItemTypes);
   const setWorkItemTypes = useUI((s) => s.setWorkItemTypes);
+  const ticketPriority = useUI((s) => s.ticketPriority);
+  const setTicketPriority = useUI((s) => s.setTicketPriority);
+  const ticketEpic = useUI((s) => s.ticketEpic);
+  const setTicketEpic = useUI((s) => s.setTicketEpic);
+  const ticketPage = useUI((s) => s.ticketPage);
+  const setTicketPage = useUI((s) => s.setTicketPage);
+  const ticketConnectionId = useUI((s) => s.ticketConnectionId);
+  const setTicketConnectionId = useUI((s) => s.setTicketConnectionId);
 
-  // Work-item connection to sync metadata + tickets from. Options are every
-  // connection with the work-item capability (ado/jira); default to the first
-  // connected one, else the first available.
+  // Connection scoping the ticket list, metadata, sprints + sync (ADR 0006).
+  // Options are every connection with the work-item capability (ado/jira);
+  // default to the first connected one, else the first available.
   const { data: providers } = useProviders();
   const workItemConnections = useMemo(
     () =>
@@ -64,15 +148,25 @@ export function Tickets() {
         .filter((c) => c.categories.includes("work_item")),
     [providers],
   );
-  const connectionOptions = workItemConnections.map((c) => ({
-    value: String(c.id),
-    label: `${PROVIDER_META[c.kind].name} · ${c.name}`,
-  }));
-  const [pickedConnId, setPickedConnId] = useState<number | null>(null);
+  const connectionGroups = useMemo(
+    () =>
+      PROVIDER_ORDER.map((kind) => ({
+        kind,
+        connections: workItemConnections.filter((c) => c.kind === kind),
+      })).filter((g) => g.connections.length > 0),
+    [workItemConnections],
+  );
   const defaultConnId =
     workItemConnections.find((c) => c.connected)?.id ?? workItemConnections[0]?.id ?? null;
-  const connectionId = pickedConnId ?? defaultConnId;
+  useEffect(() => {
+    if (ticketConnectionId == null && defaultConnId != null) {
+      setTicketConnectionId(defaultConnId);
+    }
+  }, [ticketConnectionId, defaultConnId, setTicketConnectionId]);
+  const connectionId = ticketConnectionId ?? defaultConnId;
   const selectedConn = workItemConnections.find((c) => c.id === connectionId) ?? null;
+  const isJira = selectedConn?.kind === "jira";
+  const isAdo = selectedConn?.kind === "ado";
   const { data: sprints } = useConnectionSprints(connectionId);
   const { data: metadata } = useConnectionWorkItemMetadata(connectionId);
 
@@ -82,14 +176,23 @@ export function Tickets() {
 
   // Combine every active filter into the ticket query.
   const filters: TicketFilters = {
+    connectionId: connectionId ?? undefined,
+    providerKind: selectedConn?.kind,
     assignee: ticketFilter === "mine" && userName ? userName : undefined,
     sprint: selectedSprint?.name,
-    areaPath: areaPath || undefined,
+    areaPath: isAdo ? areaPath || undefined : undefined,
     states: states.length ? states.join(",") : undefined,
     workItemTypes: workItemTypes.length ? workItemTypes.join(",") : undefined,
+    priority: ticketPriority || undefined,
+    epic: isJira ? ticketEpic || undefined : undefined,
     q: ticketSearch || undefined,
+    page: ticketPage,
+    pageSize: PAGE_SIZE,
   };
-  const { data: tickets, isLoading } = useTickets(filters);
+  const { data: ticketsPage, isLoading } = useTickets(filters);
+  const tickets = ticketsPage?.items ?? [];
+  const total = ticketsPage?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const syncTickets = useSyncTickets();
 
   const selCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
@@ -98,6 +201,7 @@ export function Tickets() {
   const areaOptions = (metadata?.areaPaths ?? []).map((a) => ({ value: a.path, label: a.name, hint: a.path }));
   const stateOptions = (metadata?.states ?? []).map((s) => ({ value: s, label: s }));
   const typeOptions = (metadata?.workItemTypes ?? []).map((t) => ({ value: t, label: t }));
+  const epicOptions = (metadata?.epics ?? []).map((e) => ({ value: e.key, label: e.name }));
 
   const onPickSprint = (path: string | null) => {
     const sprint = path ? (sprints ?? []).find((s) => s.path === path) : null;
@@ -106,7 +210,7 @@ export function Tickets() {
 
   const selectAssigned = () => {
     if (!userName) return;
-    const ids = (tickets ?? []).filter((t) => t.assignee === userName).map((t) => t.externalId);
+    const ids = tickets.filter((t) => t.assignee === userName).map((t) => t.externalId);
     setSelected(ids);
   };
 
@@ -118,7 +222,7 @@ export function Tickets() {
         mode: selectedSprint ? "sprint" : "all",
         sprint: selectedSprint?.name,
         sprintPath: selectedSprint?.path,
-        areaPath: areaPath || undefined,
+        areaPath: isAdo ? areaPath || undefined : undefined,
         states,
         workItemTypes,
       },
@@ -134,13 +238,16 @@ export function Tickets() {
       <div className="mb-4 flex items-end justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-            Surency Platform &middot; Synced 12m ago
+            {(selectedConn ? `${PROVIDER_META[selectedConn.kind].name} · ${selectedConn.name}` : "No connection") +
+              " · Synced 12m ago"}
           </div>
           <h1 className="m-0 text-[28px] font-black tracking-tight">Tickets</h1>
         </div>
       </div>
 
       <div className="glass mb-4 flex flex-wrap items-center gap-[9px] rounded-2xl p-[12px_14px]">
+        <ConnectionSelect groups={connectionGroups} value={connectionId} onChange={setTicketConnectionId} />
+
         <div className="flex h-9 max-w-[280px] min-w-[180px] flex-1 items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3">
           <Search size={14} color="#7a7a8c" strokeWidth={2} />
           <input
@@ -176,24 +283,41 @@ export function Tickets() {
           onChange={onPickSprint}
           emptyLabel="No sprints found"
         />
-        <Select
-          value={areaPath}
-          options={areaOptions}
-          placeholder="Area path"
-          onChange={setAreaPath}
-          emptyLabel="No area paths"
-        />
+        {isJira && (
+          <Select
+            value={ticketEpic}
+            options={epicOptions}
+            placeholder="Epic"
+            onChange={setTicketEpic}
+            emptyLabel="No epics"
+          />
+        )}
+        {isAdo && (
+          <Select
+            value={areaPath}
+            options={areaOptions}
+            placeholder="Area path"
+            onChange={setAreaPath}
+            emptyLabel="No area paths"
+          />
+        )}
         <MultiSelect
           values={states}
           options={stateOptions}
-          placeholder="States"
+          placeholder={isJira ? "Status" : "State"}
           onChange={setStates}
         />
         <MultiSelect
           values={workItemTypes}
           options={typeOptions}
-          placeholder="Work item types"
+          placeholder={isJira ? "Issue type" : "Work item type"}
           onChange={setWorkItemTypes}
+        />
+        <Select
+          value={ticketPriority}
+          options={PRIORITY_OPTIONS}
+          placeholder="Priority"
+          onChange={setTicketPriority}
         />
         {userName && (
           <button
@@ -205,14 +329,6 @@ export function Tickets() {
         )}
 
         <div className="ml-auto flex items-center gap-[9px]">
-          <Select
-            value={connectionId != null ? String(connectionId) : null}
-            options={connectionOptions}
-            placeholder="Sync from"
-            onChange={(v) => setPickedConnId(v ? Number(v) : null)}
-            allowClear={false}
-            emptyLabel="No work-item connections"
-          />
           <Button variant="glass" onClick={handleSync} disabled={syncTickets.isPending}>
             <RefreshCw size={13} className={syncTickets.isPending ? "animate-[spin_.7s_linear_infinite]" : ""} />
             {syncTickets.isPending ? "Syncing…" : "Sync"}
@@ -230,25 +346,54 @@ export function Tickets() {
             <div key={i} className="glass h-[64px] animate-pulse rounded-2xl" />
           ))}
         </div>
-      ) : !tickets?.length ? (
+      ) : !tickets.length ? (
         <EmptyState
           icon={<Search size={28} color="#8b8b9e" strokeWidth={1.6} />}
           title="No tickets found"
           body="Try a different filter or sync tickets from your provider."
         />
       ) : (
-        <div className="flex flex-col gap-[10px]">
-          {tickets.map((tk, i) => (
-            <TicketRow
-              key={tk.externalId}
-              ticket={tk}
-              selected={!!selected[tk.externalId]}
-              onToggle={() => toggleSelected(tk.externalId)}
-              onOpen={() => navigate(`/tickets/${encodeURIComponent(tk.externalId)}`)}
-              index={i}
-            />
-          ))}
-        </div>
+        <>
+          <div className="flex flex-col gap-[10px]">
+            {tickets.map((tk, i) => (
+              <TicketRow
+                key={tk.externalId}
+                ticket={tk}
+                selected={!!selected[tk.externalId]}
+                onToggle={() => toggleSelected(tk.externalId)}
+                onOpen={() => navigate(`/tickets/${encodeURIComponent(tk.externalId)}`)}
+                index={i}
+              />
+            ))}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-[12.5px] text-ink-dim">
+            <span>
+              {total} ticket{total === 1 ? "" : "s"}
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setTicketPage(Math.max(1, ticketPage - 1))}
+                disabled={ticketPage <= 1}
+                className="flex cursor-pointer items-center gap-1 rounded-[10px] border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={14} />
+                Prev
+              </button>
+              <span className="font-medium text-ink">
+                Page {ticketPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setTicketPage(Math.min(totalPages, ticketPage + 1))}
+                disabled={ticketPage >= totalPages}
+                className="flex cursor-pointer items-center gap-1 rounded-[10px] border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

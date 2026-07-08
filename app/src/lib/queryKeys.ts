@@ -17,7 +17,7 @@ export const queryKeys = {
   projectRepos: (key: string) => ["projects", key, "repos"] as const,
   repoKnowledge: (key: string, repo: string) =>
     ["projects", key, "repos", repo, "knowledge"] as const,
-  tickets: (filters?: Record<string, string | undefined>) =>
+  tickets: (filters?: Record<string, string | number | undefined>) =>
     ["tickets", filters ?? {}] as const,
   ticket: (externalId: string) => ["tickets", "detail", externalId] as const,
   linkedCases: (externalId: string) => ["tickets", externalId, "linked-cases"] as const,

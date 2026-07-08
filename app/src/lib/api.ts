@@ -53,6 +53,7 @@ import type {
   TicketDetailOut,
   TicketFilters,
   TicketOut,
+  TicketPage,
   WorkItemMetadataOut,
 } from "@/types/api";
 
@@ -98,10 +99,10 @@ const patch = <T>(p: string, body?: unknown) =>
   request<T>(p, { method: "PATCH", body: JSON.stringify(body ?? {}) });
 const del = <T>(p: string) => request<T>(p, { method: "DELETE" });
 
-function qs(params: Record<string, string | undefined>): string {
+function qs(params: Record<string, string | number | undefined>): string {
   const entries = Object.entries(params).filter(([, v]) => v != null && v !== "");
   if (!entries.length) return "";
-  return "?" + entries.map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`).join("&");
+  return "?" + entries.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join("&");
 }
 
 export const api = {
@@ -166,7 +167,7 @@ export const api = {
 
   // tickets
   listTickets: (params: TicketFilters = {}) =>
-    get<TicketOut[]>("/tickets" + qs(params as Record<string, string | undefined>)),
+    get<TicketPage>("/tickets" + qs(params as Record<string, string | number | undefined>)),
   getTicket: (externalId: string) => get<TicketDetailOut>(`/tickets/${externalId}`),
   linkedCases: (externalId: string) =>
     get<LinkedTestCaseOut[]>(`/tickets/${encodeURIComponent(externalId)}/linked-cases`),
