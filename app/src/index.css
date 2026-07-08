@@ -102,6 +102,24 @@
   100% { transform: translateX(320%); }
 }
 
+/* Auth screens (ADR 0007) — pulsing redirect logo + sliding progress bar. */
+@keyframes logoHalo {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes logoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.09); }
+}
+@keyframes ring {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+@keyframes authSlide {
+  0% { left: -42%; }
+  100% { left: 100%; }
+}
+
 * {
   box-sizing: border-box;
 }
