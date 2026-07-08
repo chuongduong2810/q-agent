@@ -34,6 +34,7 @@ class Ticket(Base):
     assignee: Mapped[str] = mapped_column(String(120), default="")
     sprint: Mapped[str] = mapped_column(String(120), default="")
     area_path: Mapped[str] = mapped_column(String(300), default="")
+    epic: Mapped[str] = mapped_column(String(300), default="")
 
     description: Mapped[str] = mapped_column(Text, default="")
     note: Mapped[str] = mapped_column(Text, default="")

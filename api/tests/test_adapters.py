@@ -234,6 +234,7 @@ def test_ado_work_item_metadata():
     assert meta["area_paths"][0]["path"] == "MyProj\\Brokers"
     assert set(meta["work_item_types"]) == {"Bug", "User Story"}
     assert "Ready for QA" in meta["states"] and "Active" in meta["states"]
+    assert meta["epics"] == []
 
 
 @respx.mock
@@ -320,6 +321,93 @@ def test_jira_fetch_tickets_normalizes_adf_description():
     assert t["priority"] == "High"
     assert "Tax should be 8%." in t["description"]
     assert t["labels"] == ["billing"]
+
+
+@respx.mock
+def test_jira_fetch_tickets_normalizes_epic_from_parent():
+    adapter = JiraAdapter(
+        config={"baseUrl": "https://myorg.atlassian.net", "project": "SUR"},
+        secrets={"email": "qa@myorg.com", "apiToken": "tok"},
+    )
+    respx.post("https://myorg.atlassian.net/rest/api/3/search/jql").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "issues": [
+                    {
+                        "key": "SUR-1428",
+                        "fields": {
+                            "summary": "Cart total miscalculates tax",
+                            "status": {"name": "Ready for QA"},
+                            "priority": {"name": "High"},
+                            "issuetype": {"name": "Bug"},
+                            "labels": [],
+                            "comment": {"comments": []},
+                            "attachment": [],
+                            "parent": {"fields": {"summary": "Checkout epic"}},
+                        },
+                    }
+                ]
+            },
+        )
+    )
+
+    tickets = adapter.fetch_tickets(mode="sprint", sprint="Sprint 12")
+    assert tickets[0]["epic"] == "Checkout epic"
+
+
+def test_jira_fetch_tickets_epic_defaults_empty_without_parent():
+    adapter = JiraAdapter(
+        config={"baseUrl": "https://myorg.atlassian.net", "project": "SUR"},
+        secrets={"email": "qa@myorg.com", "apiToken": "tok"},
+    )
+    ticket = adapter._normalize(
+        {
+            "key": "SUR-1",
+            "fields": {
+                "summary": "No epic",
+                "status": {"name": "Done"},
+                "priority": {"name": "Low"},
+                "issuetype": {"name": "Task"},
+            },
+        }
+    )
+    assert ticket["epic"] == ""
+
+
+@respx.mock
+def test_jira_work_item_metadata_includes_epics():
+    adapter = JiraAdapter(
+        config={"baseUrl": "https://myorg.atlassian.net", "project": "SUR"},
+        secrets={"email": "qa@myorg.com", "apiToken": "tok"},
+    )
+    respx.get("https://myorg.atlassian.net/rest/api/3/issuetype").mock(
+        return_value=httpx.Response(200, json=[{"name": "Bug"}])
+    )
+    respx.get("https://myorg.atlassian.net/rest/api/3/status").mock(
+        return_value=httpx.Response(200, json=[{"name": "Done"}])
+    )
+    respx.post("https://myorg.atlassian.net/rest/api/3/search/jql").mock(
+        return_value=httpx.Response(
+            200,
+            json={"issues": [{"key": "SUR-100", "fields": {"summary": "Checkout epic"}}]},
+        )
+    )
+    meta = adapter.list_work_item_metadata()
+    assert meta["epics"] == [{"key": "SUR-100", "name": "Checkout epic"}]
+
+
+@respx.mock
+def test_jira_work_item_metadata_epics_empty_on_error():
+    adapter = JiraAdapter(
+        config={"baseUrl": "https://myorg.atlassian.net", "project": "SUR"},
+        secrets={"email": "qa@myorg.com", "apiToken": "tok"},
+    )
+    respx.get("https://myorg.atlassian.net/rest/api/3/issuetype").mock(
+        side_effect=httpx.ConnectError("boom")
+    )
+    meta = adapter.list_work_item_metadata()
+    assert meta["epics"] == []
 
 
 # ---------------------------------------------------------------- GitHub

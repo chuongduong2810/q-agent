@@ -1,7 +1,9 @@
 """Tickets router.
 
 Endpoints to implement:
-  GET  /tickets                     -> list[TicketOut]      (query: status, assignee, sprint, q)
+  GET  /tickets                     -> TicketPageOut         (query: status, assignee, sprint,
+                                                                connection_id, provider_kind,
+                                                                priority, epic, q, page, page_size)
   GET  /tickets/{external_id}        -> TicketDetailOut
   POST /tickets/sync                 -> SyncResult           (body: SyncRequest; live adapter pull)
 """
@@ -20,6 +22,7 @@ from app.schemas import (
     SyncResult,
     TicketDetailOut,
     TicketOut,
+    TicketPageOut,
 )
 from app.services import audit_service, connection_service
 from app.services.adapters.base import ProviderError
@@ -27,7 +30,7 @@ from app.services.adapters.base import ProviderError
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 
-@router.get("", response_model=list[TicketOut])
+@router.get("", response_model=TicketPageOut)
 def list_tickets(
     status: str | None = None,
     assignee: str | None = None,
@@ -36,9 +39,19 @@ def list_tickets(
     states: str | None = None,  # comma-separated
     work_item_types: str | None = None,  # comma-separated
     q: str | None = None,
+    connection_id: int | None = None,
+    provider_kind: str | None = None,
+    priority: str | None = None,
+    epic: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
     db: Session = Depends(get_db),
-) -> list[TicketOut]:
+) -> TicketPageOut:
     query = db.query(Ticket)
+    if connection_id:
+        query = query.filter(Ticket.connection_id == connection_id)
+    if provider_kind:
+        query = query.filter(Ticket.provider_kind == provider_kind)
     if status:
         query = query.filter(Ticket.status == status)
     if assignee:
@@ -54,10 +67,27 @@ def list_tickets(
     type_list = [t for t in (work_item_types or "").split(",") if t]
     if type_list:
         query = query.filter(Ticket.work_item_type.in_(type_list))
+    if priority:
+        query = query.filter(Ticket.priority == priority)
+    if epic:
+        query = query.filter(Ticket.epic == epic)
     if q:
         like = f"%{q}%"
         query = query.filter((Ticket.title.ilike(like)) | (Ticket.external_id.ilike(like)))
-    return [TicketOut.model_validate(t) for t in query.all()]
+
+    total = query.count()
+    items = (
+        query.order_by(Ticket.synced_at.desc().nullslast(), Ticket.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return TicketPageOut(
+        items=[TicketOut.model_validate(t) for t in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/{external_id}", response_model=TicketDetailOut)
@@ -169,6 +199,7 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
         ticket.assignee = item.get("assignee", "")
         ticket.sprint = item.get("sprint", "")
         ticket.area_path = item.get("area_path", "")
+        ticket.epic = item.get("epic", "")
         ticket.description = item.get("description", "")
         ticket.note = item.get("note", "")
         ticket.labels = item.get("labels", [])
