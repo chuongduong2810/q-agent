@@ -9,6 +9,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  ALL_TICKETS_PAGE_SIZE,
   useAutomationStatus,
   useExecution,
   useGenerateAutomation,
@@ -111,7 +112,8 @@ export function Automation() {
   const startExecution = useStartExecution(runId);
   const { data: autoStatus } = useAutomationStatus(runId);
   const { data: repoOptions } = useRunRepos(runId);
-  const { data: tickets } = useTickets();
+  const { data: ticketsPage } = useTickets({ pageSize: ALL_TICKETS_PAGE_SIZE });
+  const tickets = ticketsPage?.items;
   const { data: execution } = useExecution(runId);
   const setTicketRepo = useSetRunTicketRepo(runId);
   const healSpec = useHealSpec(runId);

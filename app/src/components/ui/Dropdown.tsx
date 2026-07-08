@@ -9,8 +9,9 @@ export interface Option {
   hint?: string;
 }
 
-/** Shared trigger + floating glass panel used by Select / MultiSelect. */
-function DropdownShell({
+/** Shared trigger + floating glass panel used by Select / MultiSelect (and any
+ * custom-labeled dropdown, e.g. the Tickets connection picker). */
+export function DropdownShell({
   active,
   label,
   onClear,
