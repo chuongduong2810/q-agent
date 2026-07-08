@@ -1,7 +1,7 @@
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Spinner } from "@/components/ui/misc";
 import { ProviderGroup } from "@/components/settings/ProviderGroup";
-import { CATEGORY_SECTIONS, PROVIDER_META } from "@/components/settings/providerMeta";
+import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMeta";
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
 import type { ProviderGroupOut, ProviderKind } from "@/types/api";
@@ -10,7 +10,7 @@ import type { ProviderGroupOut, ProviderKind } from "@/types/api";
  * so synthesize an empty group the user can add a first connection under. */
 const emptyGroup = (kind: ProviderKind): ProviderGroupOut => ({
   kind,
-  category: PROVIDER_META[kind].category,
+  categories: PROVIDER_META[kind].categories,
   name: PROVIDER_META[kind].name,
   connectionCount: 0,
   connectedCount: 0,
@@ -34,23 +34,17 @@ export function Settings() {
         <h1 className="m-0 text-[28px] font-black tracking-tight">Settings</h1>
       </div>
 
+      <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PROVIDER CONNECTIONS</div>
       {providersLoading ? (
         <div className="mb-[26px] flex justify-center py-10">
           <Spinner />
         </div>
       ) : (
-        CATEGORY_SECTIONS.map((section) => (
-          <div key={section.category} className="mb-[26px]">
-            <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
-              {section.label.toUpperCase()}
-            </div>
-            <div className="flex flex-col gap-3.5">
-              {section.kinds.map((kind) => (
-                <ProviderGroup key={kind} group={groupFor(kind)} />
-              ))}
-            </div>
-          </div>
-        ))
+        <div className="mb-[26px] flex flex-col gap-3.5">
+          {PROVIDER_ORDER.map((kind) => (
+            <ProviderGroup key={kind} group={groupFor(kind)} />
+          ))}
+        </div>
       )}
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PROFILE</div>

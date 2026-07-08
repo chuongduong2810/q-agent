@@ -30,19 +30,15 @@ export const PROVIDER_FIELDS: Record<ProviderKind, FieldSpec[]> = {
 
 export const PROVIDER_META: Record<
   ProviderKind,
-  { name: string; glyph: string; color: string; glyphColor: string; category: ProviderCategory }
+  { name: string; glyph: string; color: string; glyphColor: string; categories: ProviderCategory[] }
 > = {
-  ado: { name: "Azure DevOps", glyph: "A", color: "#0078d4", glyphColor: "#fff", category: "work_item" },
-  jira: { name: "Jira", glyph: "J", color: "#2684ff", glyphColor: "#fff", category: "work_item" },
-  github: { name: "GitHub", glyph: "G", color: "#24292f", glyphColor: "#fff", category: "repository" },
+  ado: { name: "Azure DevOps", glyph: "A", color: "#0078d4", glyphColor: "#fff", categories: ["work_item", "repository"] },
+  jira: { name: "Jira", glyph: "J", color: "#2684ff", glyphColor: "#fff", categories: ["work_item"] },
+  github: { name: "GitHub", glyph: "G", color: "#24292f", glyphColor: "#fff", categories: ["repository"] },
 };
 
-/** The two category sections, in render order (work-item first), each with the
- * provider kinds that belong to it. Mirrors the backend PROVIDER_CATEGORY map. */
-export const CATEGORY_SECTIONS: { category: ProviderCategory; label: string; kinds: ProviderKind[] }[] = [
-  { category: "work_item", label: "Work Item Providers", kinds: ["ado", "jira"] },
-  { category: "repository", label: "Repository Providers", kinds: ["github"] },
-];
+/** Fixed render order for the flat Settings provider list (ADR 0006 §4). */
+export const PROVIDER_ORDER: ProviderKind[] = ["ado", "jira", "github"];
 
 /** Human summary of a connection's non-secret config (e.g. the org + project),
  * or empty string when nothing is configured yet. */
