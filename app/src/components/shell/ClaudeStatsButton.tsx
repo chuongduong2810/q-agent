@@ -89,10 +89,18 @@ export function ClaudeStatsButton() {
           </>
         ) : (
           <>
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: operational ? "#34d399" : "#f43f5e" }}
-            />
+            <span className="relative flex h-1.5 w-1.5">
+              {operational && (
+                <span
+                  className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70"
+                  style={{ background: "#34d399" }}
+                />
+              )}
+              <span
+                className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                style={{ background: operational ? "#34d399" : "#f43f5e" }}
+              />
+            </span>
             <Star size={12} strokeWidth={2} style={{ color: "#fbbf24" }} fill="#fbbf24" />
             {label}
             <ChevronDown size={12} strokeWidth={2} />

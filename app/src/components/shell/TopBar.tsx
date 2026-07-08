@@ -1,49 +1,21 @@
-import { ChevronDown, Plus, Search } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Plus, Search } from "lucide-react";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
 import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
+import { ProjectStatusButton } from "@/components/shell/ProjectStatusButton";
 import { RunContextHeader } from "@/components/shell/RunContextHeader";
-import { useProjects } from "@/hooks/queries";
 import { useRunRouteId } from "@/hooks/useRunRouteId";
 import { useUI } from "@/store/ui";
 
 export function TopBar() {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
   const openPalette = useUI((s) => s.openPalette);
   const openCreateRun = useUI((s) => s.openCreateRun);
-  const { data: projects } = useProjects();
   const runId = useRunRouteId();
 
   // On a run-scoped screen the global bar is replaced by the run-context header.
   if (runId != null) return <RunContextHeader runId={runId} />;
 
-  // Project label: the project from the URL when on a project route, else the
-  // first connected project. Empty when none are connected yet.
-  const projMatch = pathname.match(/^\/projects\/([^/]+)/);
-  const activeProject = projMatch
-    ? decodeURIComponent(projMatch[1])
-    : (projects?.[0]?.name ?? "");
-  const projectLabel = activeProject || "No project";
-
   return (
     <header className="glass-strong flex h-[56px] shrink-0 items-center gap-3.5 rounded-[18px] px-[18px]">
-      <button
-        onClick={() => navigate("/projects")}
-        className="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-[7px] hover:bg-white/[0.09]"
-      >
-        <div
-          className="h-5 w-5 rounded-md"
-          style={{ background: "linear-gradient(135deg,#22d3ee,#6366f1)" }}
-        />
-        <span
-          className={`whitespace-nowrap text-[13px] font-semibold ${activeProject ? "text-ink" : "text-ink-dim"}`}
-        >
-          {projectLabel}
-        </span>
-        <ChevronDown size={14} color="#8a8a9c" strokeWidth={2} />
-      </button>
-
       <button
         onClick={openPalette}
         className="flex h-[38px] max-w-[420px] flex-1 cursor-text items-center gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.04] px-3.5 text-[#7a7a8c] hover:border-[rgba(139,92,246,.4)]"
@@ -57,6 +29,7 @@ export function TopBar() {
 
       <div className="ml-auto flex items-center gap-2">
         <AiActivityIndicator />
+        <ProjectStatusButton />
         <ClaudeStatsButton />
         <button
           onClick={openCreateRun}

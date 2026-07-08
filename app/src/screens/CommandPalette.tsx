@@ -1,15 +1,17 @@
 import { Command } from "cmdk";
 import { motion } from "framer-motion";
 import {
+  ArrowRight,
   BarChart3,
   CheckSquare,
-  FolderKanban,
+  CornerDownLeft,
   Image,
   LayoutDashboard,
   ListChecks,
   Plus,
   Settings as SettingsIcon,
   SquareStack,
+  Star,
   Terminal,
   Ticket,
 } from "lucide-react";
@@ -18,10 +20,16 @@ import { useNavigate } from "react-router-dom";
 import { useRunRouteId } from "@/hooks/useRunRouteId";
 import { useUI } from "@/store/ui";
 
+/** Section headings, rendered in this order as grouped blocks. */
+const SECTIONS = ["Actions", "Navigate"] as const;
+type Section = (typeof SECTIONS)[number];
+
 interface PaletteCommand {
   id: string;
   label: string;
-  section: string;
+  /** Sub-label shown beneath the command name. */
+  description: string;
+  section: Section;
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
   run: () => void;
   /** Reachable only from within a run (workspace mode) — hidden off run routes. */
@@ -29,7 +37,7 @@ interface PaletteCommand {
 }
 
 /** Command palette overlay (⌘K) — cmdk-driven, matching Q-Agent.dc.html lines
- * 556-564 (frosted overlay, scaleIn card, ⌘K input, filtered result list). */
+ * 556-564 (frosted overlay, scaleIn card, ⌘K input, grouped result list). */
 export function CommandPalette() {
   const open = useUI((s) => s.paletteOpen);
   const query = useUI((s) => s.paletteQuery);
@@ -55,34 +63,32 @@ export function CommandPalette() {
   const runPath = (seg: string) => `/runs/${runId}/${seg}`;
 
   const commands: PaletteCommand[] = [
-    { id: "dashboard", label: "Go to Dashboard", section: "Navigate", icon: LayoutDashboard, run: go("/") },
-    { id: "tickets", label: "Go to Tickets", section: "Navigate", icon: Ticket, run: go("/tickets") },
-    { id: "runs", label: "Go to Runs", section: "Navigate", icon: SquareStack, run: go("/runs") },
-    { id: "review", label: "Go to Review Center", section: "Navigate", icon: CheckSquare, run: go(runPath("review")), runScoped: true },
-    { id: "automation", label: "Go to Automation", section: "Navigate", icon: Terminal, run: go(runPath("automation")), runScoped: true },
-    { id: "console", label: "Go to Execution", section: "Navigate", icon: ListChecks, run: go(runPath("execution")), runScoped: true },
-    { id: "evidence", label: "Go to Evidence", section: "Navigate", icon: Image, run: go(runPath("evidence")), runScoped: true },
-    { id: "reports", label: "Go to Reports", section: "Navigate", icon: BarChart3, run: go("/reports") },
-    { id: "settings", label: "Go to Settings", section: "Navigate", icon: SettingsIcon, run: go("/settings") },
     {
       id: "create-run",
       label: "Create a Run",
-      section: "Action",
+      description: "Batch a new QA session",
+      section: "Actions",
       icon: Plus,
       run: () => {
         openCreateRun();
         closePalette();
       },
     },
-    { id: "run-execution", label: "Run execution", section: "Action", icon: Terminal, run: go(runPath("execution")), runScoped: true },
+    { id: "run-execution", label: "Run execution", description: "Launch the run pipeline", section: "Actions", icon: Terminal, run: go(runPath("execution")), runScoped: true },
+    { id: "dashboard", label: "Go to Dashboard", description: "Mission control", section: "Navigate", icon: LayoutDashboard, run: go("/") },
+    { id: "tickets", label: "Go to Tickets", description: "Synced from providers", section: "Navigate", icon: Ticket, run: go("/tickets") },
+    { id: "runs", label: "Go to Runs", description: "All batch executions", section: "Navigate", icon: SquareStack, run: go("/runs") },
+    { id: "review", label: "Go to Review Center", description: "Approve & edit cases", section: "Navigate", icon: CheckSquare, run: go(runPath("review")), runScoped: true },
+    { id: "automation", label: "Go to Automation", description: "Playwright & scripts", section: "Navigate", icon: Terminal, run: go(runPath("automation")), runScoped: true },
+    { id: "console", label: "Go to Execution", description: "Live run console", section: "Navigate", icon: ListChecks, run: go(runPath("execution")), runScoped: true },
+    { id: "evidence", label: "Go to Evidence", description: "Screens & artifacts", section: "Navigate", icon: Image, run: go(runPath("evidence")), runScoped: true },
+    { id: "reports", label: "Go to Reports", description: "Pass rate & spend", section: "Navigate", icon: BarChart3, run: go("/reports") },
+    { id: "settings", label: "Go to Settings", description: "Providers & AI config", section: "Navigate", icon: SettingsIcon, run: go("/settings") },
   ];
 
   // Run-scoped screens (Review/Automation/Execution/Evidence) are reachable only
   // from within a run — hide them unless the URL already resolves a run.
   const visibleCommands = commands.filter((c) => !c.runScoped || runId != null);
-
-  // Also route "Projects" — not in the design's default list but keeps
-  // parity with the sidebar; kept out of the frozen command set above.
 
   return (
     <div
@@ -111,31 +117,64 @@ export function CommandPalette() {
               ref={inputRef}
               value={query}
               onValueChange={setQuery}
-              placeholder="Type a command or search…"
+              placeholder="Search screens, runs, or ask Q‑Agent…"
               className="flex-1 border-none bg-transparent text-[16px] text-ink outline-none placeholder:text-[#7a7a8c]"
             />
             <span className="rounded-md bg-white/[0.06] px-2 py-[3px] font-mono text-[11px] text-[#8b8b9e]">ESC</span>
           </div>
-          <Command.List className="max-h-[340px] overflow-y-auto p-2">
+          <Command.List className="max-h-[340px] overflow-y-auto p-2 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-[#6a6a7c]">
             <Command.Empty className="px-3 py-6 text-center text-[13px] text-ink-dim">No matching commands.</Command.Empty>
-            {visibleCommands.map((cmd) => {
-              const Icon = cmd.icon;
-              return (
-                <Command.Item
-                  key={cmd.id}
-                  value={cmd.label}
-                  onSelect={cmd.run}
-                  className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl px-[13px] py-[11px] text-left data-[selected=true]:bg-[rgba(139,92,246,.16)]"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.06]">
-                    <Icon size={15} strokeWidth={2} />
-                  </span>
-                  <span className="flex-1 text-[14px] font-medium text-ink">{cmd.label}</span>
-                  <span className="text-[11px] font-medium text-[#7a7a8c]">{cmd.section}</span>
-                </Command.Item>
-              );
-            })}
+            {SECTIONS.map((section) => (
+              <Command.Group key={section} heading={section}>
+                {visibleCommands
+                  .filter((cmd) => cmd.section === section)
+                  .map((cmd) => {
+                    const Icon = cmd.icon;
+                    return (
+                      <Command.Item
+                        key={cmd.id}
+                        value={cmd.label}
+                        onSelect={cmd.run}
+                        className="group flex w-full cursor-pointer items-center gap-[13px] rounded-xl px-[13px] py-[9px] text-left data-[selected=true]:bg-[rgba(139,92,246,.16)]"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.06] text-ink-soft">
+                          <Icon size={16} strokeWidth={2} />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-[14px] font-semibold text-ink">{cmd.label}</span>
+                          <span className="truncate text-[12px] text-[#7a7a8c]">{cmd.description}</span>
+                        </span>
+                        <ArrowRight
+                          size={15}
+                          strokeWidth={2}
+                          className="shrink-0 text-[#5a5a6c] transition group-data-[selected=true]:translate-x-0.5 group-data-[selected=true]:text-[#a78bfa]"
+                        />
+                      </Command.Item>
+                    );
+                  })}
+              </Command.Group>
+            ))}
           </Command.List>
+          <div className="flex items-center justify-between border-t border-white/[0.07] px-4 py-2.5 text-[11px] text-[#7a7a8c]">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5">
+                <kbd className="flex h-5 min-w-5 items-center justify-center rounded-md bg-white/[0.06] px-1">
+                  <CornerDownLeft size={11} strokeWidth={2} />
+                </kbd>
+                open
+              </span>
+              <span className="flex items-center gap-1.5">
+                <kbd className="flex h-5 min-w-5 items-center justify-center rounded-md bg-white/[0.06] px-1 font-mono">
+                  ↑↓
+                </kbd>
+                navigate
+              </span>
+            </div>
+            <span className="flex items-center gap-1.5 font-medium">
+              <Star size={11} strokeWidth={2} style={{ color: "#fbbf24" }} fill="#fbbf24" />
+              Powered by Claude
+            </span>
+          </div>
         </Command>
       </motion.div>
     </div>
