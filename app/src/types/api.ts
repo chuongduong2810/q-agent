@@ -383,6 +383,7 @@ export interface RunOut {
   status: RunStatus;
   createdAt: string;
   finishedAt?: string;
+  cancelledAt?: string;
   failedStage?: string;
   ticketIds: string[];
 }

@@ -426,6 +426,7 @@ class RunOut(ApiModel):
     status: str
     created_at: datetime
     finished_at: datetime | None = None
+    cancelled_at: datetime | None = None
     failed_stage: str | None = None
     ticket_ids: list[str] = Field(default_factory=list)
 

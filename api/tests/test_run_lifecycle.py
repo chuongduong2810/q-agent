@@ -32,6 +32,9 @@ def test_cancel_sets_cancelled_and_terminal_guard(client, db_session):
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "cancelled"
+    # The response must expose the cancel/finish timestamps (RunOut serialization).
+    assert body["cancelledAt"] is not None
+    assert body["finishedAt"] is not None
 
     db_session.refresh(run)
     assert run.status == "cancelled"
