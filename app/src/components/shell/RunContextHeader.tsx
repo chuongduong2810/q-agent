@@ -1,8 +1,10 @@
 import { CheckSquare, ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
 import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
+import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import { runRateLabel } from "@/components/dashboard/runStatus";
 import { useRun } from "@/hooks/queries";
@@ -16,6 +18,7 @@ import { useRun } from "@/hooks/queries";
  */
 export function RunContextHeader({ runId }: { runId: number }) {
   const { data: run } = useRun(runId);
+  const navigate = useNavigate();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -66,6 +69,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
         >
           Switch run <ChevronDown size={12} strokeWidth={2} />
         </button>
+        {run && <RunActionsMenu run={run} onDeleted={() => navigate("/runs")} />}
       </div>
 
       <RunSwitcher

@@ -32,6 +32,14 @@ const RUN_STATUS_LABEL: Record<string, string> = {
   evidence: "Evidence ready",
   comment: "Publishing",
   done: "Complete",
+  cancelled: "Cancelled",
+  failed: "Failed",
+};
+
+/** Badge color per status; in-progress stages share the design's amber. */
+const RUN_STATUS_BADGE: Record<string, { color: string; bg: string }> = {
+  cancelled: { color: "#d1d5db", bg: "rgba(156,163,175,.16)" },
+  failed: { color: "#fb7185", bg: "rgba(244,63,94,.14)" },
 };
 
 /** Run detail: pipeline stage, live processing banner, and per-ticket generation status. */
@@ -92,8 +100,11 @@ export function RunDetail() {
           <div className="mb-1.5 flex items-center gap-2.5">
             <span className="font-mono text-[13px] font-semibold text-violet">{run.code}</span>
             <span
-              className="rounded-full px-2.5 py-[3px] text-[11px] font-bold text-[#fbbf24]"
-              style={{ background: "rgba(245,158,11,.14)" }}
+              className="rounded-full px-2.5 py-[3px] text-[11px] font-bold"
+              style={{
+                color: RUN_STATUS_BADGE[run.status]?.color ?? "#fbbf24",
+                background: RUN_STATUS_BADGE[run.status]?.bg ?? "rgba(245,158,11,.14)",
+              }}
             >
               {RUN_STATUS_LABEL[run.status] ?? run.status}
             </span>

@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/ui/misc";
 import { useRuns } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
+import { isTerminalRun } from "@/components/dashboard/runStatus";
+import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
 import type { RunOut } from "@/types/api";
 
 const RUN_STATUS_LABEL: Record<string, string> = {
@@ -17,6 +19,8 @@ const RUN_STATUS_LABEL: Record<string, string> = {
   evidence: "Evidence ready",
   comment: "Publishing",
   done: "Complete",
+  cancelled: "Cancelled",
+  failed: "Failed",
 };
 
 /**
@@ -30,11 +34,12 @@ export function Runs() {
 
   const { data: runs, isLoading } = useRuns();
 
-  // Runs arrive newest-first (the API orders by created_at desc).
-  const activeRuns = (runs ?? []).filter((r) => r.status !== "done");
+  // Runs arrive newest-first (the API orders by created_at desc). All terminal
+  // states (done/cancelled/failed) fall into History — see ADR 0005.
+  const activeRuns = (runs ?? []).filter((r) => !isTerminalRun(r.status));
   const heroRun = activeRuns[0];
   const otherActive = activeRuns.slice(1);
-  const history = (runs ?? []).filter((r) => r.status === "done");
+  const history = (runs ?? []).filter((r) => isTerminalRun(r.status));
 
   const goRun = (run: RunOut) => navigate(`/runs/${run.id}`);
   const goReview = (run: RunOut) => navigate(`/runs/${run.id}/review`);
@@ -162,7 +167,16 @@ function RunRow({
   active?: boolean;
 }) {
   const stage = runStatusToStage[run.status] ?? 8;
-  const color = active ? "#f59e0b" : stage >= 8 ? "#10b981" : "#f59e0b";
+  const color =
+    run.status === "cancelled"
+      ? "#9ca3af"
+      : run.status === "failed"
+        ? "#fb7185"
+        : active
+          ? "#f59e0b"
+          : stage >= 8
+            ? "#10b981"
+            : "#f59e0b";
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -193,6 +207,7 @@ function RunRow({
       <span className="shrink-0 whitespace-nowrap text-right text-[15px] font-extrabold" style={{ color }}>
         {RUN_STATUS_LABEL[run.status] ?? run.status}
       </span>
+      <RunActionsMenu run={run} />
     </motion.div>
   );
 }
