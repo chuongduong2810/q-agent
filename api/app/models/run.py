@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base, timestamp_column
+from app.db import Base, UTCDateTime, timestamp_column
 
 # Pipeline stages (also the Run.status state machine).
 RUN_STATUSES = (
@@ -19,7 +19,11 @@ RUN_STATUSES = (
     "evidence",
     "comment",
     "done",
+    "cancelled",  # user-requested cancel
+    "failed",  # worker error
 )
+# Terminal statuses — see ADR 0005: a terminal run is never advanced by a worker.
+TERMINAL_RUN_STATUSES = frozenset({"done", "cancelled", "failed"})
 RUN_SCOPES = ("single", "selected", "assigned", "sprint")
 
 # Per-ticket generation status inside a run.
@@ -43,6 +47,11 @@ class Run(Base):
 
     status: Mapped[str] = mapped_column(String(32), default="processing", index=True)
     created_at: Mapped[datetime] = timestamp_column()
+    # Lifecycle metadata (ADR 0005) — set exclusively via app.services.run_status.
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    failed_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     run_tickets: Mapped[list["RunTicket"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="RunTicket.position"

@@ -277,7 +277,7 @@ def test_run_execution_end_to_end_with_mocked_subprocess(client, db_session, mon
     fake_stdout = "Running 1 test using 1 worker\n  1 passed (99ms)"
     fake_stderr = "warning: some deprecation notice"
 
-    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file="", **_kwargs):
         import json as _json
 
         (spec_dir_arg / "report.json").write_text(_json.dumps(report), encoding="utf-8")
@@ -357,7 +357,7 @@ def test_run_single_spec_runs_only_that_spec(client, db_session, monkeypatch):
         ]
     }
 
-    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file="", **_kwargs):
         captured["spec_file"] = spec_file
         (spec_dir_arg / "report.json").write_text(_json.dumps(report), encoding="utf-8")
         return 0, "1 passed", ""
@@ -477,7 +477,7 @@ def test_run_execution_manual_auth_capture_success(client, db_session, monkeypat
         captured["base_url"] = base_url
         return True
 
-    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file="", **_kwargs):
         # A minimal valid (empty) report so the run finishes cleanly.
         (spec_dir_arg / "report.json").write_text('{"suites": []}', encoding="utf-8")
         return 0, "ok", ""
@@ -586,7 +586,7 @@ def test_run_execution_manual_auth_applies_session_fixtures(client, db_session, 
         )
         return True
 
-    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file="", **_kwargs):
         (spec_dir_arg / "report.json").write_text('{"suites": []}', encoding="utf-8")
         return 0, "ok", ""
 
@@ -622,7 +622,7 @@ def test_run_execution_non_auth_leaves_playwright_import(client, db_session, mon
         encoding="utf-8",
     )
 
-    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
+    def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file="", **_kwargs):
         (spec_dir_arg / "report.json").write_text('{"suites": []}', encoding="utf-8")
         return 0, "ok", ""
 

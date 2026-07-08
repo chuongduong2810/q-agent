@@ -18,15 +18,32 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.comment import TicketComment
 from app.models.report import Report
+from app.models.run import Run
 from app.models.ticket import Ticket
 from app.schemas import CommentEdit, PublishRequest, TicketCommentOut
 from app.services import claude_cli
 from app.services.claude_cli import ClaudeError
 from app.services.publish_service import publish_one
 from app.services.report_service import build_report
+from app.services.run_status import set_run_status
 from app.services.skills import TICKET_COMMENT_GENERATOR
 
 router = APIRouter(tags=["comments"])
+
+
+def _maybe_finish_run(db: Session, run_id: int) -> None:
+    """Close the ADR 0005 'done' gap: once every comment for the run has
+    reached a terminal outcome (published or failed), the pipeline — whose
+    last stage is publishing results comments — has reached its natural end.
+    """
+    run = db.get(Run, run_id)
+    if run is None:
+        return
+    comments = db.execute(
+        select(TicketComment).where(TicketComment.run_id == run_id)
+    ).scalars().all()
+    if comments and all(c.status in ("published", "failed") for c in comments):
+        set_run_status(db, run, "done")
 
 # Status mapping applied to the provider work item once a comment is published.
 # All cases passing -> "Passed"; any failure -> "QA Failed".
@@ -146,6 +163,11 @@ def prepare_comments(run_id: int, db: Session = Depends(get_db)) -> list[TicketC
     db.commit()
     for c in comments:
         db.refresh(c)
+
+    run = db.get(Run, run_id)
+    if run is not None:
+        set_run_status(db, run, "comment")
+
     return comments
 
 
@@ -178,7 +200,9 @@ def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_d
 @router.post("/comments/{comment_id}/publish", response_model=TicketCommentOut)
 def publish_comment(comment_id: int, db: Session = Depends(get_db)) -> TicketComment:
     comment = _get_comment_or_404(db, comment_id)
-    return publish_one(db, comment)
+    result = publish_one(db, comment)
+    _maybe_finish_run(db, comment.run_id)
+    return result
 
 
 @router.post("/runs/{run_id}/comments/publish", response_model=list[TicketCommentOut])
@@ -189,7 +213,9 @@ def publish_comments(
     if body.ticket_ids:
         stmt = stmt.where(TicketComment.ticket_external_id.in_(body.ticket_ids))
     comments = list(db.execute(stmt).scalars())
-    return [publish_one(db, c) for c in comments]
+    results = [publish_one(db, c) for c in comments]
+    _maybe_finish_run(db, run_id)
+    return results
 
 
 @router.post("/runs/{run_id}/comments/retry", response_model=list[TicketCommentOut])
@@ -198,4 +224,6 @@ def retry_comments(run_id: int, db: Session = Depends(get_db)) -> list[TicketCom
         TicketComment.run_id == run_id, TicketComment.status == "failed"
     )
     comments = list(db.execute(stmt).scalars())
-    return [publish_one(db, c) for c in comments]
+    results = [publish_one(db, c) for c in comments]
+    _maybe_finish_run(db, run_id)
+    return results

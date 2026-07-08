@@ -1,11 +1,14 @@
 """Runs + AI analysis + test-case generation router.
 
 Endpoints implemented:
-  GET  /runs                      -> list[RunOut]
-  POST /runs                      -> RunDetailOut     (body: RunCreate; kicks off async AI pipeline)
-  GET  /runs/{run_id}             -> RunDetailOut
-  GET  /runs/{run_id}/tickets     -> list[RunTicketOut]  (per-ticket analysis + gen status)
-  POST /runs/{run_id}/regenerate  -> RunDetailOut     (re-run analysis/generation)
+  GET    /runs                      -> list[RunOut]
+  POST   /runs                      -> RunDetailOut     (body: RunCreate; kicks off async AI pipeline)
+  GET    /runs/{run_id}             -> RunDetailOut
+  GET    /runs/{run_id}/tickets     -> list[RunTicketOut]  (per-ticket analysis + gen status)
+  POST   /runs/{run_id}/regenerate  -> RunDetailOut     (re-run analysis/generation)
+  POST   /runs/{run_id}/cancel      -> RunOut            (ADR 0005 — cancel an in-progress run)
+  POST   /runs/{run_id}/retry       -> RunOut            (ADR 0005 — resume a terminal run)
+  DELETE /runs/{run_id}             -> 204                (ADR 0005 — hard delete + cascade)
 
 On create: for each ticket -> Claude analyze (business rules, risks, edge cases…)
 -> Claude generate ADO-style test cases -> persist TestCase rows -> advance
@@ -19,10 +22,18 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.db import get_db
-from app.models.run import Run, RunTicket
+from app.db import get_db, utcnow
+from app.models.claude_usage import ClaudeUsage
+from app.models.comment import TicketComment
+from app.models.execution import Execution
+from app.models.linked import LinkedTestCase
+from app.models.report import Report
+from app.models.run import TERMINAL_RUN_STATUSES, Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
+from app.routers import automation as automation_router
+from app.routers import comments as comments_router
+from app.routers import execution as execution_router
 from app.schemas import (
     RunCreate,
     RunDetailOut,
@@ -31,10 +42,24 @@ from app.schemas import (
     RunTicketOut,
     RunTicketRepoUpdate,
 )
-from app.services import ai_usage_service, audit_service, project_config_service
+from app.services import ai_usage_service, audit_service, link_service, project_config_service, run_control
 from app.services.ai_service import run_generation_pipeline
+from app.services.run_status import force_status, set_run_status
 
 router = APIRouter(prefix="/runs", tags=["runs"])
+
+# ADR 0005 retry dispatch table: failed_stage (resume from) -> resume stage.
+# "review" has nothing of its own to resume (it's a user-gated stop) so it
+# re-runs AI generation; unknown/null falls back to "processing" too.
+_RETRY_RESUME_STAGE = {
+    "processing": "processing",
+    "review": "processing",
+    "sync": "sync",
+    "automation": "automation",
+    "executing": "executing",
+    "evidence": "executing",
+    "comment": "comment",
+}
 
 SCOPE_LABELS = {
     "single": "Single ticket",
@@ -227,10 +252,8 @@ def regenerate_run(run_id: int, db: Session = Depends(get_db)) -> Run:
         run_ticket.analysis_error = ""
         db.add(run_ticket)
 
-    run.status = "processing"
-    db.add(run)
     db.commit()
-    db.refresh(run)
+    set_run_status(db, run, "processing")
 
     audit_service.record(
         category="run", actor_type="user", action="Regenerated run",
@@ -244,3 +267,122 @@ def regenerate_run(run_id: int, db: Session = Depends(get_db)) -> Run:
     db.refresh(run)
 
     return run
+
+
+@router.post("/{run_id}/cancel", response_model=RunOut)
+def cancel_run(run_id: int, db: Session = Depends(get_db)) -> Run:
+    """Cancel an in-progress run (ADR 0005). 409 if it's already terminal.
+
+    Persists ``cancel_requested``/``cancelled_at``, signals the in-memory
+    cancel event, kills any tracked live subprocess (mid-case Playwright kill),
+    then transitions the run to ``cancelled`` — authoritative because every
+    worker checkpoint checks the terminal guard before advancing.
+    """
+    run = _get_run_or_404(db, run_id)
+    if run.status in TERMINAL_RUN_STATUSES:
+        raise HTTPException(status_code=409, detail="Run is already terminal")
+
+    run.cancel_requested = True
+    run.cancelled_at = utcnow()
+    db.add(run)
+    db.commit()
+
+    run_control.request_cancel(run.id)
+    run_control.kill_processes(run.id)
+    set_run_status(db, run, "cancelled")
+
+    audit_service.record(
+        category="run", actor_type="user", action="Cancelled run", target=run.code,
+    )
+    db.refresh(run)
+    return run
+
+
+@router.post("/{run_id}/retry", response_model=RunOut)
+def retry_run(run_id: int, db: Session = Depends(get_db)) -> Run:
+    """Resume a terminal run from ``failed_stage`` (ADR 0005 dispatch table).
+
+    409 unless the run is terminal (``done``/``cancelled``/``failed``). Resets
+    the cancel bookkeeping, clears the in-process cancel/process registry, then
+    directly moves the run out of its terminal status (bypassing the guard —
+    this is the one intentional exception to it) and re-dispatches the resume
+    stage's existing worker entry point.
+    """
+    run = _get_run_or_404(db, run_id)
+    if run.status not in TERMINAL_RUN_STATUSES:
+        raise HTTPException(status_code=409, detail="Run is not terminal — cancel it first")
+
+    resume_stage = _RETRY_RESUME_STAGE.get(run.failed_stage or "", "processing")
+
+    run_control.clear(run.id)
+    run.cancel_requested = False
+    run.cancelled_at = None
+    run.finished_at = None
+    run.failed_stage = None
+    db.add(run)
+    db.commit()
+
+    force_status(db, run, resume_stage)
+
+    audit_service.record(
+        category="run", actor_type="user", action="Retried run",
+        target=f"{run.code} · resumed at {resume_stage}",
+    )
+
+    if resume_stage == "processing":
+        # Clear prior AI output so the pipeline starts fresh (mirrors regenerate_run).
+        db.query(TestCase).filter(TestCase.run_id == run.id).delete()
+        for run_ticket in db.query(RunTicket).filter(RunTicket.run_id == run.id).all():
+            run_ticket.gen_status = "queued"
+            run_ticket.analysis = {}
+            run_ticket.analysis_error = ""
+            db.add(run_ticket)
+        db.commit()
+        run_generation_pipeline(run.id, blocking=False)
+    elif resume_stage == "sync":
+        link_service.start_create_link(run.id, link=True, ticket_ids=None)
+    elif resume_stage == "automation":
+        automation_router.generate_automation(run.id, force=False, db=db)
+    elif resume_stage == "executing":
+        execution_router.start_execution(run.id, body={}, db=db)
+    elif resume_stage == "comment":
+        comments_router.retry_comments(run.id, db)
+
+    db.refresh(run)
+    return run
+
+
+@router.delete("/{run_id}", status_code=204)
+def delete_run(run_id: int, db: Session = Depends(get_db)) -> None:
+    """Hard-delete a run and all related rows in one transaction (ADR 0005).
+
+    409 if the run is still in progress — cancel it first. SQLite does not
+    enforce ``ondelete`` without ``PRAGMA foreign_keys=ON``, so related rows are
+    removed explicitly: executions and test cases are deleted via the ORM (so
+    their own children — execution results/evidence, automation specs —
+    cascade too); reports/comments/claude usage are bulk-deleted by run_id;
+    linked test cases are kept but detached (``run_id`` set to ``NULL``).
+    """
+    run = _get_run_or_404(db, run_id)
+    if run.status not in TERMINAL_RUN_STATUSES:
+        raise HTTPException(status_code=409, detail="Run is in progress — cancel it first")
+
+    code = run.code
+
+    for execution in db.query(Execution).filter(Execution.run_id == run_id).all():
+        db.delete(execution)  # cascades to ExecutionResult -> Evidence
+    for case in db.query(TestCase).filter(TestCase.run_id == run_id).all():
+        db.delete(case)  # cascades to AutomationSpec
+
+    db.query(Report).filter(Report.run_id == run_id).delete(synchronize_session=False)
+    db.query(TicketComment).filter(TicketComment.run_id == run_id).delete(synchronize_session=False)
+    db.query(ClaudeUsage).filter(ClaudeUsage.run_id == run_id).delete(synchronize_session=False)
+    db.query(LinkedTestCase).filter(LinkedTestCase.run_id == run_id).update(
+        {LinkedTestCase.run_id: None}, synchronize_session=False
+    )
+
+    db.delete(run)  # cascades to RunTicket via the ORM delete-orphan relationship
+    db.commit()
+
+    run_control.clear(run_id)
+    audit_service.record(category="run", actor_type="user", action="Deleted run", target=code)
