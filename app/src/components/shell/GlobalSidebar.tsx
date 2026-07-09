@@ -15,6 +15,7 @@ import {
 import { type ComponentType, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
+import { ClaudeLogo } from "@/components/ui/misc";
 import { api, markLoggingOut } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/store/auth";
@@ -240,6 +241,16 @@ export function GlobalSidebar() {
               >
                 <Users size={16} strokeWidth={2} />
                 <span>Users</span>
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                role="menuitem"
+                onClick={() => go("/settings/claude-credentials")}
+                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-white"
+              >
+                <ClaudeLogo size={16} />
+                <span>Claude credentials</span>
               </button>
             )}
             <hr className="mx-1 my-1.5 border-0 border-t border-white/[0.08]" />

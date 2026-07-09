@@ -1,6 +1,18 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
+/** Claude brand mark (the eight-point "sunburst") in the brand orange. Shared
+ * by every surface that visually tags something as Claude/Anthropic-related —
+ * credential cards, the admin Claude credentials screen, the AI status
+ * popover — so the glyph stays pixel-identical everywhere it appears. */
+export function ClaudeLogo({ size = 16, color = "#D97757" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M12 2.4l2.6 6.6 6.9.4-5.3 4.4 1.8 6.7L12 17.3 6 20.9l1.8-6.7L2.5 9.4l6.9-.4z" />
+    </svg>
+  );
+}
+
 /** A spinning ring loader (matches the design's `spin` animation). */
 export function Spinner({ size = 15, className }: { size?: number; className?: string }) {
   return (

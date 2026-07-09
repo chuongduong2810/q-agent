@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Pill } from "@/components/ui/badges";
-import { useAiStats, useRefreshAiStats } from "@/hooks/queries";
+import { ClaudeLogo } from "@/components/ui/misc";
+import { useAiStats, useClaudeCredentialsStatus, useRefreshAiStats } from "@/hooks/queries";
+import { cn } from "@/lib/cn";
 import type { ByModelUsage, ClaudeStats, UsageWindow } from "@/types/api";
 
 const PANEL_WIDTH = 300;
@@ -196,6 +198,7 @@ function StatsPanel({
 }) {
   const navigate = useNavigate();
   const refresh = useRefreshAiStats();
+  const { data: credStatus } = useClaudeCredentialsStatus();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
@@ -233,6 +236,30 @@ function StatsPanel({
   }, [open, anchorRef, onClose]);
 
   if (!open || !pos) return null;
+
+  // Navigates to the Settings → Claude account section, pinning which panel
+  // (shared vs. personal) it lands on via a query param — these are
+  // shortcuts to view/manage that source, not a live toggle: the backend
+  // always prefers a configured personal credential over the shared one.
+  const goToClaudeAccount = (source: "shared" | "personal") => {
+    navigate(`/settings?claudeSource=${source}#claude-account`);
+    onClose();
+  };
+
+  const credMode = credStatus?.mode ?? "none";
+  const credBadge = credMode === "own" ? "Personal" : credMode === "shared" ? "Shared" : "Not set";
+  const credName =
+    credMode === "own"
+      ? "Your personal credentials"
+      : credMode === "shared"
+        ? "Shared Claude account"
+        : "No credential configured";
+  const credSourceLabel =
+    credMode === "own"
+      ? "Using your own Claude plan"
+      : credMode === "shared"
+        ? "Maintained by your workspace admin"
+        : "Upload one in Settings";
 
   const short = shortModel(stats.modelLabel);
   const limitsStatus = stats.limitsStatus ?? "unavailable";
@@ -294,6 +321,51 @@ function StatsPanel({
         </button>
       </div>
 
+      {/* Credential summary + Shared/Personal shortcuts */}
+      <div className="mt-[14px] rounded-xl border border-[rgba(217,119,87,.22)] bg-[rgba(217,119,87,.06)] p-3">
+        <div className="mb-[9px] flex items-center gap-2">
+          <span className="text-[10px] font-bold tracking-[0.06em] text-[#e0a58c]">CREDENTIAL</span>
+          <span className="ml-auto rounded-full bg-white/[0.06] px-2 py-[2px] text-[9px] font-bold text-[#c7c7d4]">
+            {credBadge}
+          </span>
+        </div>
+        <div className="flex items-center gap-[9px]">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[rgba(217,119,87,.16)]">
+            <ClaudeLogo size={15} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12.5px] font-bold text-ink">{credName}</div>
+            <div className="truncate text-[10.5px] text-ink-dim">{credSourceLabel}</div>
+          </div>
+        </div>
+        <div className="mt-[11px] flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => goToClaudeAccount("shared")}
+            className={cn(
+              "flex-1 rounded-lg py-1.5 text-[11.5px] font-semibold transition-colors",
+              credMode === "shared" || credMode === "none"
+                ? "bg-white/[0.12] text-ink"
+                : "bg-transparent text-ink-dim hover:bg-white/[0.06]",
+            )}
+          >
+            Shared
+          </button>
+          <button
+            type="button"
+            onClick={() => goToClaudeAccount("personal")}
+            className={cn(
+              "flex-1 rounded-lg py-1.5 text-[11.5px] font-semibold transition-colors",
+              credMode === "own"
+                ? "bg-white/[0.12] text-ink"
+                : "bg-transparent text-ink-dim hover:bg-white/[0.06]",
+            )}
+          >
+            Personal
+          </button>
+        </div>
+      </div>
+
       {/* Rolling windows */}
       <UsageRow label="Current session" window={session} status={limitsStatus} />
       <UsageRow label="Current week" window={week} resetsAsDate status={limitsStatus} />
@@ -346,16 +418,16 @@ function StatsPanel({
         </span>
       </div>
 
-      {/* Manage AI settings */}
+      {/* Manage Claude account & credentials */}
       <button
         onClick={() => {
-          navigate("/settings");
+          navigate("/settings#claude-account");
           onClose();
         }}
         className="mt-[15px] flex w-full items-center justify-center gap-2 rounded-[10px] border border-white/[0.1] bg-white/[0.05] py-2.5 text-[12px] font-semibold text-ink-soft hover:bg-white/[0.09]"
       >
         <SlidersHorizontal size={13} strokeWidth={2} />
-        Manage AI settings
+        Manage Claude account &amp; credentials
       </button>
     </div>,
     document.body,
