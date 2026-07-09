@@ -9,11 +9,20 @@ from sqlalchemy import DateTime, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, mapped_column, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
-from app.config import settings
+from app.config import API_DIR, settings
+
+
+def _connect_args(url: str) -> dict:
+    """SQLite needs ``check_same_thread=False`` for our cross-thread session use;
+    Postgres (and other drivers) use a normal connection pool with no overrides."""
+    if url.startswith("sqlite"):
+        return {"check_same_thread": False}
+    return {}
+
 
 engine = create_engine(
     settings.resolved_database_url,
-    connect_args={"check_same_thread": False},
+    connect_args=_connect_args(settings.resolved_database_url),
     echo=False,
 )
 
@@ -61,13 +70,25 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def init_db() -> None:
-    """Create all tables (used for local-first bootstrap without Alembic)."""
-    # Import models so they register on Base.metadata before create_all.
-    from app import models  # noqa: F401
+def run_migrations() -> None:
+    """Apply all Alembic migrations up to ``head`` against the current DB.
 
-    Base.metadata.create_all(bind=engine)
-    _sync_columns()
+    Used both at API boot (``main.py`` lifespan, via ``init_db``) and by the test
+    fixture that builds each test's isolated temp database — schema creation
+    always goes through the same Alembic migration path instead of ad-hoc
+    ``create_all``/``ALTER TABLE`` hacks.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(API_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(API_DIR / "migrations"))
+    command.upgrade(cfg, "head")
+
+
+def init_db() -> None:
+    """Apply migrations and run best-effort data backfills (local-first bootstrap)."""
+    run_migrations()
     _backfill_connections()
     _backfill_audit()
 
@@ -98,35 +119,3 @@ def _backfill_audit() -> None:
             db.close()
     except Exception:  # noqa: BLE001 - never block startup on auditing
         pass
-
-
-def _sync_columns() -> None:
-    """Add any model columns missing from existing SQLite tables (light migration).
-
-    Lets the local-first schema evolve (new columns) without dropping the user's
-    data — e.g. configured provider credentials. New tables are handled by
-    ``create_all``; this only fills in newly-added columns.
-    """
-    from sqlalchemy import inspect, text
-
-    inspector = inspect(engine)
-    for table in Base.metadata.sorted_tables:
-        if not inspector.has_table(table.name):
-            continue
-        existing = {c["name"] for c in inspector.get_columns(table.name)}
-        for col in table.columns:
-            if col.name in existing:
-                continue
-            ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col.type.compile(engine.dialect)}'
-            default = getattr(col.default, "arg", None) if col.default is not None else None
-            if isinstance(default, bool):
-                ddl += f" DEFAULT {1 if default else 0}"
-            elif isinstance(default, (int, float)):
-                ddl += f" DEFAULT {default}"
-            elif isinstance(default, str):
-                ddl += f" DEFAULT '{default}'"
-            try:
-                with engine.begin() as conn:
-                    conn.execute(text(ddl))
-            except Exception:  # noqa: BLE001 - column may already exist / race; ignore
-                pass
