@@ -42,6 +42,18 @@ const SECONDARY_NAV: NavItem[] = [
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
+/** Wrap the Claude brand glyph so it satisfies the shared nav-icon signature. */
+const ClaudeNavIcon = ({ size = 18 }: { size?: number; strokeWidth?: number }) => (
+  <ClaudeLogo size={size} />
+);
+
+/** Admin-only navigation — rendered in a dedicated, gated ADMIN section (design
+ * "Navigation Model"), not the account popover. */
+const ADMIN_NAV: NavItem[] = [
+  { path: "/settings/users", label: "Users", icon: Users },
+  { path: "/settings/claude-credentials", label: "Claude credentials", icon: ClaudeNavIcon },
+];
+
 /** The global (non-run) sidebar: brand header, two global nav groups, account
  * footer. Structurally the pre-split sidebar, minus the run-scoped items. */
 export function GlobalSidebar() {
@@ -188,6 +200,19 @@ export function GlobalSidebar() {
         {PRIMARY_NAV.map(renderItem)}
         <hr className="mx-1.5 my-2 border-0 border-t border-white/[0.06]" />
         {SECONDARY_NAV.map(renderItem)}
+        {isAdmin && (
+          <>
+            <div className="flex items-center gap-2 px-2.5 pb-2 pt-3.5">
+              <span className="text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
+                ADMIN
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-[7px] py-[1.5px] text-[8.5px] font-bold uppercase tracking-[0.07em] text-[#7a7a8c]">
+                Restricted
+              </span>
+            </div>
+            {ADMIN_NAV.map(renderItem)}
+          </>
+        )}
       </nav>
 
       <div className="mt-auto flex flex-col gap-3 pt-3">
@@ -233,26 +258,6 @@ export function GlobalSidebar() {
               <UserRound size={16} strokeWidth={2} />
               <span>Profile</span>
             </button>
-            {isAdmin && (
-              <button
-                role="menuitem"
-                onClick={() => go("/settings/users")}
-                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-white"
-              >
-                <Users size={16} strokeWidth={2} />
-                <span>Users</span>
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                role="menuitem"
-                onClick={() => go("/settings/claude-credentials")}
-                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-white"
-              >
-                <ClaudeLogo size={16} />
-                <span>Claude credentials</span>
-              </button>
-            )}
             <hr className="mx-1 my-1.5 border-0 border-t border-white/[0.08]" />
             <button
               role="menuitem"
