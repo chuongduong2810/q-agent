@@ -15,7 +15,6 @@ import {
 import { type ComponentType, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ClaudeLogo } from "@/components/ui/misc";
 import { api, markLoggingOut } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/store/auth";
@@ -42,9 +41,23 @@ const SECONDARY_NAV: NavItem[] = [
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
-/** Wrap the Claude brand glyph so it satisfies the shared nav-icon signature. */
-const ClaudeNavIcon = ({ size = 18 }: { size?: number; strokeWidth?: number }) => (
-  <ClaudeLogo size={size} />
+/** Claude credentials nav icon — the Claude sunburst as a monochrome *stroked*
+ * line icon (`currentColor`), matching the design's nav treatment (`ic()`:
+ * `fill="none" stroke="currentColor"`) and the other line icons in the rail.
+ * NOT the filled brand-orange `ClaudeLogo` (that stays on the credential cards). */
+const ClaudeNavIcon = ({ size = 18, strokeWidth = 2 }: { size?: number; strokeWidth?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M12 2.4l2.6 6.6 6.9.4-5.3 4.4 1.8 6.7L12 17.3 6 20.9l1.8-6.7L2.5 9.4l6.9-.4z" />
+  </svg>
 );
 
 /** Admin-only navigation — rendered in a dedicated, gated ADMIN section (design
