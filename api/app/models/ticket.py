@@ -46,6 +46,11 @@ class Ticket(Base):
     linked_prs: Mapped[list] = mapped_column(JSON, default=list)
 
     synced_at: Mapped[datetime] = timestamp_column()
+    # Per-user ownership (#91) — data is per-user private. Nullable until the
+    # cleanup issue (#98) backfills every row and enforces non-null.
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
 
     @property
     def ac_count(self) -> int:

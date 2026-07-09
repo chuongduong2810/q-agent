@@ -65,3 +65,8 @@ class ProjectConfig(Base):
 
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)
+    # Per-user ownership (#91) — data is per-user private. Nullable until the
+    # cleanup issue (#98) backfills every row and enforces non-null.
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
