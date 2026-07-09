@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, Integer, String
+from sqlalchemy import JSON, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, timestamp_column, utcnow
@@ -23,10 +23,14 @@ from app.db import Base, timestamp_column, utcnow
 
 class ProjectConfig(Base):
     __tablename__ = "project_config"
+    # ADR 0009 §3 — the same project ``key`` can exist once per owner and once
+    # in the shared namespace (``owner_id IS NULL``), so uniqueness is scoped
+    # to the pair rather than global.
+    __table_args__ = (UniqueConstraint("key", "owner_id", name="uq_project_config_key_owner"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # Keyed by project name (the UI's project identifier), matching ProjectKnowledge.key.
-    key: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    key: Mapped[str] = mapped_column(String(200), index=True)
     name: Mapped[str] = mapped_column(String(200), default="")
 
     # Per-project provider bindings (ADR 0006). A project's tickets can come from
