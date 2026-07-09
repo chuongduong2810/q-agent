@@ -20,13 +20,14 @@ from typing import Any
 
 from PIL import Image
 
-from app.config import settings
 from app.logging import logger
-from app.models.execution import Evidence
+from app.models.execution import Evidence, ExecutionResult
+from app.models.run import Run
 from app.schemas import AnnotationShape
 from app.services import claude_cli
 from app.services.annotate import render_annotations
 from app.services.skills import SCREENSHOT_ANNOTATOR
+from app.services.workspace_scope import scoped_evidence_dir
 
 _ALLOWED_TOOLS = {"rectangle", "arrow", "highlight", "circle", "text"}
 _MAX_SHAPES = 4
@@ -122,18 +123,38 @@ def _caption_shapes(diagnosis: str, w: int, h: int) -> list[dict[str, Any]]:
     ]
 
 
+def _owner_id_for_result(db, result: ExecutionResult | None) -> int | None:
+    """Resolve the owning user id of the Run behind an ExecutionResult's execution.
+
+    Returns ``None`` (shared namespace) when the result/execution is missing —
+    matches the ``owned``/``get_owned_or_404`` bridge (#91) where an unowned
+    row is always accessible.
+    """
+    if result is None or result.execution is None:
+        return None
+    run = db.get(Run, result.execution.run_id)
+    return run.owner_id if run is not None else None
+
+
 def annotate_screenshot(db, evidence: Evidence, error_message: str, *, force: bool = False) -> bool:
     """Analyse + annotate one screenshot Evidence row. Returns True if annotated.
 
     Stores ``meta.diagnosis`` + ``meta.annotatedPath`` and sets ``annotated``.
     Idempotent unless ``force`` (skips evidence already auto-annotated).
+
+    ``evidence.path`` is stored relative to the scoped evidence root of the
+    owning run (ADR 0009 §1/§5 — ``<RUN-CODE>/<ticket>/<case>/<file>``, see
+    ``playwright_runner._store_evidence``), so ``src``/``dst`` are resolved
+    under ``scoped_evidence_dir(<owner of the evidence's run>)`` rather than
+    the legacy flat ``settings.evidence_dir``.
     """
     if evidence.kind != "screenshot":
         return False
     meta = dict(evidence.meta or {})
     if meta.get("autoAnnotated") and not force:
         return False
-    src = settings.evidence_dir / evidence.path
+    evidence_root = scoped_evidence_dir(_owner_id_for_result(db, evidence.result))
+    src = evidence_root / evidence.path
     if not src.exists():
         return False
     try:
@@ -152,7 +173,7 @@ def annotate_screenshot(db, evidence: Evidence, error_message: str, *, force: bo
     try:
         shapes = [AnnotationShape(**s) for s in shapes_data]
         dst_rel = Path(evidence.path).with_name(Path(evidence.path).stem + "-annotated.png")
-        dst = settings.evidence_dir / dst_rel
+        dst = evidence_root / dst_rel
         render_annotations(src, shapes, dst)
     except Exception as exc:  # noqa: BLE001
         logger.warning("evidence analysis: render failed for {}: {}", src, exc)

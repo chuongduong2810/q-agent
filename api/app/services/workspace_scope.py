@@ -31,6 +31,7 @@ __all__ = [
     "scoped_knowledge_dir",
     "scoped_repos_dir",
     "scoped_auth_dir",
+    "served_evidence_path",
     "slug",
 ]
 
@@ -89,6 +90,20 @@ def scoped_repos_dir(owner_id: int | None) -> Path:
 def scoped_auth_dir(owner_id: int | None) -> Path:
     """Scoped ``auth`` directory for ``owner_id`` — see :func:`scoped_dir`."""
     return scoped_dir("auth", owner_id)
+
+
+def served_evidence_path(owner_id: int | None, relative_path: str) -> str:
+    """Path segment served under ``/artifacts/`` for a scoped evidence file.
+
+    ``relative_path`` is the value stored in ``Evidence.path`` — relative to
+    ``scoped_evidence_dir(owner_id)`` (e.g. ``"<RUN-CODE>/<ticket>/<case>/<file>"``,
+    see ``playwright_runner._store_evidence``). The frontend builds artifact URLs
+    by naive concatenation (``app/src/lib/api.ts:408``:
+    `` `${API_BASE}/artifacts/${path}` ``), and the ``/artifacts`` mount now serves
+    ``settings.workspace_dir`` (ADR 0009 §5, ``app.main``), so this returns the
+    on-disk suffix under that mount: ``<scope>/evidence/<relative_path>``.
+    """
+    return f"{scope_for(owner_id)}/evidence/{relative_path}"
 
 
 def slug(value: str) -> str:

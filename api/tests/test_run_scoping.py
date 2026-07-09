@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import settings
 from app.models.run import Run, RunTicket
 from app.models.user import User
 from app.services import auth_service
+from app.services.workspace_scope import scope_for, scoped_evidence_dir
 
 
 @pytest.fixture
@@ -94,17 +94,71 @@ def test_other_user_gets_404_on_run_mutations(client, db_session, auth_on, two_u
 
 
 def test_other_user_gets_404_on_artifacts(client, db_session, auth_on, two_users):
-    """The run's evidence files aren't reachable by anyone but its owner."""
+    """The run's evidence files aren't reachable by anyone but its owner.
+
+    Evidence now lives at ``<scope>/evidence/<RUN-CODE>/...`` (ADR 0009 §5), so
+    the served URL carries the owner's scope segment ahead of ``evidence/``.
+    """
     user_a, user_b = two_users
     run = _make_owned_run(db_session, user_a)
 
-    evidence_dir = settings.evidence_dir / run.code
+    evidence_dir = scoped_evidence_dir(user_a.id) / run.code
     evidence_dir.mkdir(parents=True, exist_ok=True)
     (evidence_dir / "shot.png").write_bytes(b"fake-png")
 
-    url = f"/artifacts/{run.code}/shot.png"
+    url = f"/artifacts/{scope_for(user_a.id)}/evidence/{run.code}/shot.png"
     assert client.get(url, params={"token": _token(user_a)}).status_code == 200
     assert client.get(url, params={"token": _token(user_b)}).status_code == 404
+
+
+def test_two_owners_evidence_scoped_and_guarded(client, db_session, auth_on, two_users):
+    """Two runs owned by different users each build evidence under their own
+    scope; the guard allows each owner and 404s the other owner, at the new
+    ``<scope>/evidence/<RUN-CODE>/...`` path shape."""
+    user_a, user_b = two_users
+    run_a = _make_owned_run(db_session, user_a, code="RUN-801")
+    run_b = _make_owned_run(db_session, user_b, code="RUN-802")
+
+    dir_a = scoped_evidence_dir(user_a.id) / run_a.code
+    dir_a.mkdir(parents=True, exist_ok=True)
+    (dir_a / "shot.png").write_bytes(b"fake-png-a")
+
+    dir_b = scoped_evidence_dir(user_b.id) / run_b.code
+    dir_b.mkdir(parents=True, exist_ok=True)
+    (dir_b / "shot.png").write_bytes(b"fake-png-b")
+
+    url_a = f"/artifacts/{scope_for(user_a.id)}/evidence/{run_a.code}/shot.png"
+    url_b = f"/artifacts/{scope_for(user_b.id)}/evidence/{run_b.code}/shot.png"
+
+    assert client.get(url_a, params={"token": _token(user_a)}).status_code == 200
+    assert client.get(url_a, params={"token": _token(user_b)}).status_code == 404
+    assert client.get(url_b, params={"token": _token(user_b)}).status_code == 200
+    assert client.get(url_b, params={"token": _token(user_a)}).status_code == 404
+
+
+def test_forged_scope_prefix_on_valid_run_code_is_rejected(client, db_session, auth_on, two_users):
+    """Defense in depth: a valid RUN-CODE behind the WRONG scope prefix 404s
+    even for that run's real owner — the scope segment must match the run's
+    resolved owner, not just be a valid scope string."""
+    user_a, user_b = two_users
+    run_b = _make_owned_run(db_session, user_b, code="RUN-803")
+
+    dir_b = scoped_evidence_dir(user_b.id) / run_b.code
+    dir_b.mkdir(parents=True, exist_ok=True)
+    (dir_b / "shot.png").write_bytes(b"fake-png-b")
+
+    # user_a's own (valid) scope prefix in front of user_b's run code + file.
+    forged_url = f"/artifacts/{scope_for(user_a.id)}/evidence/{run_b.code}/shot.png"
+    assert client.get(forged_url, params={"token": _token(user_a)}).status_code == 404
+    assert client.get(forged_url, params={"token": _token(user_b)}).status_code == 404
+
+
+def test_artifacts_reject_paths_outside_evidence_subtree(client):
+    """The /artifacts mount now serves the workspace root, so a structural
+    check must block anything that isn't under a `.../evidence/...` subtree —
+    this runs even with auth disabled (the default in this test suite)."""
+    assert client.get("/artifacts/q-agent.db").status_code == 404
+    assert client.get("/artifacts/shared/specs/RUN-1/x.spec.ts").status_code == 404
 
 
 def test_other_user_rejected_on_run_ws(client, db_session, auth_on, two_users):

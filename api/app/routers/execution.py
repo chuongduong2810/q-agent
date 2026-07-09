@@ -27,6 +27,7 @@ from app.models.user import User
 from app.services.ownership import get_owned_or_404
 from app.services.playwright_runner import run_execution
 from app.services.run_status import set_run_status
+from app.services.workspace_scope import served_evidence_path
 
 router = APIRouter(tags=["execution"])
 
@@ -91,7 +92,7 @@ def start_execution(
     thread = threading.Thread(target=run_execution, args=(execution.id,), daemon=True)
     thread.start()
 
-    return _execution_out(db, execution)
+    return _execution_out(db, execution, run.owner_id)
 
 
 @router.post("/cases/{case_id}/spec/run")
@@ -141,7 +142,7 @@ def run_single_spec(
     db.refresh(execution)
 
     threading.Thread(target=run_execution, args=(execution.id,), daemon=True).start()
-    return _execution_out(db, execution)
+    return _execution_out(db, execution, run.owner_id)
 
 
 @router.get("/runs/{run_id}/execution")
@@ -149,7 +150,7 @@ def get_latest_execution(
     run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
 ) -> dict:
     """Return the most recent Execution for a run, with its results."""
-    get_owned_or_404(db, Run, run_id, user)
+    run = get_owned_or_404(db, Run, run_id, user)
     execution = (
         db.query(Execution)
         .filter(Execution.run_id == run_id)
@@ -158,7 +159,7 @@ def get_latest_execution(
     )
     if execution is None:
         raise HTTPException(status_code=404, detail="No execution found for this run")
-    return _execution_out(db, execution)
+    return _execution_out(db, execution, run.owner_id)
 
 
 @router.get("/executions/{execution_id}")
@@ -169,11 +170,11 @@ def get_execution(
     execution = db.get(Execution, execution_id)
     if execution is None:
         raise HTTPException(status_code=404, detail="Execution not found")
-    get_owned_or_404(db, Run, execution.run_id, user)
-    return _execution_out(db, execution)
+    run = get_owned_or_404(db, Run, execution.run_id, user)
+    return _execution_out(db, execution, run.owner_id)
 
 
-def _execution_out(db: Session, execution: Execution) -> dict:
+def _execution_out(db: Session, execution: Execution, owner_id: int | None) -> dict:
     results = (
         db.query(ExecutionResult)
         .filter(ExecutionResult.execution_id == execution.id)
@@ -194,11 +195,13 @@ def _execution_out(db: Session, execution: Execution) -> dict:
         "log": execution.log,
         "startedAt": execution.started_at,
         "finishedAt": execution.finished_at,
-        "results": [_result_out(db, r) for r in results],
+        "results": [_result_out(db, r, owner_id) for r in results],
     }
 
 
-def _result_out(db: Session, result: ExecutionResult) -> dict:
+def _result_out(db: Session, result: ExecutionResult, owner_id: int | None) -> dict:
+    """Evidence ``path`` is stored relative to the scoped evidence root; rewrite
+    it to the served ``<scope>/evidence/...`` form (ADR 0009 §5)."""
     evidence = (
         db.query(Evidence).filter(Evidence.result_id == result.id).order_by(Evidence.id).all()
     )
@@ -219,7 +222,7 @@ def _result_out(db: Session, result: ExecutionResult) -> dict:
                 "id": e.id,
                 "kind": e.kind,
                 "filename": e.filename,
-                "path": e.path,
+                "path": served_evidence_path(owner_id, e.path) if e.path else e.path,
                 "sizeBytes": e.size_bytes,
                 "annotated": e.annotated,
                 "meta": e.meta,

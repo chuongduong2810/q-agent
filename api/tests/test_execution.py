@@ -232,9 +232,9 @@ def test_run_execution_end_to_end_with_mocked_subprocess(client, db_session, mon
 
     run, case = _seed_run_with_approved_case(db_session)
 
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
-    spec_dir = settings.specs_dir / run.code
+    spec_dir = scoped_specs_dir(run.owner_id) / run.code
     spec_dir.mkdir(parents=True, exist_ok=True)
 
     # A screenshot file the parser's evidence-copy step can actually find.
@@ -334,10 +334,10 @@ def test_run_single_spec_runs_only_that_spec(client, db_session, monkeypatch):
     import json as _json
 
     import app.services.playwright_runner as runner_module
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
     run, case = _seed_run_with_approved_case(db_session)
-    spec_dir = settings.specs_dir / run.code
+    spec_dir = scoped_specs_dir(run.owner_id) / run.code
     spec_dir.mkdir(parents=True, exist_ok=True)
 
     captured = {}
@@ -465,7 +465,7 @@ def _seed_manual_auth_run(db_session):
 def test_run_execution_manual_auth_capture_success(client, db_session, monkeypatch):
     """A successful capture writes storageState into the config and the run proceeds."""
     import app.services.playwright_runner as runner_module
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
     run, _case = _seed_manual_auth_run(db_session)
 
@@ -494,7 +494,9 @@ def test_run_execution_manual_auth_capture_success(client, db_session, monkeypat
             break
 
     assert captured["base_url"] == "https://app.test"
-    config = (settings.specs_dir / run.code / "playwright.config.ts").read_text(encoding="utf-8")
+    config = (
+        scoped_specs_dir(run.owner_id) / run.code / "playwright.config.ts"
+    ).read_text(encoding="utf-8")
     assert "storageState" in config
     assert 'baseURL: "https://app.test"' in config
 
@@ -565,11 +567,11 @@ def test_apply_auth_fixtures_rewrites_imports_both_ways(tmp_path):
 def test_run_execution_manual_auth_applies_session_fixtures(client, db_session, monkeypatch):
     """Manual-auth run with a sessionStorage snapshot writes fixtures.ts + rewrites specs."""
     import app.services.playwright_runner as runner_module
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
     run, _case = _seed_manual_auth_run(db_session)
 
-    spec_dir = settings.specs_dir / run.code
+    spec_dir = scoped_specs_dir(run.owner_id) / run.code
     spec_dir.mkdir(parents=True, exist_ok=True)
     spec = spec_dir / "1428-TC-01.spec.ts"
     spec.write_text(
@@ -609,11 +611,11 @@ def test_run_execution_manual_auth_applies_session_fixtures(client, db_session, 
 def test_run_execution_non_auth_leaves_playwright_import(client, db_session, monkeypatch):
     """A normal (non-auth) run keeps specs importing '@playwright/test' and no fixtures."""
     import app.services.playwright_runner as runner_module
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
     run, _case = _seed_run_with_approved_case(db_session)
 
-    spec_dir = settings.specs_dir / run.code
+    spec_dir = scoped_specs_dir(run.owner_id) / run.code
     spec_dir.mkdir(parents=True, exist_ok=True)
     spec = spec_dir / "1428-TC-01.spec.ts"
     spec.write_text(

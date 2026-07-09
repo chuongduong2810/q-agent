@@ -11,7 +11,8 @@ exercise the mapping from a Playwright JSON report to per-spec results without
 spawning a real browser.
 
 Playwright invocation choice: we run `npx playwright test` with **cwd = the
-run's spec directory** (`settings.specs_dir/{run.code}`), not the frontend
+run's spec directory** (`scoped_specs_dir(run.owner_id)/{run.code}`, ADR 0009 §1),
+not the frontend
 `app/` dir. The frontend has no Playwright installation or config of its own
 (checked: no `playwright.config.*` in `app/`, `@playwright/test` isn't a
 frontend dependency), so anchoring execution there would require it to own a
@@ -55,6 +56,7 @@ from app.services import (
 )
 from app.services.claude_cli import ClaudeError
 from app.services.run_status import set_run_status
+from app.services.workspace_scope import scoped_evidence_dir, scoped_specs_dir
 from app.ws import hub
 
 _PLAYWRIGHT_CONFIG_TEMPLATE = """\
@@ -477,10 +479,16 @@ def _match_result(
 
 
 def _store_evidence(db, run: Run, result: ExecutionResult, attachments: list[dict]) -> None:
-    """Copy/record evidence artifacts for a result under settings.evidence_dir."""
+    """Copy/record evidence artifacts for a result under the run owner's scoped
+    evidence dir (ADR 0009 §1). ``Evidence.path`` is stored relative to that
+    scoped root (``<RUN-CODE>/<ticket>/<case>/<file>``) — see ``evidence_analysis``
+    and ``routers/evidence.py`` for how the owner scope is prepended when the
+    served ``/artifacts`` URL is built.
+    """
     import shutil
 
-    dest_dir = settings.evidence_dir / run.code / result.ticket_external_id / result.case_code
+    evidence_root = scoped_evidence_dir(run.owner_id)
+    dest_dir = evidence_root / run.code / result.ticket_external_id / result.case_code
     dest_dir.mkdir(parents=True, exist_ok=True)
     for att in attachments:
         src = Path(att["path"])
@@ -492,7 +500,7 @@ def _store_evidence(db, run: Run, result: ExecutionResult, attachments: list[dic
         except OSError as exc:
             logger.warning("Failed to copy evidence {}: {}", src, exc)
             continue
-        rel_path = dest.relative_to(settings.evidence_dir).as_posix()
+        rel_path = dest.relative_to(evidence_root).as_posix()
         evidence = Evidence(
             result_id=result.id,
             kind=att["kind"],
@@ -626,7 +634,7 @@ def run_execution(execution_id: int) -> None:
                     },
                 )
 
-            spec_dir = settings.specs_dir / run.code
+            spec_dir = scoped_specs_dir(run.owner_id) / run.code
             spec_dir.mkdir(parents=True, exist_ok=True)
             headless = bool(settings_store.load_settings().get("headless", True))
 
@@ -991,7 +999,7 @@ def heal_spec(case_id: int) -> None:
         run_id_str = str(run.id)
         max_attempts = settings.heal_max_attempts
         filename = spec_service.spec_filename(case.ticket_external_id, case.code)
-        spec_dir = settings.specs_dir / run.code
+        spec_dir = scoped_specs_dir(run.owner_id) / run.code
         spec_dir.mkdir(parents=True, exist_ok=True)
         headless = bool(settings_store.load_settings().get("headless", True))
 
@@ -1230,7 +1238,7 @@ def heal_spec(case_id: int) -> None:
             attempts_log.append(rec)
 
             path = spec_service.write_spec_file(
-                run.code, case.ticket_external_id, case.code, fixed
+                run.code, case.ticket_external_id, case.code, fixed, run.owner_id
             )
             spec.code = fixed
             spec.path = str(path)
