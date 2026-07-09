@@ -19,9 +19,12 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.deps_auth import current_user
 from app.models.execution import Evidence, Execution, ExecutionResult
 from app.models.run import Run
 from app.models.testcase import TestCase
+from app.models.user import User
+from app.services.ownership import get_owned_or_404
 from app.services.playwright_runner import run_execution
 from app.services.run_status import set_run_status
 
@@ -33,11 +36,10 @@ def start_execution(
     run_id: int,
     body: dict = Body(default_factory=dict),
     db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> dict:
     """Create an Execution + pending ExecutionResults, then run Playwright in a thread."""
-    run = db.get(Run, run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = get_owned_or_404(db, Run, run_id, user)
 
     cases = (
         db.query(TestCase)
@@ -93,7 +95,9 @@ def start_execution(
 
 
 @router.post("/cases/{case_id}/spec/run")
-def run_single_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
+def run_single_spec(
+    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Execute just one test case's spec (the "run this test" action).
 
     Creates an Execution with a single pending ExecutionResult and runs only that
@@ -110,9 +114,7 @@ def run_single_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
             status_code=400,
             detail="Spec is blocked or a product defect — resolve the block or route the defect to the report; it is not runnable",
         )
-    run = db.get(Run, case.run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = get_owned_or_404(db, Run, case.run_id, user)
 
     execution = Execution(
         run_id=run.id,
@@ -143,8 +145,11 @@ def run_single_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/runs/{run_id}/execution")
-def get_latest_execution(run_id: int, db: Session = Depends(get_db)) -> dict:
+def get_latest_execution(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Return the most recent Execution for a run, with its results."""
+    get_owned_or_404(db, Run, run_id, user)
     execution = (
         db.query(Execution)
         .filter(Execution.run_id == run_id)
@@ -157,11 +162,14 @@ def get_latest_execution(run_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/executions/{execution_id}")
-def get_execution(execution_id: int, db: Session = Depends(get_db)) -> dict:
+def get_execution(
+    execution_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Return a single Execution by id, with its results."""
     execution = db.get(Execution, execution_id)
     if execution is None:
         raise HTTPException(status_code=404, detail="Execution not found")
+    get_owned_or_404(db, Run, execution.run_id, user)
     return _execution_out(db, execution)
 
 

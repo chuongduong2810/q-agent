@@ -47,7 +47,7 @@ from app.schemas import (
 )
 from app.services import ai_usage_service, audit_service, link_service, project_config_service, run_control
 from app.services.ai_service import run_generation_pipeline
-from app.services.ownership import stamp_owner
+from app.services.ownership import get_owned_or_404, owned, stamp_owner
 from app.services.run_status import force_status, set_run_status
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -81,13 +81,6 @@ def _next_run_code(db: Session) -> str:
         if match:
             max_n = max(max_n, int(match.group(1)))
     return f"RUN-{max_n + 1}"
-
-
-def _get_run_or_404(db: Session, run_id: int) -> Run:
-    run = db.query(Run).filter(Run.id == run_id).first()
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return run
 
 
 def _resolve_run_project_key(db: Session, run: Run) -> str | None:
@@ -159,8 +152,8 @@ def _attach_run_aggregates(db: Session, runs: list[Run]) -> list[Run]:
 
 
 @router.get("", response_model=list[RunOut])
-def list_runs(db: Session = Depends(get_db)) -> list[Run]:
-    runs = db.query(Run).order_by(Run.created_at.desc()).all()
+def list_runs(db: Session = Depends(get_db), user: User | None = Depends(current_user)) -> list[Run]:
+    runs = owned(db.query(Run), Run, user).order_by(Run.created_at.desc()).all()
     return _attach_run_aggregates(db, runs)
 
 
@@ -228,15 +221,19 @@ def create_run(
 
 
 @router.get("/{run_id}", response_model=RunDetailOut)
-def get_run(run_id: int, db: Session = Depends(get_db)) -> Run:
-    run = _get_run_or_404(db, run_id)
+def get_run(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Run:
+    run = get_owned_or_404(db, Run, run_id, user)
     _attach_run_aggregates(db, [run])
     return run
 
 
 @router.get("/{run_id}/tickets", response_model=list[RunTicketOut])
-def list_run_tickets(run_id: int, db: Session = Depends(get_db)) -> list[RunTicket]:
-    _get_run_or_404(db, run_id)
+def list_run_tickets(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[RunTicket]:
+    get_owned_or_404(db, Run, run_id, user)
     return (
         db.query(RunTicket)
         .filter(RunTicket.run_id == run_id)
@@ -246,20 +243,24 @@ def list_run_tickets(run_id: int, db: Session = Depends(get_db)) -> list[RunTick
 
 
 @router.get("/{run_id}/ai-usage")
-def get_run_ai_usage(run_id: int, db: Session = Depends(get_db)) -> dict:
+def get_run_ai_usage(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Per-run Claude cost/token attribution, grouped by process (see contract)."""
-    _get_run_or_404(db, run_id)
+    get_owned_or_404(db, Run, run_id, user)
     return ai_usage_service.run_breakdown(db, run_id)
 
 
 @router.get("/{run_id}/repos", response_model=list[RunRepoOptionOut])
-def list_run_repos(run_id: int, db: Session = Depends(get_db)) -> list[dict]:
+def list_run_repos(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[dict]:
     """The run's project repositories, each with its per-repo knowledge status.
 
     Resolves the project from the run's first work item's ticket provider; returns
     an empty list when no project can be resolved.
     """
-    run = _get_run_or_404(db, run_id)
+    run = get_owned_or_404(db, Run, run_id, user)
     key = _resolve_run_project_key(db, run)
     if not key:
         return []
@@ -268,14 +269,18 @@ def list_run_repos(run_id: int, db: Session = Depends(get_db)) -> list[dict]:
 
 @router.post("/{run_id}/tickets/{tid}/repo", response_model=RunTicketOut)
 def set_run_ticket_repo(
-    run_id: int, tid: str, body: RunTicketRepoUpdate, db: Session = Depends(get_db)
+    run_id: int,
+    tid: str,
+    body: RunTicketRepoUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> RunTicket:
     """Set a work item's target repository.
 
     An empty ``repo`` resets it to the project default. A non-empty value must be
     one of the project's configured repo names, else HTTP 400.
     """
-    run = _get_run_or_404(db, run_id)
+    run = get_owned_or_404(db, Run, run_id, user)
     run_ticket = (
         db.query(RunTicket)
         .filter(RunTicket.run_id == run.id, RunTicket.ticket_external_id == tid)
@@ -301,8 +306,10 @@ def set_run_ticket_repo(
 
 
 @router.post("/{run_id}/regenerate", response_model=RunDetailOut)
-def regenerate_run(run_id: int, db: Session = Depends(get_db)) -> Run:
-    run = _get_run_or_404(db, run_id)
+def regenerate_run(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Run:
+    run = get_owned_or_404(db, Run, run_id, user)
 
     # Clear prior AI output so the pipeline starts fresh.
     db.query(TestCase).filter(TestCase.run_id == run.id).delete()
@@ -330,7 +337,9 @@ def regenerate_run(run_id: int, db: Session = Depends(get_db)) -> Run:
 
 
 @router.post("/{run_id}/cancel", response_model=RunOut)
-def cancel_run(run_id: int, db: Session = Depends(get_db)) -> Run:
+def cancel_run(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Run:
     """Cancel an in-progress run (ADR 0005). 409 if it's already terminal.
 
     Persists ``cancel_requested``/``cancelled_at``, signals the in-memory
@@ -338,7 +347,7 @@ def cancel_run(run_id: int, db: Session = Depends(get_db)) -> Run:
     then transitions the run to ``cancelled`` — authoritative because every
     worker checkpoint checks the terminal guard before advancing.
     """
-    run = _get_run_or_404(db, run_id)
+    run = get_owned_or_404(db, Run, run_id, user)
     if run.status in TERMINAL_RUN_STATUSES:
         raise HTTPException(status_code=409, detail="Run is already terminal")
 
@@ -359,7 +368,9 @@ def cancel_run(run_id: int, db: Session = Depends(get_db)) -> Run:
 
 
 @router.post("/{run_id}/retry", response_model=RunOut)
-def retry_run(run_id: int, db: Session = Depends(get_db)) -> Run:
+def retry_run(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Run:
     """Resume a terminal run from ``failed_stage`` (ADR 0005 dispatch table).
 
     409 unless the run is terminal (``done``/``cancelled``/``failed``). Resets
@@ -368,7 +379,7 @@ def retry_run(run_id: int, db: Session = Depends(get_db)) -> Run:
     this is the one intentional exception to it) and re-dispatches the resume
     stage's existing worker entry point.
     """
-    run = _get_run_or_404(db, run_id)
+    run = get_owned_or_404(db, Run, run_id, user)
     if run.status not in TERMINAL_RUN_STATUSES:
         raise HTTPException(status_code=409, detail="Run is not terminal — cancel it first")
 
@@ -402,18 +413,20 @@ def retry_run(run_id: int, db: Session = Depends(get_db)) -> Run:
     elif resume_stage == "sync":
         link_service.start_create_link(run.id, link=True, ticket_ids=None)
     elif resume_stage == "automation":
-        automation_router.generate_automation(run.id, force=False, db=db)
+        automation_router.generate_automation(run.id, force=False, db=db, user=user)
     elif resume_stage == "executing":
-        execution_router.start_execution(run.id, body={}, db=db)
+        execution_router.start_execution(run.id, body={}, db=db, user=user)
     elif resume_stage == "comment":
-        comments_router.retry_comments(run.id, db)
+        comments_router.retry_comments(run.id, db, user=user)
 
     db.refresh(run)
     return run
 
 
 @router.delete("/{run_id}", status_code=204)
-def delete_run(run_id: int, db: Session = Depends(get_db)) -> None:
+def delete_run(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> None:
     """Hard-delete a run and all related rows in one transaction (ADR 0005).
 
     409 if the run is still in progress — cancel it first. SQLite does not
@@ -423,7 +436,7 @@ def delete_run(run_id: int, db: Session = Depends(get_db)) -> None:
     cascade too); reports/comments/claude usage are bulk-deleted by run_id;
     linked test cases are kept but detached (``run_id`` set to ``NULL``).
     """
-    run = _get_run_or_404(db, run_id)
+    run = get_owned_or_404(db, Run, run_id, user)
     if run.status not in TERMINAL_RUN_STATUSES:
         raise HTTPException(status_code=409, detail="Run is in progress — cancel it first")
 

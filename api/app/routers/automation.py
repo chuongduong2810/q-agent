@@ -21,10 +21,12 @@ from sqlalchemy.orm import Session
 from app import db as db_module
 from app.config import settings
 from app.db import get_db
+from app.deps_auth import current_user
 from app.logging import logger
 from app.models.run import Run, RunTicket
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
+from app.models.user import User
 from app.schemas import AutomationSpecUpdate
 from app.services import (
     audit_service,
@@ -37,6 +39,7 @@ from app.services import (
     spec_service,
 )
 from app.services.claude_cli import ClaudeError
+from app.services.ownership import get_owned_or_404
 from app.services.run_status import set_run_status
 from app.ws import hub
 
@@ -49,6 +52,21 @@ _generating: set[int] = set()
 
 def is_generating(run_id: int) -> bool:
     return run_id in _generating
+
+
+def _get_case_and_run_or_404(
+    db: Session, case_id: int, user: User | None
+) -> tuple[TestCase, Run]:
+    """Resolve a test case and its owning run.
+
+    404s when the case is missing, or when the case's run is not owned by
+    ``user`` (see ``app.services.ownership.get_owned_or_404``).
+    """
+    case = db.get(TestCase, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Test case not found")
+    run = get_owned_or_404(db, Run, case.run_id, user)
+    return case, run
 
 
 def _eligible_cases_query(db: Session, run_id: int):
@@ -248,7 +266,10 @@ def _run_generation(run_id: int, force: bool = False) -> None:
 
 @router.post("/runs/{run_id}/automation/generate")
 def generate_automation(
-    run_id: int, force: bool = False, db: Session = Depends(get_db)
+    run_id: int,
+    force: bool = False,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> list[dict]:
     """Kick off automation spec generation for a run's approved, non-Manual cases.
 
@@ -262,9 +283,7 @@ def generate_automation(
             generated/edited specs are left untouched. When True every eligible
             case is regenerated, overwriting existing specs.
     """
-    run = db.get(Run, run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = get_owned_or_404(db, Run, run_id, user)
 
     # Guard against double-triggering while a pass is already running.
     if run_id not in _generating:
@@ -288,8 +307,11 @@ def generate_automation(
 
 
 @router.get("/runs/{run_id}/automation")
-def list_automation(run_id: int, db: Session = Depends(get_db)) -> list[dict]:
+def list_automation(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[dict]:
     """List all generated automation specs for a run."""
+    get_owned_or_404(db, Run, run_id, user)
     specs = (
         db.query(AutomationSpec)
         .join(TestCase, AutomationSpec.test_case_id == TestCase.id)
@@ -300,18 +322,24 @@ def list_automation(run_id: int, db: Session = Depends(get_db)) -> list[dict]:
 
 
 @router.get("/runs/{run_id}/automation/status")
-def automation_status(run_id: int) -> dict:
+def automation_status(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Whether a generation pass is currently running for this run.
 
     Lets the UI restore the 'generating' state after navigating away/back and
     keep the Generate button disabled instead of re-triggering.
     """
+    get_owned_or_404(db, Run, run_id, user)
     return {"generating": is_generating(run_id)}
 
 
 @router.get("/cases/{case_id}/spec")
-def get_case_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
+def get_case_spec(
+    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Get the automation spec for a single test case."""
+    _get_case_and_run_or_404(db, case_id, user)
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case_id).first()
     if spec is None:
         raise HTTPException(status_code=404, detail="Spec not found")
@@ -320,19 +348,20 @@ def get_case_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.patch("/cases/{case_id}/spec")
 def update_case_spec(
-    case_id: int, payload: AutomationSpecUpdate, db: Session = Depends(get_db)
+    case_id: int,
+    payload: AutomationSpecUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> dict:
     """Persist manual edits to a case's spec and rewrite the on-disk .spec.ts file.
 
     Updates AutomationSpec.code, rewrites the file so execution picks up the
     edits, and refreshes AutomationSpec.path. 404 if the case has no spec.
     """
+    case, run = _get_case_and_run_or_404(db, case_id, user)
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case_id).first()
     if spec is None:
         raise HTTPException(status_code=404, detail="Spec not found")
-
-    case = db.get(TestCase, spec.test_case_id)
-    run = db.get(Run, case.run_id)
 
     spec.code = payload.code
     path = spec_service.write_spec_file(
@@ -345,14 +374,11 @@ def update_case_spec(
 
 
 @router.post("/cases/{case_id}/spec/regenerate")
-def regenerate_case_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
+def regenerate_case_spec(
+    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Synchronously regenerate the automation spec for a single test case."""
-    case = db.get(TestCase, case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    run = db.get(Run, case.run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    case, run = _get_case_and_run_or_404(db, case_id, user)
 
     try:
         spec = _generate_one(db, run, case)
@@ -369,7 +395,9 @@ def regenerate_case_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/cases/{case_id}/spec/heal")
-def heal_case_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
+def heal_case_spec(
+    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Start a self-heal loop for one case: run its spec and, while it fails,
     feed the failure back to Claude to regenerate + re-run, up to a cap.
 
@@ -377,12 +405,7 @@ def heal_case_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
     immediately. 409 if the run is executing or another case in the run is
     already healing (they share the run's spec dir).
     """
-    case = db.get(TestCase, case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    run = db.get(Run, case.run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    case, run = _get_case_and_run_or_404(db, case_id, user)
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case_id).first()
     if spec is None:
         raise HTTPException(status_code=404, detail="Generate a spec for this case first")
@@ -401,19 +424,25 @@ def heal_case_spec(case_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/cases/{case_id}/spec/heal/status")
-def heal_case_spec_status(case_id: int) -> dict:
+def heal_case_spec_status(
+    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Whether a self-heal pass is running for this case (survives navigation)."""
+    _get_case_and_run_or_404(db, case_id, user)
     return playwright_runner.heal_state(case_id)
 
 
 @router.get("/cases/{case_id}/spec/heal/report")
-def heal_case_spec_report(case_id: int, db: Session = Depends(get_db)) -> dict:
+def heal_case_spec_report(
+    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """The last self-heal trail for a case: per-attempt error, diff and outcome.
 
     Returns ``{}`` if the case has no spec or has never been healed.
     """
     import json as _json
 
+    _get_case_and_run_or_404(db, case_id, user)
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case_id).first()
     if spec is None or not spec.heal_report:
         return {}

@@ -16,13 +16,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.deps_auth import current_user
 from app.models.comment import TicketComment
 from app.models.report import Report
 from app.models.run import Run
 from app.models.ticket import Ticket
+from app.models.user import User
 from app.schemas import CommentEdit, PublishRequest, TicketCommentOut
 from app.services import claude_cli
 from app.services.claude_cli import ClaudeError
+from app.services.ownership import get_owned_or_404
 from app.services.publish_service import publish_one
 from app.services.report_service import build_report
 from app.services.run_status import set_run_status
@@ -104,7 +107,10 @@ def _summarize_ticket(ticket_external_id: str, summary: dict, ai_failure_analysi
 
 
 @router.post("/runs/{run_id}/comments/prepare", response_model=list[TicketCommentOut])
-def prepare_comments(run_id: int, db: Session = Depends(get_db)) -> list[TicketComment]:
+def prepare_comments(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[TicketComment]:
+    get_owned_or_404(db, Run, run_id, user)
     report = _latest_report(db, run_id)
     ticket_summaries = report.data.get("ticketSummary", [])
     ai_failure_analysis = report.data.get("aiFailureAnalysis", "")
@@ -172,21 +178,31 @@ def prepare_comments(run_id: int, db: Session = Depends(get_db)) -> list[TicketC
 
 
 @router.get("/runs/{run_id}/comments", response_model=list[TicketCommentOut])
-def list_comments(run_id: int, db: Session = Depends(get_db)) -> list[TicketComment]:
+def list_comments(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[TicketComment]:
+    get_owned_or_404(db, Run, run_id, user)
     stmt = select(TicketComment).where(TicketComment.run_id == run_id).order_by(TicketComment.id)
     return list(db.execute(stmt).scalars())
 
 
-def _get_comment_or_404(db: Session, comment_id: int) -> TicketComment:
+def _get_comment_or_404(db: Session, comment_id: int, user: User | None) -> TicketComment:
+    """Resolve a comment, 404ing if missing or if its run isn't owned by ``user``."""
     comment = db.get(TicketComment, comment_id)
     if comment is None:
         raise HTTPException(status_code=404, detail="Comment not found")
+    get_owned_or_404(db, Run, comment.run_id, user)
     return comment
 
 
 @router.patch("/comments/{comment_id}", response_model=TicketCommentOut)
-def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_db)) -> TicketComment:
-    comment = _get_comment_or_404(db, comment_id)
+def edit_comment(
+    comment_id: int,
+    body: CommentEdit,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> TicketComment:
+    comment = _get_comment_or_404(db, comment_id, user)
     if body.body is not None:
         comment.body = body.body
     if body.target_status is not None:
@@ -198,8 +214,10 @@ def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_d
 
 
 @router.post("/comments/{comment_id}/publish", response_model=TicketCommentOut)
-def publish_comment(comment_id: int, db: Session = Depends(get_db)) -> TicketComment:
-    comment = _get_comment_or_404(db, comment_id)
+def publish_comment(
+    comment_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> TicketComment:
+    comment = _get_comment_or_404(db, comment_id, user)
     result = publish_one(db, comment)
     _maybe_finish_run(db, comment.run_id)
     return result
@@ -207,8 +225,12 @@ def publish_comment(comment_id: int, db: Session = Depends(get_db)) -> TicketCom
 
 @router.post("/runs/{run_id}/comments/publish", response_model=list[TicketCommentOut])
 def publish_comments(
-    run_id: int, body: PublishRequest, db: Session = Depends(get_db)
+    run_id: int,
+    body: PublishRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> list[TicketComment]:
+    get_owned_or_404(db, Run, run_id, user)
     stmt = select(TicketComment).where(TicketComment.run_id == run_id)
     if body.ticket_ids:
         stmt = stmt.where(TicketComment.ticket_external_id.in_(body.ticket_ids))
@@ -219,7 +241,10 @@ def publish_comments(
 
 
 @router.post("/runs/{run_id}/comments/retry", response_model=list[TicketCommentOut])
-def retry_comments(run_id: int, db: Session = Depends(get_db)) -> list[TicketComment]:
+def retry_comments(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[TicketComment]:
+    get_owned_or_404(db, Run, run_id, user)
     stmt = select(TicketComment).where(
         TicketComment.run_id == run_id, TicketComment.status == "failed"
     )

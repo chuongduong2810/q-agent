@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 from app.config import settings
 from app.db import init_db
 from app.logging import logger, setup_logging
+from app.models.run import Run
 from app.services.audit_context import bind_audit_actor
 from app.routers import (
     ai,
@@ -47,6 +48,82 @@ _AUTH_ALLOWLIST = {
     "/redoc",
     "/docs/oauth2-redirect",
 }
+
+
+def _token_user_id(token: str | None) -> int | None:
+    """Decode a validated access token and return the user id (``sub`` claim).
+
+    Returns ``None`` when ``token`` is missing/invalid — callers are expected to
+    have already validated the token (e.g. via ``access_token_valid``) so this
+    should only fail on a decode race; treat it as "no user" defensively.
+    """
+    if not token:
+        return None
+    try:
+        payload = auth_service.decode_access_token(token)
+    except auth_service.AuthError:
+        return None
+    return int(payload.get("sub", 0) or 0)
+
+
+def _run_owner_allows(owner_id: int | None, user_id: int) -> bool:
+    """A run with no owner (pre-ownership data, #91 bridge) is reachable by
+    anyone; an owned run only by its owner."""
+    return owner_id is None or owner_id == user_id
+
+
+def _artifact_access_allowed(path: str, token: str | None) -> bool:
+    """True if the token's user may fetch this ``/artifacts/<RUN-CODE>/...`` path.
+
+    Evidence files are stored under ``settings.evidence_dir/<run.code>/...``, so
+    the run code is the first path segment after ``/artifacts/``. Looks up the
+    run by code and applies the same owner check as
+    ``app.services.ownership.get_owned_or_404`` (#92 — run domain scoping).
+    """
+    user_id = _token_user_id(token)
+    if user_id is None:
+        return False
+    parts = path.split("/", 3)  # ["", "artifacts", "<code>", "..."]
+    code = parts[2] if len(parts) > 2 else ""
+    if not code:
+        return False
+    # Local import (like _seed_admin below): re-reads app.db.SessionLocal at call
+    # time instead of binding it once at module-import time, so the test suite's
+    # per-test engine rebind (see conftest.workspace_dir) is honored.
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        run = db.query(Run).filter(Run.code == code).first()
+    finally:
+        db.close()
+    if run is None:
+        return False
+    return _run_owner_allows(run.owner_id, user_id)
+
+
+def _run_ws_access_allowed(run_id: str, token: str | None) -> bool:
+    """True if the token's user may subscribe to this run's WS channel (#92).
+
+    ``run_id`` is the numeric ``Run.id`` used by ``/ws/runs/{run_id}``.
+    """
+    user_id = _token_user_id(token)
+    if user_id is None:
+        return False
+    try:
+        rid = int(run_id)
+    except ValueError:
+        return False
+    from app.db import SessionLocal  # see _artifact_access_allowed
+
+    db = SessionLocal()
+    try:
+        run = db.get(Run, rid)
+    finally:
+        db.close()
+    if run is None:
+        return False
+    return _run_owner_allows(run.owner_id, user_id)
 
 
 def _seed_admin() -> None:
@@ -131,11 +208,15 @@ def create_app() -> FastAPI:
         path = request.url.path
         if request.method == "OPTIONS" or path in _AUTH_ALLOWLIST:
             return await call_next(request)
-        # Static artifacts bypass router deps → validate a ?token= access token.
+        # Static artifacts bypass router deps → validate a ?token= access token,
+        # then (#92) confirm the token's user owns the run the path serves from.
         if path.startswith("/artifacts"):
-            if auth_service.access_token_valid(request.query_params.get("token")):
-                return await call_next(request)
-            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+            token = request.query_params.get("token")
+            if not auth_service.access_token_valid(token):
+                return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+            if not _artifact_access_allowed(path, token):
+                return JSONResponse({"detail": "Not found"}, status_code=404)
+            return await call_next(request)
         auth_header = request.headers.get("authorization", "")
         if auth_header.lower().startswith("bearer "):
             if auth_service.access_token_valid(auth_header[7:].strip()):
@@ -184,12 +265,15 @@ def create_app() -> FastAPI:
 
     @app.websocket("/ws/runs/{run_id}")
     async def run_progress(websocket: WebSocket, run_id: str) -> None:
-        # WS bypasses the HTTP guard → validate ?token= when auth is required.
-        if settings.auth_required and not auth_service.access_token_valid(
-            websocket.query_params.get("token")
-        ):
-            await websocket.close(code=1008)
-            return
+        # WS bypasses the HTTP guard → validate ?token=, then (#92) confirm the
+        # token's user owns this run, when auth is required.
+        if settings.auth_required:
+            token = websocket.query_params.get("token")
+            if not auth_service.access_token_valid(token) or not _run_ws_access_allowed(
+                run_id, token
+            ):
+                await websocket.close(code=1008)
+                return
         await hub.connect(run_id, websocket)
         try:
             while True:
