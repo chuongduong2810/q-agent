@@ -1,18 +1,17 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
-import { useEffect, useMemo } from "react";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DropdownShell, MultiSelect, Select } from "@/components/ui/Dropdown";
 import { StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
 import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMeta";
+import { SyncTicketsModal } from "@/components/tickets/SyncTicketsModal";
 import {
   useConnectionSprints,
   useConnectionWorkItemMetadata,
   useProviders,
-  useSyncTickets,
   useTickets,
 } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
@@ -26,7 +25,7 @@ const FILTERS: { id: TicketFilter; label: string }[] = [
 
 const PRIORITY_OPTIONS = ["High", "Medium", "Low"].map((p) => ({ value: p, label: p }));
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 function initials(name: string): string {
   return name
@@ -193,7 +192,7 @@ export function Tickets() {
   const tickets = ticketsPage?.items ?? [];
   const total = ticketsPage?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const syncTickets = useSyncTickets();
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const selCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
 
@@ -214,24 +213,9 @@ export function Tickets() {
     setSelected(ids);
   };
 
-  const handleSync = () => {
-    syncTickets.mutate(
-      {
-        connectionId: connectionId ?? undefined,
-        providerKind: selectedConn?.kind,
-        mode: selectedSprint ? "sprint" : "all",
-        sprint: selectedSprint?.name,
-        sprintPath: selectedSprint?.path,
-        areaPath: isAdo ? areaPath || undefined : undefined,
-        states,
-        workItemTypes,
-      },
-      {
-        onSuccess: (res) => toast.success(`Synced ${res.synced} ticket${res.synced === 1 ? "" : "s"}`),
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Sync failed"),
-      },
-    );
-  };
+  const syncSourceLabel = selectedConn
+    ? `${PROVIDER_META[selectedConn.kind].name}${selectedConn.name ? ` · ${selectedConn.name}` : ""}`
+    : "your provider";
 
   return (
     <div className="px-1 pb-10 pt-0.5">
@@ -329,9 +313,9 @@ export function Tickets() {
         )}
 
         <div className="ml-auto flex items-center gap-[9px]">
-          <Button variant="glass" onClick={handleSync} disabled={syncTickets.isPending}>
-            <RefreshCw size={13} className={syncTickets.isPending ? "animate-[spin_.7s_linear_infinite]" : ""} />
-            {syncTickets.isPending ? "Syncing…" : "Sync"}
+          <Button variant="glass" onClick={() => setSyncOpen(true)}>
+            <RefreshCw size={13} />
+            Sync
           </Button>
           <Button variant="primary" onClick={openCreateRun}>
             <Plus size={14} strokeWidth={2.3} />
@@ -394,6 +378,15 @@ export function Tickets() {
             </div>
           </div>
         </>
+      )}
+
+      {syncOpen && (
+        <SyncTicketsModal
+          connectionId={connectionId}
+          providerKind={selectedConn?.kind}
+          sourceLabel={syncSourceLabel}
+          onClose={() => setSyncOpen(false)}
+        />
       )}
     </div>
   );
