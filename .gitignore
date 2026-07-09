@@ -37,3 +37,6 @@ api/workspace/
 
 # agent worktrees
 .claude/
+
+# designs
+designs/

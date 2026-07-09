@@ -1,0 +1,28 @@
+<steps id="0" last="3">
+  <step id="1" type="ActionStep">
+    <parameterizedString isformatted="true">
+      Navigate to Login page.
+    </parameterizedString>
+    <parameterizedString isformatted="true">
+      Login page is displayed.
+    </parameterizedString>
+  </step>
+
+  <step id="2" type="ActionStep">
+    <parameterizedString isformatted="true">
+      Enter valid username and password.
+    </parameterizedString>
+    <parameterizedString isformatted="true">
+      Credentials are accepted.
+    </parameterizedString>
+  </step>
+
+  <step id="3" type="ActionStep">
+    <parameterizedString isformatted="true">
+      Click Login.
+    </parameterizedString>
+    <parameterizedString isformatted="true">
+      Dashboard is displayed.
+    </parameterizedString>
+  </step>
+</steps>
