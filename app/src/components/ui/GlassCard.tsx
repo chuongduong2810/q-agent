@@ -12,24 +12,27 @@ interface GlassCardProps {
   style?: React.CSSProperties;
 }
 
-/** Frosted glass surface — the design's default panel. Optional hover lift. */
+/**
+ * Frosted glass surface — the design's default panel. Every card gently lifts
+ * and brightens on hover (the design applies this to all glass panels). Cards
+ * flagged `hover` or given an `onClick` are interactive: they get the richer
+ * border-highlight + cyan glow and a pointer cursor on top of the base lift.
+ */
 export function GlassCard({ children, className, hover, index = 0, onClick, style }: GlassCardProps) {
+  const interactive = hover || Boolean(onClick);
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: Math.min(index * 0.04, 0.3), ease: "easeOut" }}
-      whileHover={
-        hover
-          ? {
-              y: -4,
-              borderColor: "rgba(139,92,246,.4)",
-              boxShadow:
-                "0 20px 45px -20px rgba(139,92,246,.5), 0 0 26px -10px rgba(34,211,238,.35)",
-              transition: { duration: 0.18 },
-            }
-          : undefined
-      }
+      whileHover={{
+        y: interactive ? -4 : -3,
+        ...(interactive ? { borderColor: "rgba(139,92,246,.4)" } : {}),
+        boxShadow: interactive
+          ? "0 20px 45px -20px rgba(139,92,246,.5), 0 0 26px -10px rgba(34,211,238,.35)"
+          : "0 18px 50px -22px rgba(139,92,246,.5)",
+        transition: { duration: 0.25, ease: [0.2, 0.8, 0.2, 1] },
+      }}
       onClick={onClick}
       style={style}
       className={cn(

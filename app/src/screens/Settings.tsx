@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { Select } from "@/components/ui/Dropdown";
 import { Spinner } from "@/components/ui/misc";
 import { ClaudeCredentialsCard } from "@/components/settings/ClaudeCredentialsCard";
 import { ProviderGroup } from "@/components/settings/ProviderGroup";
@@ -163,23 +164,19 @@ export function Settings() {
             <Spinner />
           </div>
         ) : (
-          <label className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <span className="text-[12px] font-semibold text-[#9494a6]">Claude model</span>
-            <select
+            <Select
               value={settings.claudeModel}
-              onChange={(e) => updateSettings.mutate({ claudeModel: e.target.value })}
-              className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
-            >
-              <option className="bg-[#16161c] text-ink" value="claude-opus-4-8">
-                Opus 4.8 — highest quality
-              </option>
-              <option className="bg-[#16161c] text-ink" value="claude-sonnet-5">
-                Sonnet 5 — balanced (default)
-              </option>
-              <option className="bg-[#16161c] text-ink" value="claude-haiku-4-5-20251001">
-                Haiku 4.5 — fastest
-              </option>
-            </select>
+              onChange={(v) => v && updateSettings.mutate({ claudeModel: v })}
+              placeholder="Select a model"
+              allowClear={false}
+              options={[
+                { value: "claude-opus-4-8", label: "Opus 4.8 — highest quality" },
+                { value: "claude-sonnet-5", label: "Sonnet 5 — balanced (default)" },
+                { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — fastest" },
+              ]}
+            />
             <span className="text-[12px] text-muted">
               Model used for all AI actions (analysis, generation, self-heal).
             </span>
@@ -197,7 +194,7 @@ export function Settings() {
             <span className="text-[12px] text-muted">
               Shown as a usage bar in the Claude stats panel. 0 = no budget.
             </span>
-          </label>
+          </div>
         )}
       </GlassCard>
 
