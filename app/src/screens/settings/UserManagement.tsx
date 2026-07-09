@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AuthLabel, TextInput } from "@/components/auth/fields";
+import { AuthLabel, PasswordInput, TextInput } from "@/components/auth/fields";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ApiError, api } from "@/lib/api";
@@ -55,6 +55,7 @@ export function UserManagement() {
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const usersQuery = useQuery({
     queryKey: USERS_KEY,
@@ -133,10 +134,16 @@ export function UserManagement() {
           </div>
           <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">User management</h1>
         </div>
-        <Button variant="primary" onClick={() => setInviteOpen(true)}>
-          <UserPlus size={15} strokeWidth={2.4} />
-          Invite user
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button variant="glass" onClick={() => setCreateOpen(true)}>
+            <UserIcon size={15} strokeWidth={2.4} />
+            Create user
+          </Button>
+          <Button variant="primary" onClick={() => setInviteOpen(true)}>
+            <UserPlus size={15} strokeWidth={2.4} />
+            Invite user
+          </Button>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -264,6 +271,16 @@ export function UserManagement() {
           onClose={() => setInviteOpen(false)}
           onInvited={() => {
             setInviteOpen(false);
+            refresh();
+          }}
+        />
+      )}
+
+      {createOpen && (
+        <CreateUserModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
             refresh();
           }}
         />
@@ -612,6 +629,166 @@ function InviteUserModal({
             </Button>
             <Button type="submit" variant="primary" disabled={!canSubmit}>
               {inviteMut.isPending ? "Sending…" : "Send invitation"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Manual "Create user" modal — same shell/styling as `InviteUserModal`
+ * (design's invite modal, `Q-Agent.dc.html` lines 1217–1230) plus the extra
+ * name + password fields `api.auth.createUser` needs. Unlike invite, this
+ * creates the account with a usable password immediately — no reset-token
+ * email flow. Portalled to `document.body` with fixed positioning per the
+ * project's floating-overlay rule. */
+function CreateUserModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<UserRole>("member");
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      api.auth.createUser({
+        email: email.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        role,
+        password,
+      }),
+    onSuccess: (u) => {
+      toast.success(`Created ${u.email}`);
+      onCreated();
+    },
+    onError: (e) => toast.error(errMsg(e, "Failed to create user")),
+  });
+
+  const canSubmit =
+    /.+@.+\..+/.test(email.trim()) && firstName.trim().length > 0 && password.length >= 8 && !createMut.isPending;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    createMut.mutate();
+  };
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6"
+      style={{ background: "rgba(6,6,10,.62)" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-[min(430px,100%)] rounded-[20px] border border-white/[0.12] p-6"
+        style={{ background: "#15151c", boxShadow: "0 40px 90px -30px #000", animation: "fadeInUp .25s ease both" }}
+      >
+        <div className="mb-[18px] flex items-center gap-3">
+          <div className="accent-gradient flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px]">
+            <UserIcon size={19} color="#fff" strokeWidth={2.2} />
+          </div>
+          <div className="flex-1">
+            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">Create a user</h2>
+            <p className="m-0 mt-0.5 text-[12.5px] text-muted">
+              Sets up the account directly with a password — no invite email.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.08] hover:text-ink"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <form onSubmit={submit}>
+          <div className="mb-4 flex gap-3">
+            <div className="flex-1">
+              <AuthLabel htmlFor="cu-first">First name</AuthLabel>
+              <TextInput
+                id="cu-first"
+                placeholder="Ada"
+                autoFocus
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <AuthLabel htmlFor="cu-last">Last name</AuthLabel>
+              <TextInput
+                id="cu-last"
+                placeholder="Lovelace"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <AuthLabel htmlFor="cu-email">Work email</AuthLabel>
+            <TextInput
+              id="cu-email"
+              type="email"
+              icon={<Mail size={15} />}
+              placeholder="teammate@surency.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div className="mb-4">
+            <AuthLabel htmlFor="cu-password">Password</AuthLabel>
+            <PasswordInput
+              id="cu-password"
+              placeholder="At least 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <div className="mb-5">
+            <AuthLabel>Role</AuthLabel>
+            <div className="flex gap-2 rounded-xl bg-black/25 p-1">
+              {(["member", "admin"] as const).map((r) => {
+                const on = role === r;
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRole(r)}
+                    className={cn(
+                      "flex-1 rounded-[10px] py-[10px] text-[13px] font-bold transition-colors",
+                      on ? "accent-gradient text-white" : "bg-white/[0.05] text-[#9a9aae]",
+                    )}
+                  >
+                    {r === "admin" ? "Admin" : "Member"}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mb-0 mt-2 text-[11.5px] text-faint">
+              Admins can manage users and shared Claude credentials.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5">
+            <Button type="button" variant="glass" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={!canSubmit}>
+              {createMut.isPending ? "Creating…" : "Create user"}
             </Button>
           </div>
         </form>
