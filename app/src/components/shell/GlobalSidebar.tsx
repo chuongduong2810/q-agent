@@ -15,7 +15,7 @@ import {
 import { type ComponentType, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "@/lib/api";
+import { api, markLoggingOut } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useSettings } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
@@ -144,13 +144,17 @@ export function GlobalSidebar() {
 
   const handleLogout = async () => {
     closeMenu();
-    try {
-      await api.auth.logout();
-    } catch {
-      // Even if the server call fails, still clear the local session.
-    }
-    useAuth.getState().logout();
-    navigate("/signed-out");
+    // Suppress the api 401 interceptor's redirect to /login so the in-flight
+    // authenticated requests that 401 after logout don't beat us to /signed-out.
+    // Navigate to the public /signed-out route while still "authed" so
+    // RequireAuth stays satisfied and simply unmounts (no /login redirect).
+    // SignedOut clears the local session on mount; we just revoke server-side.
+    // markLoggingOut() keeps the api 401 interceptor inert during the handoff.
+    markLoggingOut();
+    navigate("/signed-out", { replace: true });
+    void api.auth.logout().catch(() => {
+      // Session is cleared locally by SignedOut even if the revoke call fails.
+    });
   };
 
   const avatarInitials = userInitials || (hasIdentity && !user ? initials(displayName) : "");

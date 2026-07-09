@@ -98,6 +98,19 @@ function isAuthPath(path: string): boolean {
  * 401s triggers exactly one `POST /auth/refresh`. */
 let refreshInFlight: Promise<boolean> | null = null;
 
+/** Set while an *explicit* logout is in progress. In-flight authenticated
+ * requests 401 once the refresh cookie is cleared; without this, the 401
+ * interceptor's hard redirect to /login would race ahead of the intentional
+ * navigation to /signed-out. Auto-clears so genuine session-expiry redirects
+ * resume. */
+let loggingOut = false;
+export function markLoggingOut(): void {
+  loggingOut = true;
+  setTimeout(() => {
+    loggingOut = false;
+  }, 4000);
+}
+
 function tryRefresh(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = api.auth
@@ -134,9 +147,17 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
   // it and bounce to /login, then rethrow so the caller still sees the error.
   if (res.status === 401 && !authPath && !retried) {
     if (await tryRefresh()) return request<T>(path, init, true);
-    useAuth.getState().logout();
-    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.location.assign("/login");
+    // An explicit logout is orchestrating its own navigation to /signed-out —
+    // stay inert so a background 401 doesn't flip the store to anon (which would
+    // trip RequireAuth to /login) or hard-redirect over it.
+    if (!loggingOut) {
+      useAuth.getState().logout();
+      const onPublicAuthRoute =
+        typeof window !== "undefined" &&
+        /^\/(login|signed-out|forgot)/.test(window.location.pathname);
+      if (typeof window !== "undefined" && !onPublicAuthRoute) {
+        window.location.assign("/login");
+      }
     }
   }
 
