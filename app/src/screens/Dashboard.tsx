@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
 import { runColor, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
-import { useAuditEvents, useReports, useRunCases, useRuns, useSettings } from "@/hooks/queries";
+import { useAuditEvents, useReports, useRunCases, useRuns } from "@/hooks/queries";
+import { useAuth } from "@/store/auth";
 import { useUI } from "@/store/ui";
 
 const initials = (name: string) =>
@@ -36,8 +37,8 @@ export function Dashboard() {
   const { data: activeRunCases } = useRunCases(heroRun?.id ?? null);
   const { data: reports } = useReports();
   const { data: activity } = useAuditEvents({});
-  const { data: settings } = useSettings();
-  const firstName = settings?.userName?.trim().split(" ")[0] ?? "";
+  const user = useAuth((s) => s.user);
+  const firstName = user?.firstName?.trim() ?? "";
 
   // Aggregate real report metrics; show em dash when no reports exist yet.
   const reportCount = reports?.length ?? 0;

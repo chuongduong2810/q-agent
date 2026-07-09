@@ -12,10 +12,10 @@ import {
   useConnectionSprints,
   useConnectionWorkItemMetadata,
   useProviders,
-  useSettings,
   useSyncTickets,
   useTickets,
 } from "@/hooks/queries";
+import { useAuth } from "@/store/auth";
 import { useUI, type TicketFilter } from "@/store/ui";
 import type { ConnectionOut, ProviderKind, TicketFilters, TicketOut } from "@/types/api";
 
@@ -170,9 +170,9 @@ export function Tickets() {
   const { data: sprints } = useConnectionSprints(connectionId);
   const { data: metadata } = useConnectionWorkItemMetadata(connectionId);
 
-  // "Assigned to me" resolves against the configured identity (Settings → Profile).
-  const { data: settings } = useSettings();
-  const userName = (settings?.userName ?? "").trim();
+  // "Assigned to me" resolves against the authenticated user (ADR 0007).
+  const user = useAuth((s) => s.user);
+  const userName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : "";
 
   // Combine every active filter into the ticket query.
   const filters: TicketFilters = {

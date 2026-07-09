@@ -21,6 +21,7 @@ from app import db as db_module
 from app.db import utcnow
 from app.logging import logger
 from app.models.audit import AuditLog
+from app.services import audit_context
 from app.models.comment import TicketComment
 from app.models.execution import Execution
 from app.models.knowledge import ProjectKnowledge
@@ -59,6 +60,10 @@ def record(
         ts: Override the timestamp (defaults to now; used by backfill).
     """
     default_actor, default_ip = _actor_fields(actor_type)
+    # Prefer the authenticated request actor (ADR 0007, #79) over the legacy
+    # "You" default when the caller didn't pass one explicitly.
+    if actor is None and actor_type == "user":
+        actor = audit_context.get_actor()
     try:
         db = db_module.SessionLocal()
         try:

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Spinner } from "@/components/ui/misc";
 import { ProviderGroup } from "@/components/settings/ProviderGroup";
@@ -49,43 +50,17 @@ export function Settings() {
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PROFILE</div>
       <GlassCard className="mb-[26px] p-[22px]">
-        {settingsLoading || !settings ? (
-          <div className="flex justify-center py-10">
-            <Spinner />
+        <div className="flex items-center justify-between gap-4">
+          <div className="text-[12px] text-muted">
+            Your name, email, password, and two-factor auth live on your account profile.
           </div>
-        ) : (
-          <>
-            <div className="mb-4 text-[12px] text-muted">
-              Used for your sidebar profile and &ldquo;assigned to me&rdquo; filters.
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <label className="flex flex-col gap-2">
-                <span className="text-[12px] font-semibold text-[#9494a6]">Your name</span>
-                <input
-                  defaultValue={settings.userName}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim();
-                    if (v !== settings.userName) updateSettings.mutate({ userName: v });
-                  }}
-                  placeholder="Your name"
-                  className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
-                />
-              </label>
-              <label className="flex flex-col gap-2">
-                <span className="text-[12px] font-semibold text-[#9494a6]">Your role</span>
-                <input
-                  defaultValue={settings.userRole}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim();
-                    if (v !== settings.userRole) updateSettings.mutate({ userRole: v });
-                  }}
-                  placeholder="Your role (e.g. QA Lead)"
-                  className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
-                />
-              </label>
-            </div>
-          </>
-        )}
+          <Link
+            to="/profile"
+            className="shrink-0 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[10px] text-[13px] font-semibold text-ink transition-colors hover:bg-white/[0.1]"
+          >
+            Manage profile
+          </Link>
+        </div>
       </GlassCard>
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">DEFAULT EXECUTION</div>

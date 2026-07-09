@@ -39,10 +39,13 @@ class Settings(BaseSettings):
     # Override in production via QAGENT_SECRET_KEY.
     secret_key: str = "dev-only-insecure-change-me"
 
-    # Auth (ADR 0007). The global auth guard is OFF by default so local-first
-    # single-user installs keep working unchanged. Flip QAGENT_AUTH_REQUIRED=true
-    # for a shared/multi-user server deployment.
-    auth_required: bool = False
+    # Auth (ADR 0007). The global auth guard is ON by default (go-live, #79):
+    # every route/WS/artifact requires a valid session. Set QAGENT_AUTH_REQUIRED=
+    # false to opt back into the local-first single-user mode. On an empty DB the
+    # first admin is seeded from QAGENT_ADMIN_EMAIL/PASSWORD; in dev (cookie_secure
+    # off) a fallback admin is auto-seeded with a logged password so you're never
+    # locked out — see main._seed_admin.
+    auth_required: bool = True
     # Set the `Secure` flag on auth cookies. Default False so http-localhost dev
     # works; set QAGENT_COOKIE_SECURE=true behind HTTPS in production.
     cookie_secure: bool = False

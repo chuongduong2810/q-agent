@@ -83,7 +83,14 @@ def _decode(token: str, typ: str) -> dict[str, Any]:
 
 
 def create_access_token(user: User, sid: str) -> str:
-    return _encode({"sub": str(user.id), "role": user.role, "sid": sid}, ACCESS_TTL, "access")
+    # email + name are carried so the audit layer can attribute events without a
+    # DB lookup (see services.audit_context).
+    name = f"{user.first_name} {user.last_name}".strip()
+    return _encode(
+        {"sub": str(user.id), "role": user.role, "sid": sid, "email": user.email, "name": name},
+        ACCESS_TTL,
+        "access",
+    )
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
