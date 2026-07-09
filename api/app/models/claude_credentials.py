@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db import Base, timestamp_column, utcnow
+from app.db import Base, UTCDateTime, timestamp_column, utcnow
 
 STATUS_ACTIVE = "active"
 
@@ -38,5 +38,11 @@ class ClaudeCredentials(Base):
     credentials: Mapped[str] = mapped_column(Text, default="")
     label: Mapped[str] = mapped_column(String(120), default="")
     status: Mapped[str] = mapped_column(String(16), default=STATUS_ACTIVE)
+    # Best-effort metadata parsed from the uploaded `.credentials.json` (see
+    # app.services.claude_credentials._extract_metadata) — all optional, never
+    # the token itself.
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True, default=None)
+    scopes: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
+    subscription_type: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)

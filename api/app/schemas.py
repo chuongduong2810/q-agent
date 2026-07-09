@@ -660,6 +660,15 @@ class UserOut(ApiModel):
     totp_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    last_active: datetime | None = None  # stamped on login/refresh; null if never
+
+
+class AdminUserOut(UserOut):
+    """``UserOut`` plus admin-only fields for the workspace user list."""
+
+    # "personal" (has own credential), "shared" (falls back to the shared
+    # credential), or "none" (no Claude credential resolves for this user).
+    credential_source: str = "none"
 
 
 class LoginRequest(ApiModel):
@@ -789,6 +798,17 @@ class ClaudeCredentialsUpload(ApiModel):
     label: str = ""
 
 
+class ClaudeCredentialsMetaOut(ApiModel):
+    """Public metadata for one credential row — never the token itself."""
+
+    subscription_type: str | None = None
+    expires_at: datetime | None = None
+    scopes: list[str] = Field(default_factory=list)
+    last_refreshed: datetime | None = None  # the row's updated_at
+    # Active users with no own credential (only meaningful for the shared row).
+    assigned_users: int | None = None
+
+
 class ClaudeCredentialsStatusOut(ApiModel):
     """Whether own/shared credentials exist, and which one is effective. Never
     carries the token itself."""
@@ -796,3 +816,5 @@ class ClaudeCredentialsStatusOut(ApiModel):
     has_own: bool = False
     has_shared: bool = False
     mode: str = "none"  # "own" | "shared" | "none"
+    own: ClaudeCredentialsMetaOut | None = None
+    shared: ClaudeCredentialsMetaOut | None = None
