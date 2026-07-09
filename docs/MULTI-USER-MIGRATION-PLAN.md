@@ -1,11 +1,43 @@
 # Multi-User Server Migration Plan
 
-> **Status:** Draft plan (planning only — no code changes yet)
+> **Status:** In progress — auth + per-user data isolation delivered (see Progress)
 > **Date:** 2026-07-08
 > **Goal:** Move Q-Agent from a *local-first, single-operator* app (every user clones
 > the repo and runs it on their own machine) to a **centrally-hosted, multi-user
 > server** where access is managed by **logged-in users**, and migrate the database
 > from **SQLite → PostgreSQL**.
+
+## Progress (updated 2026-07-09)
+
+| Area | Plan phase | Status |
+|---|---|---|
+| Authentication (login, JWT+refresh, MFA, reset, guard, WS/artifact token) | Phase 2 + 7 | ✅ Done — ADR 0007 (#72–#89) |
+| PostgreSQL support + Alembic migrations (retire `_sync_columns`) | Phase 1 | ✅ Done (#90/#99) |
+| Per-user **ownership model** + `current_user` + scoping helpers | Phase 3 core | ✅ Done (#91/#100) |
+| Scope **run domain** to owner + guard `/artifacts` + run WS | Phase 3/4 | ✅ Done (#92/#103) |
+| Scope **connections/projects/tickets** to owner (per-user PATs) | Phase 3/4 | ✅ Done (#93/#102) |
+| **Member management** — RBAC + lifecycle + self-service | "member manage" | ✅ Done (#94/#101) |
+| **Claude CLI credentials** (shared/admin or per-user `.credentials.json`) + per-user cost | Phase 5 (revised) | ✅ Done (#95/#104) |
+| Execution **job queue** + workers + WS pub/sub | Phase 6 | ⏸️ Deferred — blocked on deployment (#96) |
+| Interactive **browser sessions** (noVNC → WebRTC) | §12 | ⏸️ Deferred — blocked on deployment (#97) |
+| **Deployment** (Docker/Compose/TLS) | Phase 8 | ⛔ Excluded from this batch by request |
+
+**Decisions ratified during implementation** (see ADR 0008): data is **per-user
+private** (every primary entity carries a nullable `owner_id`, all reads filtered by
+the current user); provider connections hold **per-user PATs** (revises ADR 0006's
+team-shared assumption); Claude stays on the **CLI**, authenticated by a managed
+`.credentials.json` (a shared admin credential *or* a per-user upload) selected via
+`CLAUDE_CONFIG_DIR` per invocation, with per-user cost attribution.
+
+**Bridge still in place (intentional):** the `owner_id` columns are nullable and the
+scoping helpers no-op when there is no authenticated user — this keeps the
+**auth-disabled local-dev mode** and the test suite working. It is load-bearing, not
+dead code; enforcing non-null owner is deferred until/if auth-disabled mode is
+retired.
+
+Integrated verification on `master` after the batch: **272 backend tests pass**,
+frontend `typecheck` + `build` pass, single Alembic head with a clean
+upgrade/downgrade round-trip.
 
 This is the living plan for that shift. It supersedes the MVP non-goal in
 `docs/CONTEXT.md` ("Cloud deployment, multi-user auth/RBAC") — we are now taking on

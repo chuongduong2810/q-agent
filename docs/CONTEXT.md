@@ -89,7 +89,19 @@ Other skills ship for future/adjacent use: `test-case-reviewer`,
 - **QA Engineer / QA Lead** (e.g. "Maya Kaur" in the seed data): the primary user.
   Reviews AI work, runs suites, publishes results. Wants an *AI teammate*, not a tool.
 
-## Non-goals (MVP)
+## Multi-user (delivered)
 
-Cloud deployment, multi-user auth/RBAC, CI/CD triggers, Cypress/Selenium runners
-(architecture stays extensible for them). Tauri desktop packaging is future.
+Q-Agent is now a **multi-user, logged-in** application with **per-user data
+isolation**: authentication (ADR 0007) plus per-user ownership of runs, tickets,
+projects, provider connections (each user's own PATs), knowledge, and Claude cost
+(ADR 0008). Roles are **admin** / **member** with RBAC enforcement, full member
+lifecycle, and self-service. Persistence runs on **PostgreSQL** (SQLite still
+supported for local dev) with Alembic migrations. See
+[`docs/MULTI-USER-MIGRATION-PLAN.md`](MULTI-USER-MIGRATION-PLAN.md) for status.
+
+## Non-goals (current)
+
+CI/CD triggers and Cypress/Selenium runners (architecture stays extensible for
+them). **Deferred, blocked on deployment:** an execution job queue/workers and
+interactive server-side browser sessions (noVNC → WebRTC). Containerized deployment
+(Docker/Compose/TLS) and Tauri desktop packaging remain future work.
