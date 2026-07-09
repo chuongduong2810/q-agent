@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Spinner } from "@/components/ui/misc";
 import { ClaudeCredentialsCard } from "@/components/settings/ClaudeCredentialsCard";
@@ -23,6 +24,14 @@ export function Settings() {
   const { data: providers, isLoading: providersLoading } = useProviders();
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettings = useUpdateSettings();
+  const location = useLocation();
+
+  // Deep-link support for the AI status popover's "Manage Claude account &
+  // credentials" button (navigates to `/settings#claude-account`).
+  useEffect(() => {
+    if (location.hash !== "#claude-account") return;
+    document.getElementById("claude-account")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [location.hash]);
 
   // Always render one group per known kind — synthesize an empty group when the
   // backend catalog omits it, so a fresh machine can still add connections.
@@ -192,12 +201,14 @@ export function Settings() {
         )}
       </GlassCard>
 
-      <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
-        CLAUDE CREDENTIALS
+      <div id="claude-account">
+        <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
+          CLAUDE ACCOUNT
+        </div>
+        <GlassCard className="p-[22px]">
+          <ClaudeCredentialsCard />
+        </GlassCard>
       </div>
-      <GlassCard className="p-[22px]">
-        <ClaudeCredentialsCard />
-      </GlassCard>
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">INTERFACE</div>
       <GlassCard className="p-[22px]">
