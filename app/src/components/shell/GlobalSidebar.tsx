@@ -2,17 +2,23 @@ import {
   BarChart3,
   FolderKanban,
   LayoutDashboard,
+  LogOut,
   Settings,
   ShieldCheck,
   Sparkles,
   SquareStack,
   Ticket,
   User,
+  UserRound,
+  Users,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import { type ComponentType, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useSettings } from "@/hooks/queries";
+import { useAuth } from "@/store/auth";
 
 const initials = (name: string) =>
   name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -39,15 +45,30 @@ const SECONDARY_NAV: NavItem[] = [
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
-/** The global (non-run) sidebar: brand header, two global nav groups, profile
+/** The global (non-run) sidebar: brand header, two global nav groups, account
  * footer. Structurally the pre-split sidebar, minus the run-scoped items. */
 export function GlobalSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  const user = useAuth((s) => s.user);
+
+  // Fallback identity for when auth is off / not logged in during dev — keep the
+  // original settings-driven display working so the footer never goes blank.
   const { data: settings } = useSettings();
-  const userName = (settings?.userName ?? "").trim();
-  const userRole = (settings?.userRole ?? "").trim();
-  const hasIdentity = userName.length > 0;
+  const settingsName = (settings?.userName ?? "").trim();
+  const settingsRole = (settings?.userRole ?? "").trim();
+
+  // Resolved display identity: prefer the authenticated principal, else settings.
+  const userInitials = user
+    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase()
+    : "";
+  const displayName = user
+    ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim()
+    : settingsName;
+  const displayRole = user ? user.role : settingsRole;
+  const hasIdentity = displayName.length > 0;
+  const isAdmin = user?.role === "admin";
 
   const isActive = (path: string): boolean =>
     path === "/" ? pathname === "/" : pathname.startsWith(path);
@@ -84,6 +105,72 @@ export function GlobalSidebar() {
     );
   };
 
+  // Account popover: portalled to <body> with fixed positioning anchored to the
+  // trigger's bounding rect (project rule — the sidebar's glass/backdrop-filter
+  // creates a stacking context that would otherwise trap a child z-index).
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
+  const menuOpen = menuRect !== null;
+
+  const openMenu = () => {
+    if (triggerRef.current) setMenuRect(triggerRef.current.getBoundingClientRect());
+  };
+  const closeMenu = () => setMenuRect(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      closeMenu();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMenu();
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  const go = (path: string) => {
+    closeMenu();
+    navigate(path);
+  };
+
+  const handleLogout = async () => {
+    closeMenu();
+    try {
+      await api.auth.logout();
+    } catch {
+      // Even if the server call fails, still clear the local session.
+    }
+    useAuth.getState().logout();
+    navigate("/signed-out");
+  };
+
+  const avatarInitials = userInitials || (hasIdentity && !user ? initials(displayName) : "");
+  const avatar = (
+    <div className="h-8 w-8 rounded-[10px] text-[13px]">
+      {avatarInitials ? (
+        <div
+          className="flex h-full w-full items-center justify-center rounded-[10px] font-bold text-white"
+          style={{ background: "linear-gradient(135deg,#f59e0b,#f43f5e)" }}
+        >
+          {avatarInitials}
+        </div>
+      ) : (
+        <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-white/[0.08] text-[#9494a6]">
+          <User size={16} strokeWidth={2} />
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <aside className="glass-strong flex w-[248px] shrink-0 flex-col rounded-[22px] p-[20px_14px] shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)]">
       <div className="flex items-center gap-[11px] px-2 pb-[18px] pt-1.5">
@@ -110,31 +197,69 @@ export function GlobalSidebar() {
 
       <div className="mt-auto flex flex-col gap-3 pt-3">
         <button
-          onClick={() => navigate("/settings")}
-          className="flex items-center gap-2.5 rounded-2xl px-2.5 py-1.5 text-left hover:bg-white/[0.05]"
-        >
-          {hasIdentity ? (
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-[10px] text-[13px] font-bold text-white"
-              style={{ background: "linear-gradient(135deg,#f59e0b,#f43f5e)" }}
-            >
-              {initials(userName)}
-            </div>
-          ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.08] text-[#9494a6]">
-              <User size={16} strokeWidth={2} />
-            </div>
+          ref={triggerRef}
+          onClick={() => (menuOpen ? closeMenu() : openMenu())}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          className={cn(
+            "flex items-center gap-2.5 rounded-2xl px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.05]",
+            menuOpen && "bg-white/[0.05]",
           )}
+        >
+          {avatar}
           <div className="min-w-0 flex-1">
-            <div className="text-[12.5px] font-semibold">
-              {hasIdentity ? userName : "Set your identity"}
+            <div className="truncate text-[12.5px] font-semibold">
+              {hasIdentity ? displayName : "Set your identity"}
             </div>
-            <div className="truncate text-[10.5px] text-[#7a7a8c]">
-              {hasIdentity ? userRole || "—" : "Settings → Profile"}
+            <div className="truncate text-[10.5px] capitalize text-[#7a7a8c]">
+              {hasIdentity ? displayRole || "—" : "Settings → Profile"}
             </div>
           </div>
         </button>
       </div>
+
+      {menuOpen &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            className="fixed z-[1000] overflow-hidden rounded-2xl border border-white/10 bg-[#16161f] p-1.5 shadow-[0_24px_60px_-16px_rgba(0,0,0,.7)]"
+            style={{
+              left: menuRect.left,
+              bottom: window.innerHeight - menuRect.top + 8,
+              width: Math.max(menuRect.width, 200),
+            }}
+          >
+            <button
+              role="menuitem"
+              onClick={() => go("/profile")}
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-white"
+            >
+              <UserRound size={16} strokeWidth={2} />
+              <span>Profile</span>
+            </button>
+            {isAdmin && (
+              <button
+                role="menuitem"
+                onClick={() => go("/settings/users")}
+                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-white"
+              >
+                <Users size={16} strokeWidth={2} />
+                <span>Users</span>
+              </button>
+            )}
+            <hr className="mx-1 my-1.5 border-0 border-t border-white/[0.08]" />
+            <button
+              role="menuitem"
+              onClick={handleLogout}
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-rose-300 transition-colors hover:bg-rose-500/10 hover:text-rose-200"
+            >
+              <LogOut size={16} strokeWidth={2} />
+              <span>Log out</span>
+            </button>
+          </div>,
+          document.body,
+        )}
     </aside>
   );
 }
