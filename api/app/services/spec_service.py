@@ -24,6 +24,7 @@ from app.models.ticket import Ticket
 from app.services import claude_cli, project_config_service
 from app.services.prompts import render_project_context
 from app.services.skills import AUTOMATION_GENERATOR
+from app.services.workspace_scope import scoped_specs_dir
 
 _FENCE_RE = re.compile(r"```(?:ts|typescript)?\s*(.*?)```", re.DOTALL)
 
@@ -294,19 +295,28 @@ def spec_filename(ticket_external_id: str, case_code: str) -> str:
     return f"{short_ticket}-{case_code}.spec.ts"
 
 
-def write_spec_file(run_code: str, ticket_external_id: str, case_code: str, code: str) -> Path:
-    """Write generated spec source to workspace/specs/{run_code}/{filename}.
+def write_spec_file(
+    run_code: str,
+    ticket_external_id: str,
+    case_code: str,
+    code: str,
+    owner_id: int | None = None,
+) -> Path:
+    """Write generated spec source to <scoped specs dir>/{run_code}/{filename}.
 
     Args:
         run_code: The owning Run's human code, e.g. "RUN-205".
         ticket_external_id: The ticket the case belongs to, e.g. "SUR-1428".
         case_code: The test case's code, e.g. "TC-01".
         code: The TypeScript source to write.
+        owner_id: The owning Run's ``owner_id`` (ADR 0009 §1) — resolves the
+            per-owner specs tree via ``scoped_specs_dir``; ``None`` (no owner,
+            e.g. auth disabled) resolves to the shared namespace.
 
     Returns:
         The absolute path the file was written to.
     """
-    run_dir = settings.specs_dir / run_code
+    run_dir = scoped_specs_dir(owner_id) / run_code
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / spec_filename(ticket_external_id, case_code)
     path.write_text(code, encoding="utf-8")
@@ -327,14 +337,17 @@ def _resolve_list_bin() -> str | None:
     return None
 
 
-def playwright_list_ok(code: str) -> bool:
+def playwright_list_ok(code: str, owner_id: int | None = None) -> bool:
     """Best-effort ``playwright test --list`` parse gate for a generated spec.
 
-    Writes ``code`` to a throwaway spec in a temp dir under the specs workspace and
-    runs ``playwright test --list`` against it.
+    Writes ``code`` to a throwaway spec in a temp dir under the caller's scoped
+    specs workspace and runs ``playwright test --list`` against it.
 
     Args:
         code: The generated Playwright/TypeScript spec source to parse-check.
+        owner_id: The owning Run's ``owner_id`` — resolves the scoped specs
+            dir the throwaway gate dir is created under (ADR 0009 §1); ``None``
+            resolves to the shared namespace.
 
     Returns:
         ``False`` only when Playwright ran but FAILED to parse/collect the spec (a
@@ -348,8 +361,9 @@ def playwright_list_ok(code: str) -> bool:
     if bin_path is None:
         return True  # skip: nothing to parse with
     try:
-        settings.specs_dir.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=str(settings.specs_dir)) as tmp:
+        specs_dir = scoped_specs_dir(owner_id)
+        specs_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=str(specs_dir)) as tmp:
             tmp_dir = Path(tmp)
             (tmp_dir / "playwright.config.ts").write_text(
                 "import { defineConfig } from '@playwright/test';\n"

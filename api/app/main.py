@@ -33,6 +33,7 @@ from app.routers import (
     tickets,
 )
 from app.services import auth_service
+from app.services.workspace_scope import scope_for
 from app.ws import hub
 
 # Paths reachable without a bearer access token when QAGENT_AUTH_REQUIRED is on.
@@ -73,18 +74,28 @@ def _run_owner_allows(owner_id: int | None, user_id: int) -> bool:
 
 
 def _artifact_access_allowed(path: str, token: str | None) -> bool:
-    """True if the token's user may fetch this ``/artifacts/<RUN-CODE>/...`` path.
+    """True if the token's user may fetch this ``/artifacts/<scope>/evidence/<RUN-CODE>/...`` path.
 
-    Evidence files are stored under ``settings.evidence_dir/<run.code>/...``, so
-    the run code is the first path segment after ``/artifacts/``. Looks up the
-    run by code and applies the same owner check as
-    ``app.services.ownership.get_owned_or_404`` (#92 — run domain scoping).
+    Evidence now lives under ``workspace/<scope>/evidence/<run.code>/...``
+    (ADR 0009 §5 — ``<scope>`` is ``users/<owner_id>`` or ``shared``, see
+    ``app.services.workspace_scope.scope_for``) and the ``/artifacts`` mount is
+    the workspace root, so the RUN-CODE is the path segment right after
+    ``evidence/`` rather than the first segment. ``Run.code`` stays globally
+    unique, so the lookup resolves regardless of where the scope prefix sits.
+    Applies the same owner check as ``app.services.ownership.get_owned_or_404``
+    (#92 — run domain scoping), then — defense in depth — cross-checks that the
+    URL's scope segment actually matches the resolved run's owner (a forged or
+    stale scope prefix in front of a valid RUN-CODE is rejected too).
     """
     user_id = _token_user_id(token)
     if user_id is None:
         return False
-    parts = path.split("/", 3)  # ["", "artifacts", "<code>", "..."]
-    code = parts[2] if len(parts) > 2 else ""
+    parts = path.split("/")  # ["", "artifacts", <scope...>, "evidence", "<code>", ...]
+    if "evidence" not in parts:
+        return False
+    evidence_idx = parts.index("evidence")
+    scope = "/".join(parts[2:evidence_idx])
+    code = parts[evidence_idx + 1] if len(parts) > evidence_idx + 1 else ""
     if not code:
         return False
     # Local import (like _seed_admin below): re-reads app.db.SessionLocal at call
@@ -99,7 +110,9 @@ def _artifact_access_allowed(path: str, token: str | None) -> bool:
         db.close()
     if run is None:
         return False
-    return _run_owner_allows(run.owner_id, user_id)
+    if not _run_owner_allows(run.owner_id, user_id):
+        return False
+    return scope == scope_for(run.owner_id)
 
 
 def _run_ws_access_allowed(run_id: str, token: str | None) -> bool:
@@ -203,13 +216,22 @@ def create_app() -> FastAPI:
     # QAGENT_AUTH_REQUIRED is off (the local-first default) this is a passthrough.
     @app.middleware("http")
     async def auth_guard(request, call_next):  # noqa: ANN001, ANN202
-        if not settings.auth_required:
-            return await call_next(request)
         path = request.url.path
+        if not settings.auth_required:
+            # The /artifacts mount now serves the whole workspace root
+            # (evidence lives at <scope>/evidence/<RUN-CODE>/..., ADR 0009
+            # §5), so even with auth disabled this structural check runs: it
+            # never lets /artifacts reach the DB file, settings.json, or
+            # another kind's secrets (auth/ storageState, knowledge, repos).
+            if path.startswith("/artifacts") and "/evidence/" not in path:
+                return JSONResponse({"detail": "Not found"}, status_code=404)
+            return await call_next(request)
         if request.method == "OPTIONS" or path in _AUTH_ALLOWLIST:
             return await call_next(request)
         # Static artifacts bypass router deps → validate a ?token= access token,
-        # then (#92) confirm the token's user owns the run the path serves from.
+        # then (#92) confirm the token's user owns the run the path serves from
+        # (``_artifact_access_allowed`` also enforces the same evidence-subtree
+        # shape check above, so a malformed path 404s once past authentication).
         if path.startswith("/artifacts"):
             token = request.query_params.get("token")
             if not auth_service.access_token_valid(token):
@@ -256,10 +278,14 @@ def create_app() -> FastAPI:
     ):
         app.include_router(module.router, dependencies=[Depends(bind_audit_actor)])
 
-    # Serve captured evidence artifacts statically.
+    # Serve captured evidence artifacts statically. Evidence lives under
+    # workspace/<scope>/evidence/<RUN-CODE>/... (ADR 0009 §5), so the mount is
+    # the workspace root rather than the flat settings.evidence_dir; the
+    # auth_guard middleware above restricts requests to the `.../evidence/...`
+    # subtree regardless of auth mode, and to the owning run when auth is on.
     app.mount(
         "/artifacts",
-        StaticFiles(directory=str(settings.evidence_dir), check_dir=False),
+        StaticFiles(directory=str(settings.workspace_dir), check_dir=False),
         name="artifacts",
     )
 

@@ -154,7 +154,7 @@ def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
     outcome = gate["outcome"]
     # A spec Playwright cannot even parse/collect is treated like a rejection
     # (best-effort: an unavailable CLI/timeout skips the check, never blocks).
-    if outcome == "passed" and not spec_service.playwright_list_ok(code):
+    if outcome == "passed" and not spec_service.playwright_list_ok(code, run.owner_id):
         outcome = "rejected"
         gate = {
             "outcome": "rejected",
@@ -184,7 +184,9 @@ def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
         return spec
 
     # passed — accept and write the runnable spec file.
-    path = spec_service.write_spec_file(run.code, case.ticket_external_id, case.code, code)
+    path = spec_service.write_spec_file(
+        run.code, case.ticket_external_id, case.code, code, run.owner_id
+    )
     spec.code = code
     spec.path = str(path)
     spec.status = "draft"
@@ -365,7 +367,7 @@ def update_case_spec(
 
     spec.code = payload.code
     path = spec_service.write_spec_file(
-        run.code, case.ticket_external_id, case.code, payload.code
+        run.code, case.ticket_external_id, case.code, payload.code, run.owner_id
     )
     spec.path = str(path)
     db.commit()

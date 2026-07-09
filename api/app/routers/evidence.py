@@ -17,7 +17,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.config import settings
 from app.db import get_db
 from app.deps_auth import current_user
 from app.models.execution import Evidence, Execution, ExecutionResult
@@ -28,6 +27,7 @@ from app.schemas import AnnotateRequest, EvidenceOut, ExecutionResultOut
 from app.services import evidence_analysis, report_service
 from app.services.annotate import render_annotations
 from app.services.ownership import get_owned_or_404
+from app.services.workspace_scope import scoped_evidence_dir, served_evidence_path
 
 router = APIRouter(tags=["evidence"])
 
@@ -36,10 +36,35 @@ _PROVIDER_GLYPH = {"ado": "AD", "jira": "JR", "github": "GH"}
 _PROVIDER_COLOR = {"ado": "#0078d4", "jira": "#0052cc", "github": "#24292e"}
 
 
-def _check_result_owner(db: Session, result: ExecutionResult, user: User | None) -> None:
-    """404s unless ``user`` owns the run behind ``result``'s execution."""
+def _check_result_owner(db: Session, result: ExecutionResult, user: User | None) -> Run | None:
+    """404s unless ``user`` owns the run behind ``result``'s execution.
+
+    Returns the resolved ``Run`` (or ``None`` if the result has no execution)
+    so callers can read ``run.owner_id`` to scope the evidence path (ADR 0009).
+    """
     if result.execution is not None:
-        get_owned_or_404(db, Run, result.execution.run_id, user)
+        return get_owned_or_404(db, Run, result.execution.run_id, user)
+    return None
+
+
+def _evidence_out(evidence: Evidence, owner_id: int | None) -> dict:
+    """API view of an Evidence row.
+
+    ``Evidence.path`` is stored relative to the scoped evidence root
+    (``<RUN-CODE>/<ticket>/<case>/<file>``), so the served path returned here
+    prepends the owner's scope + ``evidence/`` to match the ``/artifacts``
+    mount (ADR 0009 §5) — the frontend builds the URL by naive concatenation
+    (``app/src/lib/api.ts:408``).
+    """
+    return {
+        "id": evidence.id,
+        "kind": evidence.kind,
+        "filename": evidence.filename,
+        "path": served_evidence_path(owner_id, evidence.path) if evidence.path else evidence.path,
+        "size_bytes": evidence.size_bytes,
+        "annotated": evidence.annotated,
+        "meta": evidence.meta,
+    }
 
 
 def _latest_execution(db: Session, run_id: int) -> Execution | None:
@@ -57,7 +82,7 @@ def _latest_execution(db: Session, run_id: int) -> Execution | None:
 def get_run_evidence(
     run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
 ) -> dict:
-    get_owned_or_404(db, Run, run_id, user)
+    run = get_owned_or_404(db, Run, run_id, user)
     execution = _latest_execution(db, run_id)
     results = list(execution.results) if execution else []
 
@@ -101,27 +126,38 @@ def get_run_evidence(
     return {
         "tickets": tickets_summary,
         "byTicket": {
-            tid: [ExecutionResultOut.model_validate(r).model_dump(by_alias=True) for r in rs]
-            for tid, rs in by_ticket.items()
+            tid: _results_out(rs, run.owner_id) for tid, rs in by_ticket.items()
         },
     }
+
+
+def _results_out(results: list[ExecutionResult], owner_id: int | None) -> list[dict]:
+    """Dump ``ExecutionResultOut`` rows, rewriting each nested evidence path to
+    the served ``<scope>/evidence/...`` form (see ``_evidence_out``)."""
+    dumped = [ExecutionResultOut.model_validate(r).model_dump(by_alias=True) for r in results]
+    for result in dumped:
+        for ev in result.get("evidence", []):
+            if ev.get("path"):
+                ev["path"] = served_evidence_path(owner_id, ev["path"])
+    return dumped
 
 
 @router.get("/results/{result_id}/evidence", response_model=list[EvidenceOut])
 def get_result_evidence(
     result_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
-) -> list[Evidence]:
+) -> list[dict]:
     result = db.get(ExecutionResult, result_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Execution result not found")
-    _check_result_owner(db, result, user)
-    return list(result.evidence)
+    run = _check_result_owner(db, result, user)
+    owner_id = run.owner_id if run is not None else None
+    return [_evidence_out(e, owner_id) for e in result.evidence]
 
 
 @router.post("/evidence/{evidence_id}/auto-annotate", response_model=EvidenceOut)
 def auto_annotate_evidence(
     evidence_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
-) -> Evidence:
+) -> dict:
     """Analyze a failure screenshot with Claude vision and burn annotations on it.
 
     Stores the diagnosis + annotated-image path in ``meta`` and flips ``annotated``.
@@ -134,13 +170,12 @@ def auto_annotate_evidence(
         raise HTTPException(status_code=400, detail="Only screenshot evidence can be annotated")
 
     result = db.get(ExecutionResult, evidence.result_id)
-    if result is not None:
-        _check_result_owner(db, result, user)
+    run = _check_result_owner(db, result, user) if result is not None else None
     error_message = result.error_message if result else ""
     if not evidence_analysis.annotate_screenshot(db, evidence, error_message or "", force=True):
         raise HTTPException(status_code=502, detail="Auto-annotation failed (see server logs)")
     db.refresh(evidence)
-    return evidence
+    return _evidence_out(evidence, run.owner_id if run is not None else None)
 
 
 @router.post("/evidence/{evidence_id}/annotate", response_model=EvidenceOut)
@@ -149,22 +184,23 @@ def annotate_evidence(
     body: AnnotateRequest,
     db: Session = Depends(get_db),
     user: User | None = Depends(current_user),
-) -> Evidence:
+) -> dict:
     evidence = db.get(Evidence, evidence_id)
     if evidence is None:
         raise HTTPException(status_code=404, detail="Evidence not found")
     if evidence.kind != "screenshot":
         raise HTTPException(status_code=400, detail="Only screenshot evidence can be annotated")
     result = db.get(ExecutionResult, evidence.result_id)
-    if result is not None:
-        _check_result_owner(db, result, user)
+    run = _check_result_owner(db, result, user) if result is not None else None
+    owner_id = run.owner_id if run is not None else None
 
-    src_path = settings.evidence_dir / evidence.path
+    evidence_root = scoped_evidence_dir(owner_id)
+    src_path = evidence_root / evidence.path
     if not src_path.exists():
         raise HTTPException(status_code=404, detail=f"Evidence file not found: {evidence.path}")
 
     dst_relpath = Path(evidence.path).with_name(Path(evidence.path).stem + "-annotated.png")
-    dst_path = settings.evidence_dir / dst_relpath
+    dst_path = evidence_root / dst_relpath
 
     render_annotations(src_path, body.shapes, dst_path)
 
@@ -175,4 +211,4 @@ def annotate_evidence(
     db.add(evidence)
     db.commit()
     db.refresh(evidence)
-    return evidence
+    return _evidence_out(evidence, owner_id)

@@ -116,17 +116,21 @@ def test_get_result_evidence_returns_list(client, db_session):
     assert len(items) == 1
     assert items[0]["kind"] == "screenshot"
     assert items[0]["annotated"] is False
+    # Served path is scope-prefixed (ADR 0009 §5): run 1 has no owner -> shared.
+    assert items[0]["path"] == "shared/evidence/shot.png"
 
 
 def test_annotate_evidence_endpoint(client, db_session, workspace_dir: Path):
     from app.config import get_settings
     from app.models.execution import Evidence
+    from app.services.workspace_scope import scoped_evidence_dir
 
     _execution, fail_result = _seed_execution(db_session)
 
     settings = get_settings()
+    # Run 1 has no owner (auth disabled in tests) -> the shared namespace.
     src_relpath = "run1/SUR-1/shot.png"
-    src_path = settings.evidence_dir / src_relpath
+    src_path = scoped_evidence_dir(None) / src_relpath
     src_path.parent.mkdir(parents=True, exist_ok=True)
     _make_png(src_path)
 
@@ -149,8 +153,10 @@ def test_annotate_evidence_endpoint(client, db_session, workspace_dir: Path):
     body = resp.json()
     assert body["annotated"] is True
     assert body["path"].endswith("-annotated.png")
+    # The served path is scope-prefixed (ADR 0009 §5): "shared/evidence/...".
+    assert body["path"].startswith("shared/evidence/")
 
-    annotated_path = settings.evidence_dir / body["path"]
+    annotated_path = settings.workspace_dir / body["path"]
     assert annotated_path.exists()
 
 
@@ -199,15 +205,16 @@ def test_ticket_passed_only_when_all_approved_cases_pass(client, db_session):
 
 def _seed_failed_screenshot(db_session):
     """A failed result with a real screenshot Evidence on disk."""
-    from app.config import settings
     from app.models.execution import Evidence
+    from app.services.workspace_scope import scoped_evidence_dir
 
     _execution, fail_result = _seed_execution(db_session, run_id=77)
     fail_result.error_message = 'expect(locator).toContainText("Activate") — not found'
     db_session.flush()
 
     rel = "RUN-77/SUR-1/TC-02/test-failed-1.png"
-    abs_path = settings.evidence_dir / rel
+    # Run 77 has no owner (auth disabled in tests) -> the shared namespace.
+    abs_path = scoped_evidence_dir(None) / rel
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (400, 300), (240, 240, 245)).save(abs_path)
     ev = Evidence(result_id=fail_result.id, kind="screenshot", path=rel,
@@ -222,8 +229,8 @@ def _seed_failed_screenshot(db_session):
 
 
 def test_auto_annotate_burns_shapes_and_stores_diagnosis(db_session, monkeypatch):
-    from app.config import settings
     from app.services import claude_cli, evidence_analysis
+    from app.services.workspace_scope import scoped_evidence_dir
 
     run, result, ev = _seed_failed_screenshot(db_session)
     monkeypatch.setattr(
@@ -239,12 +246,12 @@ def test_auto_annotate_burns_shapes_and_stores_diagnosis(db_session, monkeypatch
     assert ev.annotated is True
     assert ev.meta["autoAnnotated"] is True
     assert "Activate action is missing" in ev.meta["diagnosis"]
-    assert (settings.evidence_dir / ev.meta["annotatedPath"]).exists()
+    assert (scoped_evidence_dir(run.owner_id) / ev.meta["annotatedPath"]).exists()
 
 
 def test_auto_annotate_falls_back_to_caption_on_bad_json(db_session, monkeypatch):
-    from app.config import settings
     from app.services import claude_cli, evidence_analysis
+    from app.services.workspace_scope import scoped_evidence_dir
 
     run, result, ev = _seed_failed_screenshot(db_session)
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: "sorry, I cannot help")
@@ -254,7 +261,7 @@ def test_auto_annotate_falls_back_to_caption_on_bad_json(db_session, monkeypatch
 
     assert ev.annotated is True
     assert ev.meta["diagnosis"]  # falls back to the error message
-    assert (settings.evidence_dir / ev.meta["annotatedPath"]).exists()
+    assert (scoped_evidence_dir(run.owner_id) / ev.meta["annotatedPath"]).exists()
 
 
 def test_auto_annotate_endpoint(client, db_session, monkeypatch):

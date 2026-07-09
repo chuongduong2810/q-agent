@@ -45,7 +45,7 @@ def _stub_external_gates(monkeypatch):
     that need a specific outcome override these locally after this fixture runs."""
     from app.services import failure_classifier, spec_service
 
-    monkeypatch.setattr(spec_service, "playwright_list_ok", lambda code: True)
+    monkeypatch.setattr(spec_service, "playwright_list_ok", lambda *a, **k: True)
     monkeypatch.setattr(
         failure_classifier,
         "classify_failure",
@@ -113,9 +113,9 @@ def test_generate_writes_spec_file_and_persists_row(client, db_session, monkeypa
     assert spec["language"] == "TypeScript"
     assert spec["framework"] == "Playwright"
 
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
-    spec_path = settings.specs_dir / run.code / "1428-TC-01.spec.ts"
+    spec_path = scoped_specs_dir(run.owner_id) / run.code / "1428-TC-01.spec.ts"
     assert spec_path.exists()
     assert "test('Login works'" in spec_path.read_text(encoding="utf-8")
 
@@ -190,9 +190,9 @@ def test_update_case_spec_persists_and_rewrites_file(client, db_session, monkeyp
     assert body["testCaseId"] == case.id
     assert body["code"] == edited
 
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
-    spec_path = settings.specs_dir / run.code / "1428-TC-01.spec.ts"
+    spec_path = scoped_specs_dir(run.owner_id) / run.code / "1428-TC-01.spec.ts"
     assert spec_path.exists()
     assert spec_path.read_text(encoding="utf-8") == edited
 
@@ -695,9 +695,9 @@ def test_generation_gate_blocked_vs_rejected(db_session, monkeypatch):
     db_session.commit()
     assert spec.status == "blocked"
     assert spec.block_reason
-    from app.config import settings
+    from app.services.workspace_scope import scoped_specs_dir
 
-    assert not (settings.specs_dir / run.code / "1428-TC-01.spec.ts").exists()
+    assert not (scoped_specs_dir(run.owner_id) / run.code / "1428-TC-01.spec.ts").exists()
 
     # KB has grounding for the very route/selectors -> the placeholder is a rejection.
     grounded = {"routes": [{"path": "/login"}], "selectors": ["#user"], "baseUrl": "https://x"}
