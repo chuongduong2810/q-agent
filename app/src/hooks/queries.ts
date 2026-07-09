@@ -9,7 +9,8 @@ import {
   useQueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { ApiError, api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 import type {
   AnnotationShape,
@@ -21,6 +22,7 @@ import type {
   ProviderKind,
   RunCreate,
   SettingsUpdate,
+  SharedProjectCreate,
   SyncRequest,
   TestCaseCreate,
   TestCaseUpdate,
@@ -176,6 +178,75 @@ export const useRefreshProjects = () => {
   return useMutation({
     mutationFn: api.refreshProjects,
     onSuccess: (data) => qc.setQueryData(queryKeys.projects, data),
+  });
+};
+
+// -------------------------------------------------------------- shared namespace (ADR 0009)
+// Catalog of the admin-curated shared namespace, so any member can browse
+// before cloning (GET /shared/projects — any authed caller).
+export const useSharedProjects = () =>
+  useQuery({ queryKey: queryKeys.sharedProjects, queryFn: api.listSharedProjects });
+
+// Clone a shared project into the caller's own scope. On success, the
+// project + its knowledge now exist under the caller's owner scope, so
+// refresh both lists. 409 means the caller already owns that key — surfaced
+// as a friendly toast instead of the generic error message.
+export const useCloneSharedProject = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (key: string) => api.cloneSharedProject(key),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.projects });
+      qc.invalidateQueries({ queryKey: queryKeys.knowledgeList });
+      qc.invalidateQueries({ queryKey: queryKeys.sharedProjects });
+      toast.success(
+        "Project cloned. Re-bind its provider connections in Project Settings to enable sync.",
+      );
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 409) {
+        toast.error("You already have this project.");
+        return;
+      }
+      toast.error(e instanceof Error ? e.message : "Failed to clone project");
+    },
+  });
+};
+
+// Admin: create/update the shared project shell + config (owner_id=None).
+export const useCreateSharedProject = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: SharedProjectCreate }) =>
+      api.createSharedProject(key, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sharedProjects }),
+  });
+};
+
+// Admin: build/rebuild the shared project's bare-key knowledge base.
+export const useBuildSharedKnowledge = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: KnowledgeBuildRequest }) =>
+      api.buildSharedKnowledge(key, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sharedProjects }),
+  });
+};
+
+// Admin: build/rebuild a shared project's per-repo knowledge base.
+export const useBuildSharedRepoKnowledge = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      key,
+      repo,
+      body,
+    }: {
+      key: string;
+      repo: string;
+      body: KnowledgeBuildRequest;
+    }) => api.buildSharedRepoKnowledge(key, repo, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sharedProjects }),
   });
 };
 

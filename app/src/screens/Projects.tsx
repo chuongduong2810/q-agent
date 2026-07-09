@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { providerGlyph } from "@/components/ui/badges";
 import { EmptyState, Spinner } from "@/components/ui/misc";
+import { SharedProjectsCatalog } from "@/components/projects/SharedProjectsCatalog";
 import { confidenceColor, knowledgeStatusStyle, providerLabel } from "@/data/projects";
 import { useKnowledgeList, useProjects, useProviders, useRefreshProjects } from "@/hooks/queries";
 import type { KnowledgeStatus, ProjectKnowledgeOut, ProjectOut } from "@/types/api";
@@ -95,6 +96,8 @@ export function Projects() {
           Refresh
         </Button>
       </div>
+
+      <SharedProjectsCatalog />
 
       {isLoading || refresh.isPending ? (
         <div className="grid grid-cols-3 gap-3.5">

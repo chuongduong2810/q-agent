@@ -9,6 +9,7 @@ import { SignedOut } from "@/screens/auth/SignedOut";
 import { Profile } from "@/screens/auth/Profile";
 import { UserManagement } from "@/screens/settings/UserManagement";
 import { ClaudeCredentials } from "@/screens/settings/ClaudeCredentials";
+import { SharedWorkspace } from "@/screens/settings/SharedWorkspace";
 
 import { Dashboard } from "@/screens/Dashboard";
 import { Projects } from "@/screens/Projects";
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
           { path: "settings", element: <Settings /> },
           { path: "settings/users", element: <UserManagement /> },
           { path: "settings/claude-credentials", element: <ClaudeCredentials /> },
+          { path: "settings/shared-workspace", element: <SharedWorkspace /> },
           { path: "profile", element: <Profile /> },
           { path: "*", element: <Navigate to="/" replace /> },
         ],
