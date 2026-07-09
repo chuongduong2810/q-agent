@@ -1,13 +1,17 @@
-import { Link } from "react-router-dom";
+/**
+ * Signed-out confirmation (#74) — shown after an explicit logout (ADR 0007).
+ * A gradient logout tile, a reassuring line about the session ending, and a
+ * full-width "Sign back in" button that returns to `/login`. Ported from the
+ * design source's "SIGNED OUT" section.
+ */
+
+import { useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 
-/**
- * PLACEHOLDER (#73 scaffold). Confirmation screen shown after an explicit
- * logout. The refined copy/animation lands in a later slice; the "Sign back
- * in" link is already wired.
- */
 export function SignedOut() {
+  const navigate = useNavigate();
+
   return (
     <AuthLayout>
       <div className="text-center">
@@ -16,6 +20,7 @@ export function SignedOut() {
           style={{
             background: "linear-gradient(135deg,#8b5cf6,#6366f1)",
             boxShadow: "0 12px 30px -8px rgba(139,92,246,.7)",
+            animation: "scaleIn .4s ease both",
           }}
         >
           <LogOut size={28} color="#fff" strokeWidth={2.2} />
@@ -25,16 +30,17 @@ export function SignedOut() {
           Your session on this device has ended. Sign back in whenever you&#8217;re ready to pick up
           where you left off.
         </p>
-        <Link
-          to="/login"
-          className="flex h-[46px] items-center justify-center rounded-xl text-[14.5px] font-bold text-white"
+        <button
+          type="button"
+          onClick={() => navigate("/login")}
+          className="flex h-[46px] w-full items-center justify-center rounded-xl border-none text-[14.5px] font-bold text-white transition-[filter] hover:brightness-110"
           style={{
             background: "linear-gradient(135deg,#8b5cf6,#6366f1)",
             boxShadow: "0 10px 26px -8px rgba(139,92,246,.8)",
           }}
         >
           Sign back in
-        </Link>
+        </button>
       </div>
     </AuthLayout>
   );
