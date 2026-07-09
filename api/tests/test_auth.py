@@ -214,3 +214,30 @@ def test_ws_rejects_missing_token_when_auth_on(client, auth_on):
 
 def test_artifacts_rejects_missing_token_when_auth_on(client, auth_on):
     assert client.get("/artifacts/anything.png").status_code == 401
+
+
+# ---------------------------------------------------------------- audit actor (#79)
+def test_audit_actor_is_authenticated_user(client, auth_on, db_session):
+    """An audited mutation attributes the event to the bearer's user, not "You"."""
+    from app import db as db_module
+    from app.models.audit import AuditLog
+
+    _make_user(db_session, "lead@example.com", "hunter2000", role="admin")
+    token = _login(client, "lead@example.com", "hunter2000").json()["accessToken"]
+
+    r = client.put("/settings", json={"parallel": 6}, headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+
+    session = db_module.SessionLocal()
+    try:
+        row = (
+            session.query(AuditLog)
+            .filter(AuditLog.category == "settings")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+    finally:
+        session.close()
+    assert row is not None
+    assert row.actor_type == "user"
+    assert row.actor == "Test User"  # first/last name from _make_user, not "You"

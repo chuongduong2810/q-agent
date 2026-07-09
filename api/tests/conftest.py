@@ -34,6 +34,10 @@ def workspace_dir(tmp_path, monkeypatch) -> Iterator:
     # Mutate the singleton in place so modules that did `from app.config import
     # settings` at import time see the temp workspace too.
     config_module.settings.__dict__.update(fresh.__dict__)
+    # The app enforces auth by default (#79); the suite exercises handlers
+    # without auth plumbing, so disable enforcement here. test_auth opts back in
+    # per-test via its own `auth_on` fixture.
+    config_module.settings.auth_required = False
     config_module.settings.ensure_dirs()
     settings = config_module.settings
 

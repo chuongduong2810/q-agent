@@ -643,8 +643,6 @@ export interface SettingsOut {
   video: boolean;
   maxCasesPerTicket: number;
   headless: boolean;
-  userName: string;
-  userRole: string;
   autoAnnotate: boolean;
   neuralBackground: boolean;
   claudeModel: string;

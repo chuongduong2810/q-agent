@@ -18,8 +18,6 @@ DEFAULTS: dict[str, Any] = {
     "video": False,
     "maxCasesPerTicket": 8,
     "headless": True,
-    "userName": "",
-    "userRole": "",
     "autoAnnotate": True,
     "neuralBackground": True,
     "claudeModel": "claude-sonnet-5",

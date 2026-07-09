@@ -17,11 +17,7 @@ import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api, markLoggingOut } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { useSettings } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
-
-const initials = (name: string) =>
-  name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
 interface NavItem {
   path: string;
@@ -51,22 +47,16 @@ export function GlobalSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  // Identity comes from the authenticated principal (/auth/me) — the app subtree
+  // renders only behind RequireAuth, so `user` is present in normal use. The
+  // settings.json userName/userRole fields were retired (#79).
   const user = useAuth((s) => s.user);
 
-  // Fallback identity for when auth is off / not logged in during dev — keep the
-  // original settings-driven display working so the footer never goes blank.
-  const { data: settings } = useSettings();
-  const settingsName = (settings?.userName ?? "").trim();
-  const settingsRole = (settings?.userRole ?? "").trim();
-
-  // Resolved display identity: prefer the authenticated principal, else settings.
   const userInitials = user
     ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase()
     : "";
-  const displayName = user
-    ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim()
-    : settingsName;
-  const displayRole = user ? user.role : settingsRole;
+  const displayName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : "";
+  const displayRole = user?.role ?? "";
   const hasIdentity = displayName.length > 0;
   const isAdmin = user?.role === "admin";
 
@@ -157,7 +147,7 @@ export function GlobalSidebar() {
     });
   };
 
-  const avatarInitials = userInitials || (hasIdentity && !user ? initials(displayName) : "");
+  const avatarInitials = userInitials;
   const avatar = (
     <div className="h-8 w-8 rounded-[10px] text-[13px]">
       {avatarInitials ? (

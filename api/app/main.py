@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
@@ -13,6 +14,7 @@ from starlette.responses import JSONResponse
 from app.config import settings
 from app.db import init_db
 from app.logging import logger, setup_logging
+from app.services.audit_context import bind_audit_actor
 from app.routers import (
     ai,
     audit,
@@ -48,9 +50,14 @@ _AUTH_ALLOWLIST = {
 
 
 def _seed_admin() -> None:
-    """Create a seed admin from QAGENT_ADMIN_EMAIL/PASSWORD when no user exists."""
-    if not (settings.admin_email and settings.admin_password):
-        return
+    """Ensure a first admin exists so an auth-required install is reachable.
+
+    Precedence: explicit ``QAGENT_ADMIN_EMAIL``/``QAGENT_ADMIN_PASSWORD`` win. In
+    dev (``cookie_secure`` off) with auth required and no explicit creds, a
+    fallback ``admin@qagent.local`` is seeded with a generated password logged at
+    startup — so the operator is never locked out. In prod (``cookie_secure`` on)
+    we refuse to seed an insecure default and log how to create the admin.
+    """
     from app.db import SessionLocal
     from app.models.user import ROLE_ADMIN, User
 
@@ -58,19 +65,41 @@ def _seed_admin() -> None:
     try:
         if db.query(User.id).first() is not None:
             return
-        email = settings.admin_email.strip().lower()
+        dev = not settings.cookie_secure
+        fallback_ok = settings.auth_required and dev
+        email = (settings.admin_email or ("admin@qagent.local" if fallback_ok else "")).strip().lower()
+        password = settings.admin_password
+        generated = False
+        if not password and fallback_ok:
+            password = secrets.token_urlsafe(12)
+            generated = True
+        if not (email and password):
+            if settings.auth_required:
+                logger.error(
+                    "Auth is required but no admin was seeded — set QAGENT_ADMIN_EMAIL "
+                    "and QAGENT_ADMIN_PASSWORD to create the first administrator."
+                )
+            return
         db.add(
             User(
                 email=email,
                 first_name="Admin",
                 last_name="",
                 role=ROLE_ADMIN,
-                password_hash=auth_service.hash_password(settings.admin_password),
+                password_hash=auth_service.hash_password(password),
                 is_active=True,
             )
         )
         db.commit()
-        logger.info("Seeded admin user {}", email)
+        if generated:
+            logger.warning(
+                "Seeded DEV admin {} with a generated password: {}  "
+                "(set QAGENT_ADMIN_PASSWORD to choose your own)",
+                email,
+                password,
+            )
+        else:
+            logger.info("Seeded admin user {}", email)
     except Exception as exc:  # noqa: BLE001 - never block startup on the seed
         logger.warning("admin seed failed: {}", exc)
         db.rollback()
@@ -124,21 +153,27 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Feature routers (implemented by feature modules).
-    app.include_router(health.router)
-    app.include_router(auth.router)
-    app.include_router(ai.router)
-    app.include_router(audit.router)
-    app.include_router(providers.router)
-    app.include_router(projects.router)
-    app.include_router(tickets.router)
-    app.include_router(runs.router)
-    app.include_router(review.router)
-    app.include_router(automation.router)
-    app.include_router(execution.router)
-    app.include_router(evidence.router)
-    app.include_router(reports.router)
-    app.include_router(comments.router)
+    # Feature routers (implemented by feature modules). The bind_audit_actor
+    # dependency runs in each endpoint's request context (avoiding the
+    # BaseHTTPMiddleware contextvar pitfall) so audit_service.record() attributes
+    # events to the authenticated user instead of the "You" default.
+    for module in (
+        health,
+        auth,
+        ai,
+        audit,
+        providers,
+        projects,
+        tickets,
+        runs,
+        review,
+        automation,
+        execution,
+        evidence,
+        reports,
+        comments,
+    ):
+        app.include_router(module.router, dependencies=[Depends(bind_audit_actor)])
 
     # Serve captured evidence artifacts statically.
     app.mount(

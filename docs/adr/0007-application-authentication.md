@@ -148,13 +148,15 @@ First **Admin** is seeded on empty DB from `QAGENT_ADMIN_EMAIL` / `QAGENT_ADMIN_
 
 ## Consequences
 
-- Every request/WS becomes authenticated **when `QAGENT_AUTH_REQUIRED` is on**; `/artifacts`
-  no longer public. Enforcement stays **opt-in** (default off) so local single-operator dev
-  keeps working with no login; it is switched on at deploy (see §Rollout status below).
-- `settings.json` `userName`/`userRole` remain the identity fallback while enforcement is
-  opt-in (the sidebar reads `/auth/me` when signed in, else falls back). Fully retiring
-  them — and replacing `audit_logs.actor="You"` with the real user — lands with enforcement
-  at go-live / ownership scoping (plan Phase 3).
+- Every request/WS/artifact requires a valid session — enforcement is **on by default**
+  (`QAGENT_AUTH_REQUIRED=true`); set it false to opt back into local-first single-user mode.
+  On an empty DB the first admin is seeded from env, or in dev (`cookie_secure` off) a
+  fallback `admin@qagent.local` is auto-seeded with a password logged at startup so the
+  operator is never locked out; prod refuses an insecure default.
+- `settings.json` `userName`/`userRole` are **retired** — identity now comes from `/auth/me`
+  everywhere (sidebar, dashboard greeting, "assigned to me" filters, profile). `audit_logs`
+  attributes events to the authenticated user (via a per-request actor context) instead of
+  the legacy `"You"` default.
 - A `sessions` table introduces server-side session state (revocation, active-sessions
   UI) — the tradeoff for httpOnly-cookie security over stateless-JWT simplicity.
 - SSO, Postgres, and ownership scoping remain follow-on epics; this ADR is the foundation
@@ -177,8 +179,10 @@ Signed-out (#74), Admin user management (#75, admin-provisioned; replaces public
 Forgot/reset (#76), Profile incl. 2FA/sessions/delete (#77), and the sidebar account menu +
 logout (#78). SSO providers are hidden per scope.
 
-**Enforcement is opt-in:** `QAGENT_AUTH_REQUIRED` defaults **off**. Set it to `true`
-(with `QAGENT_ADMIN_EMAIL`/`QAGENT_ADMIN_PASSWORD`) to require login — that switch, plus
-retiring the `settings.json` identity fallback and the real `audit_logs.actor`, is the
-go-live task (tracked on #79). An e2e (`app/e2e/auth.spec.ts`) exercises the full flow with
-the flag on.
+**Enforcement is on by default** (go-live, #79): `QAGENT_AUTH_REQUIRED` defaults **true**,
+with a dev-safe admin seed (fallback `admin@qagent.local`, generated password logged) so
+local dev is never locked out; prod requires explicit `QAGENT_ADMIN_EMAIL`/`PASSWORD`. The
+`settings.json` identity fields are retired in favor of `/auth/me`, and `audit_logs` records
+the real actor. The test suite runs with the guard disabled (`conftest` sets it off;
+`test_auth` opts in per-case); `app/e2e/auth.spec.ts` exercises the full browser flow with
+the guard on. SSO, Postgres, and per-entity ownership scoping remain follow-on epics.

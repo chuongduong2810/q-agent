@@ -3,7 +3,8 @@ import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
-import { ALL_TICKETS_PAGE_SIZE, useCreateRun, useSettings, useTickets } from "@/hooks/queries";
+import { ALL_TICKETS_PAGE_SIZE, useCreateRun, useTickets } from "@/hooks/queries";
+import { useAuth } from "@/store/auth";
 import { useUI } from "@/store/ui";
 
 const FRAMEWORKS = ["Playwright", "Selenium"];
@@ -30,8 +31,8 @@ export function CreateRunModal() {
 
   const { data: ticketsPage } = useTickets({ pageSize: ALL_TICKETS_PAGE_SIZE });
   const tickets = ticketsPage?.items;
-  const { data: settings } = useSettings();
-  const userName = (settings?.userName ?? "").trim();
+  const user = useAuth((s) => s.user);
+  const userName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : "";
   const createRun = useCreateRun();
 
   if (!open) return null;

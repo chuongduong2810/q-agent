@@ -628,8 +628,6 @@ class SettingsOut(ApiModel):
     video: bool = False
     max_cases_per_ticket: int = 8
     headless: bool = True
-    user_name: str = ""
-    user_role: str = ""
     auto_annotate: bool = True
     neural_background: bool = True
     claude_model: str = "claude-sonnet-5"
@@ -643,8 +641,6 @@ class SettingsUpdate(ApiModel):
     video: bool | None = None
     max_cases_per_ticket: int | None = None
     headless: bool | None = None
-    user_name: str | None = None
-    user_role: str | None = None
     auto_annotate: bool | None = None
     neural_background: bool | None = None
     claude_model: str | None = None

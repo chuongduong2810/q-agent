@@ -293,8 +293,6 @@ def update_settings_endpoint(body: SettingsUpdate) -> SettingsOut:
         "video": updates.get("video"),
         "maxCasesPerTicket": updates.get("max_cases_per_ticket"),
         "headless": updates.get("headless"),
-        "userName": updates.get("user_name"),
-        "userRole": updates.get("user_role"),
         "autoAnnotate": updates.get("auto_annotate"),
         "neuralBackground": updates.get("neural_background"),
         "claudeModel": updates.get("claude_model"),
