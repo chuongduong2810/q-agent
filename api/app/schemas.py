@@ -237,6 +237,53 @@ class RepoKnowledgeOut(ApiModel):
     version: str = "v1"
     needs_refresh: bool = False
     last_indexed: datetime | None = None
+
+
+# ------------------------------------------------------- Shared namespace (#120)
+class SharedProjectKnowledgeOut(ApiModel):
+    """One repo's (or the bare project's, when ``repo`` is blank) knowledge status
+    within a shared-catalog entry."""
+
+    repo: str = ""
+    status: str = "not_indexed"
+    confidence: int = 0
+    version: str = "v1"
+    last_indexed: datetime | None = None
+
+
+class SharedProjectOut(ApiModel):
+    """A shared-namespace project the catalog lists for members to browse/clone."""
+
+    key: str
+    name: str
+    provider_kind: str = ""
+    has_config: bool = False
+    knowledge: list[SharedProjectKnowledgeOut] = Field(default_factory=list)
+    already_cloned: bool = False
+
+
+class SharedProjectCreate(ApiModel):
+    """Admin: create/update the shared project shell + its config (ADR 0009 §2)."""
+
+    name: str = ""
+    provider_kind: str = ""
+    external_id: str = ""
+    base_url: str = ""
+    repos: list[ProjectRepo] = Field(default_factory=list)
+    environments: list[EnvironmentCfg] = Field(default_factory=list)
+    test_accounts: list[TestAccountIn] = Field(default_factory=list)
+    extra: dict = Field(default_factory=dict)
+    manual_auth: bool = False
+
+
+class CloneResultOut(ApiModel):
+    """Summary of what a clone copied (ADR 0009 §4)."""
+
+    project_key: str
+    projects_cloned: int = 0
+    config_cloned: bool = False
+    knowledge_cloned: list[str] = Field(default_factory=list)
+    artifacts_copied: list[str] = Field(default_factory=list)
     doc_path: str = ""
     last_error: str = ""
 
