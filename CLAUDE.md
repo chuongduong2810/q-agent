@@ -38,6 +38,7 @@ Navigation is **URL-driven** via `react-router-dom` (`app/src/router.tsx`, `crea
 ## Parallel multi-slice work
 
 - For cross-cutting changes, slice into a **solo foundation** + **file-disjoint feature slices run in parallel** (worktree sub-agents), then a **solo cleanup**. Parallelism is bounded by file disjointness, not issue count — slices sharing a core file (store, router, shell) must be sequenced. Pull `master` between waves so each new worktree branches from merged code.
+- **Do not use the `de-expert` agent for this project.** Use `general-purpose` for implementation sub-agents.
 - When a full migration can't land in one green step, ship a temporary bridge in the foundation so every intermediate slice stays functional and typechecks, then delete the bridge in the cleanup slice.
 
 ## Tooling
