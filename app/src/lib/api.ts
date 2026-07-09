@@ -25,6 +25,7 @@ import type {
   EvidenceOut,
   ExecutionOut,
   HealReport,
+  InviteUserResponse,
   AvailableReposOut,
   ConnectionOut,
   ConnectionUpdate,
@@ -226,7 +227,7 @@ export const api = {
     revokeOthers: () => post<void>("/auth/sessions/revoke-others"),
     deleteMe: () => del<void>("/auth/me"),
 
-    // admin — user management (#78 / #77)
+    // admin — user management (#78 / #77 / #94)
     users: () => get<User[]>("/auth/users"),
     createUser: (body: {
       email: string;
@@ -235,6 +236,8 @@ export const api = {
       role: UserRole;
       password?: string;
     }) => post<User>("/auth/users", body),
+    inviteUser: (body: { email: string; firstName?: string; lastName?: string; role: UserRole }) =>
+      post<InviteUserResponse>("/auth/users/invite", body),
     updateUser: (
       id: number,
       body: Partial<{ firstName: string; lastName: string; role: UserRole; isActive: boolean }>,
