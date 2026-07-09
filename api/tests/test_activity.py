@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from app.services import activity, claude_cli
 
 
-def test_run_prompt_records_activity(monkeypatch):
+def test_run_prompt_records_activity(monkeypatch, shared_claude_credential):
     monkeypatch.setattr(
         claude_cli.subprocess,
         "run",
@@ -23,7 +23,7 @@ def test_run_prompt_records_activity(monkeypatch):
     assert "durationMs" in top
 
 
-def test_run_prompt_records_failure(monkeypatch):
+def test_run_prompt_records_failure(monkeypatch, shared_claude_credential):
     def boom(*a, **k):
         raise FileNotFoundError("no claude")
 

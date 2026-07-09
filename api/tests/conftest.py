@@ -102,6 +102,18 @@ def client(app, db_session):
 
 
 @pytest.fixture
+def shared_claude_credential(db_session):
+    """Seed a shared Claude credential row (#95) so ``claude_cli.run_prompt``
+    resolves an effective ``CLAUDE_CONFIG_DIR`` instead of raising "no
+    credentials configured" — for tests that exercise the real ``run_prompt``
+    body with only ``subprocess.run`` mocked out."""
+    from app.services import claude_credentials
+
+    claude_credentials.upsert_shared(db_session, '{"token": "test-token"}')
+    return db_session
+
+
+@pytest.fixture
 def seed_ticket(db_session):
     """Seed one Ticket row directly in the temp DB (used by AI/review tests)."""
     from app.models.ticket import Ticket

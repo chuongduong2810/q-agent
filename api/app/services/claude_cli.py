@@ -19,6 +19,7 @@ or times out, we raise :class:`ClaudeError` and the caller surfaces it.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -71,12 +72,16 @@ def _compose_system(system: str | None, skill: str | None, include_template: boo
     return f"{skill_text}\n\n{system}" if system else skill_text
 
 
-def _record_usage(envelope: dict | None, *, model: str, action: str, wall_ms: int) -> None:
+def _record_usage(
+    envelope: dict | None, *, model: str, action: str, wall_ms: int, owner_id: int | None
+) -> None:
     """Best-effort: log a successful call's real token/cost/latency usage.
 
     Parses the CLI's JSON result envelope for ``total_cost_usd``, ``usage`` token
     counts and ``duration_ms`` (falling back to the measured wall-clock time), and
-    hands them to :func:`ai_usage_service.record`. Wrapped so a logging failure can
+    hands them to :func:`ai_usage_service.record`. ``owner_id`` stamps the row for
+    per-user cost attribution (#95) — the same user whose credentials the call
+    ran under (see :func:`_resolve_claude_env`). Wrapped so a logging failure can
     never break the Claude call it observes.
     """
     try:
@@ -94,6 +99,7 @@ def _record_usage(envelope: dict | None, *, model: str, action: str, wall_ms: in
             cost_usd=env.get("total_cost_usd", 0.0),
             duration_ms=int(duration) if isinstance(duration, (int, float)) else wall_ms,
             action=action,
+            owner_id=owner_id,
         )
     except Exception as exc:  # noqa: BLE001 - usage capture is additive + best-effort
         logger.warning("Claude usage capture skipped: {}", exc)
@@ -105,6 +111,35 @@ def _resolve_cwd(cwd: str | Path | None) -> str | None:
         return None
     path = Path(cwd)
     return str(path) if path.is_dir() else None
+
+
+def _resolve_claude_env() -> tuple[dict[str, str], int | None]:
+    """Resolve the effective Claude credentials and build the subprocess env.
+
+    Resolves the current owner (see
+    :func:`app.services.claude_credentials.resolve_ambient_owner_id`), then that
+    user's own credential, else the shared/admin credential (#95), materializes
+    it into a private config dir, and returns ``(env, owner_id)`` where ``env``
+    points ``CLAUDE_CONFIG_DIR`` at that dir. ``owner_id`` is also returned so the
+    caller can stamp the usage row with the same user. Raises :class:`ClaudeError`
+    when no credential is configured at all — there is no interactive
+    ``claude login`` fallback (ADR 0001).
+    """
+    from app.db import SessionLocal
+    from app.services import claude_credentials
+
+    owner_id = claude_credentials.resolve_ambient_owner_id()
+    db = SessionLocal()
+    try:
+        config_dir = claude_credentials.resolve_effective_config_dir(db, owner_id)
+    finally:
+        db.close()
+    if config_dir is None:
+        raise ClaudeError(
+            "No Claude credentials configured. Upload your own credentials in "
+            "Settings, or ask an admin to configure the shared credential."
+        )
+    return {**os.environ, "CLAUDE_CONFIG_DIR": str(config_dir)}, owner_id
 
 
 def run_prompt(
@@ -138,6 +173,7 @@ def run_prompt(
     if system:
         cmd += ["--append-system-prompt", system]
     resolved_cwd = _resolve_cwd(cwd)
+    env, owner_id = _resolve_claude_env()
 
     # Register the call so operators can observe it live (logs + /ai/activity + WS).
     from app.services import activity
@@ -153,6 +189,7 @@ def run_prompt(
             timeout=timeout or settings.claude_timeout_s,
             encoding="utf-8",
             cwd=resolved_cwd,
+            env=env,
         )
     except FileNotFoundError as exc:  # noqa: TRY003
         activity.finish(call_id, ok=False, error="Claude CLI not found")
@@ -186,7 +223,13 @@ def run_prompt(
     # Record the skill (not the per-call label) as the action so per-run cost
     # attribution can group calls by process; run_id is read from the ambient
     # run context inside ai_usage_service.record.
-    _record_usage(envelope, model=model, action=skill or label or "Claude CLI", wall_ms=wall_ms)
+    _record_usage(
+        envelope,
+        model=model,
+        action=skill or label or "Claude CLI",
+        wall_ms=wall_ms,
+        owner_id=owner_id,
+    )
     if envelope is not None and "result" in envelope:
         return str(envelope["result"])
     return raw

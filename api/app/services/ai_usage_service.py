@@ -25,6 +25,7 @@ from app import db
 from app.config import settings as app_settings
 from app.logging import logger
 from app.models.claude_usage import ClaudeUsage
+from app.models.user import User
 
 # Static presentation map: model id -> (human label, context window).
 MODEL_LABELS: dict[str, tuple[str, str]] = {
@@ -76,6 +77,7 @@ def record(
     duration_ms: int,
     action: str,
     run_id: int | None = None,
+    owner_id: int | None = None,
 ) -> None:
     """Append one usage row for a completed Claude CLI call (best-effort).
 
@@ -95,6 +97,9 @@ def record(
         run_id: The run this call belongs to. When ``None`` (the common case for
             CLI callers) it is resolved from the ambient run context set by the
             run-scoped worker thread, so per-run spend can be attributed later.
+        owner_id: The user this call's cost is attributed to (#95) — the same
+            user whose credentials the call ran under. ``None`` when the call
+            ran under the shared credential or has no attributable owner.
     """
     if run_id is None:
         from app.services import run_context
@@ -114,6 +119,7 @@ def record(
                     cost_usd=float(cost_usd or 0.0),
                     duration_ms=int(duration_ms or 0),
                     action=action or "",
+                    owner_id=owner_id,
                 )
             )
             session.commit()
@@ -123,9 +129,15 @@ def record(
         logger.warning("Claude usage record failed: {}", exc)
 
 
-def stats() -> dict[str, Any]:
-    """Aggregate recorded usage into the ``GET /ai/stats`` contract dict."""
+def stats(user: User | None = None) -> dict[str, Any]:
+    """Aggregate recorded usage into the ``GET /ai/stats`` contract dict.
+
+    ``user`` (#95), when given, scopes every aggregate to that user's own
+    ``owner_id``-stamped rows via :func:`app.services.ownership.owned` — a
+    ``None`` user (the default) keeps today's unscoped, all-users behavior.
+    """
     from app.services import claude_cli, settings_store
+    from app.services.ownership import owned
 
     model = _current_model()
     label, ctx_window = MODEL_LABELS.get(model, (model, "—"))
@@ -145,29 +157,39 @@ def stats() -> dict[str, Any]:
     session = db.SessionLocal()
     try:
         # Today: request count + average latency.
-        requests_today, avg_latency = session.query(
-            func.count(ClaudeUsage.id), func.avg(ClaudeUsage.duration_ms)
+        requests_today, avg_latency = owned(
+            session.query(func.count(ClaudeUsage.id), func.avg(ClaudeUsage.duration_ms)),
+            ClaudeUsage,
+            user,
         ).filter(ClaudeUsage.ts >= today_start).one()
 
         # This calendar month: total cost.
-        cost_month = session.query(func.sum(ClaudeUsage.cost_usd)).filter(
-            ClaudeUsage.ts >= month_start
-        ).scalar()
+        cost_month = owned(
+            session.query(func.sum(ClaudeUsage.cost_usd)), ClaudeUsage, user
+        ).filter(ClaudeUsage.ts >= month_start).scalar()
 
         # This ISO week, all models: total tokens (input+output+cacheRead+cacheWrite).
-        week_totals = session.query(
-            func.sum(ClaudeUsage.input_tokens),
-            func.sum(ClaudeUsage.output_tokens),
-            func.sum(ClaudeUsage.cache_read_tokens),
-            func.sum(ClaudeUsage.cache_write_tokens),
+        week_totals = owned(
+            session.query(
+                func.sum(ClaudeUsage.input_tokens),
+                func.sum(ClaudeUsage.output_tokens),
+                func.sum(ClaudeUsage.cache_read_tokens),
+                func.sum(ClaudeUsage.cache_write_tokens),
+            ),
+            ClaudeUsage,
+            user,
         ).filter(ClaudeUsage.ts >= week_start).one()
 
         # This ISO week, current model only: per-kind breakdown.
-        model_totals = session.query(
-            func.sum(ClaudeUsage.input_tokens),
-            func.sum(ClaudeUsage.output_tokens),
-            func.sum(ClaudeUsage.cache_read_tokens),
-            func.sum(ClaudeUsage.cache_write_tokens),
+        model_totals = owned(
+            session.query(
+                func.sum(ClaudeUsage.input_tokens),
+                func.sum(ClaudeUsage.output_tokens),
+                func.sum(ClaudeUsage.cache_read_tokens),
+                func.sum(ClaudeUsage.cache_write_tokens),
+            ),
+            ClaudeUsage,
+            user,
         ).filter(ClaudeUsage.ts >= week_start, ClaudeUsage.model == model).one()
     finally:
         session.close()

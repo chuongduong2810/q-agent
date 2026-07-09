@@ -14,6 +14,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import type {
   AnnotationShape,
   AutomationSpecOut,
+  ClaudeCredentialsUpload,
   ConnectionUpdate,
   KnowledgeBuildRequest,
   ProjectConfigUpdate,
@@ -51,6 +52,42 @@ export const useRefreshAiStats = () => {
   return useMutation({
     mutationFn: () => api.aiStats(true),
     onSuccess: (data) => qc.setQueryData(queryKeys.aiStats, data),
+  });
+};
+
+// Claude CLI credentials (#95) — own (per-user) + shared (admin-only) status.
+export const useClaudeCredentialsStatus = () =>
+  useQuery({ queryKey: queryKeys.claudeCredentialsStatus, queryFn: api.claudeCredentials.status });
+
+export const useUploadOwnClaudeCredentials = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ClaudeCredentialsUpload) => api.claudeCredentials.uploadOwn(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.claudeCredentialsStatus }),
+  });
+};
+
+export const useDeleteOwnClaudeCredentials = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.claudeCredentials.deleteOwn(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.claudeCredentialsStatus }),
+  });
+};
+
+export const useUploadSharedClaudeCredentials = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ClaudeCredentialsUpload) => api.claudeCredentials.uploadShared(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.claudeCredentialsStatus }),
+  });
+};
+
+export const useDeleteSharedClaudeCredentials = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.claudeCredentials.deleteShared(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.claudeCredentialsStatus }),
   });
 };
 

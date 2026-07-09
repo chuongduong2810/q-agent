@@ -776,3 +776,23 @@ class AdminInviteUserResponse(ApiModel):
 
 class OkResponse(ApiModel):
     ok: bool = True
+
+
+# --------------------------------------------------------- Claude credentials (#95)
+class ClaudeCredentialsUpload(ApiModel):
+    """Body for uploading/replacing a Claude CLI ``.credentials.json``.
+
+    ``credentials`` is the raw file contents (JSON text) — never echoed back.
+    """
+
+    credentials: str
+    label: str = ""
+
+
+class ClaudeCredentialsStatusOut(ApiModel):
+    """Whether own/shared credentials exist, and which one is effective. Never
+    carries the token itself."""
+
+    has_own: bool = False
+    has_shared: bool = False
+    mode: str = "none"  # "own" | "shared" | "none"

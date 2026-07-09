@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Spinner } from "@/components/ui/misc";
+import { ClaudeCredentialsCard } from "@/components/settings/ClaudeCredentialsCard";
 import { ProviderGroup } from "@/components/settings/ProviderGroup";
 import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMeta";
 import { ToggleRow } from "@/components/settings/ToggleRow";
@@ -189,6 +190,13 @@ export function Settings() {
             </span>
           </label>
         )}
+      </GlassCard>
+
+      <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
+        CLAUDE CREDENTIALS
+      </div>
+      <GlassCard className="p-[22px]">
+        <ClaudeCredentialsCard />
       </GlassCard>
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">INTERFACE</div>

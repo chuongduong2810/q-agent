@@ -18,7 +18,7 @@ def test_load_skill_missing_returns_none():
     assert skills.load_skill("does-not-exist-skill") is None
 
 
-def test_run_prompt_injects_skill_as_system(monkeypatch):
+def test_run_prompt_injects_skill_as_system(monkeypatch, shared_claude_credential):
     captured = {}
 
     def fake_run(cmd, **kwargs):
@@ -35,7 +35,7 @@ def test_run_prompt_injects_skill_as_system(monkeypatch):
     assert "Test Case Generator" in injected
 
 
-def test_run_prompt_merges_skill_and_explicit_system(monkeypatch):
+def test_run_prompt_merges_skill_and_explicit_system(monkeypatch, shared_claude_credential):
     captured = {}
 
     def fake_run(cmd, **kwargs):
