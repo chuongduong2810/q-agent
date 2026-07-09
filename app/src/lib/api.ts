@@ -6,6 +6,7 @@
 
 import { useAuth } from "@/store/auth";
 import type {
+  AdminUser,
   AiActivity,
   AnnotationShape,
   AuditEventOut,
@@ -239,7 +240,7 @@ export const api = {
     deleteMe: () => del<void>("/auth/me"),
 
     // admin — user management (#78 / #77 / #94)
-    users: () => get<User[]>("/auth/users"),
+    users: () => get<AdminUser[]>("/auth/users"),
     createUser: (body: {
       email: string;
       firstName: string;

@@ -6,11 +6,9 @@
  *
  * Re-skinned to match the client design (`design/…/Q-Agent.dc.html`, lines
  * 1111–1230): stat cards, a USER/ROLE/CLAUDE CREDENTIAL/LAST ACTIVE/STATUS
- * table, and a per-row `⋯` menu. The design's "Claude credential" and "last
- * active" columns aren't backed by any admin-facing API (`GET /ai/credentials`
- * only reports the signed-in user's own status, and there's no last-seen
- * field on `User`) — both render a placeholder dash rather than inventing an
- * endpoint. Renders inside the app shell (child of `RequireAuth` → `App`).
+ * table, and a per-row `⋯` menu. The "Claude credential" and "last active"
+ * columns are backed by `GET /auth/users`' `credentialSource`/`lastActive`
+ * fields (#95). Renders inside the app shell (child of `RequireAuth` → `App`).
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -19,6 +17,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Ban,
   Check,
+  KeyRound,
   Lock,
   Mail,
   MoreVertical,
@@ -37,7 +36,8 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/store/auth";
-import type { User, UserRole } from "@/types/api";
+import { relativeTime } from "@/screens/auth/profile/sessions";
+import type { AdminUser, User, UserRole } from "@/types/api";
 
 /** Local (screen-scoped) query key — the shared `queryKeys` module is off-limits
  * to this slice, so we key the admin user list inline. */
@@ -226,15 +226,14 @@ export function UserManagement() {
                     <RoleBadge role={u.role} />
                   </div>
 
-                  {/* Claude credential — not exposed per-user by the API; see
-                      the file doc comment. Always renders the "none" state. */}
-                  <div className="hidden w-[168px] shrink-0 text-[12px] text-[#6c6c7e] md:block">
-                    &#8212;
+                  {/* Claude credential (#95) */}
+                  <div className="hidden w-[168px] shrink-0 md:block">
+                    <CredentialSourceCell source={u.credentialSource} />
                   </div>
 
-                  {/* Last active — no last-seen field on `User`; placeholder. */}
+                  {/* Last active (#95) */}
                   <div className="hidden w-[120px] shrink-0 text-[12px] text-[#9a9aae] md:block">
-                    &#8212;
+                    {u.lastActive ? relativeTime(u.lastActive) : "Never"}
                   </div>
 
                   {/* Status */}
@@ -286,6 +285,28 @@ function RoleBadge({ role }: { role: UserRole }) {
       {admin ? "Admin" : "Member"}
     </span>
   );
+}
+
+/** "Claude credential" cell (#95): cyan token icon for a personal upload,
+ * an orange dot + label for the shared fallback, "—" for none. */
+function CredentialSourceCell({ source }: { source: AdminUser["credentialSource"] }) {
+  if (source === "personal") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#67e8f9]">
+        <KeyRound size={13} strokeWidth={2} />
+        Personal
+      </span>
+    );
+  }
+  if (source === "shared") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#e0a58c]">
+        <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-[#d97757]" />
+        Shared
+      </span>
+    );
+  }
+  return <span className="text-[12px] text-[#6c6c7e]">&#8212;</span>;
 }
 
 function StatusBadge({ active }: { active: boolean }) {
