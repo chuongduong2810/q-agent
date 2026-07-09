@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import shutil
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.logging import logger
+
 # Repo/base directories. The backend keeps all local state under `workspace/`.
 API_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = API_DIR.parent
+
+# Artifact kinds every per-owner workspace scope holds (ADR 0009). Mirrors the
+# flat `workspace/<kind>/` dirs `Settings.*_dir` has historically exposed.
+_SCOPED_KINDS = ("specs", "evidence", "knowledge", "repos", "auth")
+
+# Sentinel file marking that the one-time legacy-flat-dirs migration ran.
+_LEGACY_MIGRATION_SENTINEL = ".workspace_scoped"
 
 
 class Settings(BaseSettings):
@@ -121,6 +131,50 @@ class Settings(BaseSettings):
             self.auth_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
+        # Per-owner workspace scoping (ADR 0009): the admin/shared namespace's
+        # artifact trees always exist, even before any user or migration writes
+        # to them. Existing `specs_dir`/`evidence_dir`/etc above are untouched —
+        # call sites migrate to the scoped dirs in a later slice.
+        for kind in _SCOPED_KINDS:
+            (self.workspace_dir / "shared" / kind).mkdir(parents=True, exist_ok=True)
+        migrate_legacy_workspace_dirs(self)
+
+
+def migrate_legacy_workspace_dirs(settings: Settings) -> None:
+    """One-time, best-effort move of pre-ADR-0009 flat artifact dirs into ``shared/``.
+
+    Before per-owner workspace scoping, every artifact kind lived directly
+    under ``workspace/<kind>/`` (see ``Settings.specs_dir`` etc). This treats
+    any pre-existing content there as belonging to the admin/shared namespace
+    and relocates it to ``workspace/shared/<kind>/`` so scoped lookups
+    (:mod:`app.services.workspace_scope`) find it. Runs at most once, guarded
+    by the ``workspace/.workspace_scoped`` sentinel file: a no-op once that
+    sentinel exists, and a no-op for any ``<kind>`` dir that doesn't exist or
+    is empty. Never raises — any failure is logged and swallowed so a bad
+    migration can't block startup.
+    """
+    sentinel = settings.workspace_dir / _LEGACY_MIGRATION_SENTINEL
+    if sentinel.exists():
+        return
+    try:
+        for kind in _SCOPED_KINDS:
+            legacy_dir = settings.workspace_dir / kind
+            if not legacy_dir.is_dir():
+                continue
+            entries = list(legacy_dir.iterdir())
+            if not entries:
+                continue
+            shared_kind_dir = settings.workspace_dir / "shared" / kind
+            shared_kind_dir.mkdir(parents=True, exist_ok=True)
+            for entry in entries:
+                destination = shared_kind_dir / entry.name
+                if destination.exists():
+                    continue  # already present in shared/ — leave the legacy copy alone
+                shutil.move(str(entry), str(destination))
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text("1", encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 - migration must never break startup
+        logger.warning("workspace scope legacy migration failed: {}", exc)
 
 
 @lru_cache
