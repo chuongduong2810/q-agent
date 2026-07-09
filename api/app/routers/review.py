@@ -18,8 +18,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.deps_auth import current_user
 from app.models.run import Run
 from app.models.testcase import TestCase
+from app.models.user import User
 from app.schemas import (
     ApprovalUpdate,
     CreateLinkRequest,
@@ -31,27 +33,25 @@ from app.schemas import (
 from app.services import audit_service, link_service
 from app.services.ai_service import next_case_code, regenerate_case
 from app.services.claude_cli import ClaudeError
+from app.services.ownership import get_owned_or_404
 
 router = APIRouter(tags=["review"])
 
 
-def _get_run_or_404(db: Session, run_id: int) -> Run:
-    run = db.query(Run).filter(Run.id == run_id).first()
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return run
-
-
-def _get_case_or_404(db: Session, case_id: int) -> TestCase:
+def _get_case_or_404(db: Session, case_id: int, user: User | None) -> TestCase:
+    """Resolve a test case, 404ing if missing or if its run isn't owned by ``user``."""
     case = db.query(TestCase).filter(TestCase.id == case_id).first()
     if case is None:
         raise HTTPException(status_code=404, detail="Test case not found")
+    get_owned_or_404(db, Run, case.run_id, user)
     return case
 
 
 @router.get("/runs/{run_id}/cases", response_model=list[TestCaseOut])
-def list_cases(run_id: int, db: Session = Depends(get_db)) -> list[TestCase]:
-    _get_run_or_404(db, run_id)
+def list_cases(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[TestCase]:
+    get_owned_or_404(db, Run, run_id, user)
     return (
         db.query(TestCase)
         .filter(TestCase.run_id == run_id)
@@ -61,8 +61,13 @@ def list_cases(run_id: int, db: Session = Depends(get_db)) -> list[TestCase]:
 
 
 @router.post("/runs/{run_id}/cases", response_model=TestCaseOut)
-def create_case(run_id: int, body: TestCaseCreate, db: Session = Depends(get_db)) -> TestCase:
-    _get_run_or_404(db, run_id)
+def create_case(
+    run_id: int,
+    body: TestCaseCreate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> TestCase:
+    get_owned_or_404(db, Run, run_id, user)
 
     code = next_case_code(db, run_id, body.ticket_external_id)
     case = TestCase(
@@ -85,8 +90,13 @@ def create_case(run_id: int, body: TestCaseCreate, db: Session = Depends(get_db)
 
 
 @router.patch("/cases/{case_id}", response_model=TestCaseOut)
-def update_case(case_id: int, body: TestCaseUpdate, db: Session = Depends(get_db)) -> TestCase:
-    case = _get_case_or_404(db, case_id)
+def update_case(
+    case_id: int,
+    body: TestCaseUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> TestCase:
+    case = _get_case_or_404(db, case_id, user)
 
     updates = body.model_dump(exclude_unset=True)
     if "steps" in updates and updates["steps"] is not None:
@@ -103,8 +113,13 @@ def update_case(case_id: int, body: TestCaseUpdate, db: Session = Depends(get_db
 
 
 @router.post("/cases/{case_id}/approval", response_model=TestCaseOut)
-def set_case_approval(case_id: int, body: ApprovalUpdate, db: Session = Depends(get_db)) -> TestCase:
-    case = _get_case_or_404(db, case_id)
+def set_case_approval(
+    case_id: int,
+    body: ApprovalUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> TestCase:
+    case = _get_case_or_404(db, case_id, user)
     case.approval = body.approval
     db.add(case)
     db.commit()
@@ -121,8 +136,10 @@ def set_case_approval(case_id: int, body: ApprovalUpdate, db: Session = Depends(
 
 
 @router.post("/cases/{case_id}/regenerate", response_model=TestCaseOut)
-def regenerate_single_case(case_id: int, db: Session = Depends(get_db)) -> TestCase:
-    case = _get_case_or_404(db, case_id)
+def regenerate_single_case(
+    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> TestCase:
+    case = _get_case_or_404(db, case_id, user)
     try:
         return regenerate_case(db, case)
     except ClaudeError as exc:
@@ -131,14 +148,17 @@ def regenerate_single_case(case_id: int, db: Session = Depends(get_db)) -> TestC
 
 @router.post("/runs/{run_id}/testcases/create-link", response_model=LinkStatusOut)
 def create_and_link(
-    run_id: int, body: CreateLinkRequest, db: Session = Depends(get_db)
+    run_id: int,
+    body: CreateLinkRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> LinkStatusOut:
     """Create approved test cases in the provider (+link to work items when link=true).
 
     Runs in the background; poll GET /runs/{id}/linked or subscribe to the run WS
     (sync.progress / sync.done) for results.
     """
-    run = _get_run_or_404(db, run_id)
+    run = get_owned_or_404(db, Run, run_id, user)
     approved = (
         db.query(TestCase)
         .filter(TestCase.run_id == run_id, TestCase.approval == "approved")
@@ -157,14 +177,18 @@ def create_and_link(
 
 
 @router.get("/runs/{run_id}/linked", response_model=LinkStatusOut)
-def linked_status(run_id: int, db: Session = Depends(get_db)) -> LinkStatusOut:
-    _get_run_or_404(db, run_id)
+def linked_status(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> LinkStatusOut:
+    get_owned_or_404(db, Run, run_id, user)
     return LinkStatusOut(**link_service.link_status(db, run_id))
 
 
 @router.post("/runs/{run_id}/approve-all", response_model=list[TestCaseOut])
-def approve_all(run_id: int, db: Session = Depends(get_db)) -> list[TestCase]:
-    run = _get_run_or_404(db, run_id)
+def approve_all(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[TestCase]:
+    run = get_owned_or_404(db, Run, run_id, user)
     cases = (
         db.query(TestCase)
         .filter(TestCase.run_id == run_id, TestCase.approval != "rejected")
@@ -187,8 +211,13 @@ def approve_all(run_id: int, db: Session = Depends(get_db)) -> list[TestCase]:
 
 
 @router.post("/runs/{run_id}/tickets/{tid}/approve", response_model=list[TestCaseOut])
-def approve_ticket_cases(run_id: int, tid: str, db: Session = Depends(get_db)) -> list[TestCase]:
-    _get_run_or_404(db, run_id)
+def approve_ticket_cases(
+    run_id: int,
+    tid: str,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> list[TestCase]:
+    get_owned_or_404(db, Run, run_id, user)
     cases = (
         db.query(TestCase)
         .filter(

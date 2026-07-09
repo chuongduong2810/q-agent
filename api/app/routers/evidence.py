@@ -19,17 +19,27 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.db import get_db
+from app.deps_auth import current_user
 from app.models.execution import Evidence, Execution, ExecutionResult
+from app.models.run import Run
 from app.models.ticket import Ticket
+from app.models.user import User
 from app.schemas import AnnotateRequest, EvidenceOut, ExecutionResultOut
 from app.services import evidence_analysis, report_service
 from app.services.annotate import render_annotations
+from app.services.ownership import get_owned_or_404
 
 router = APIRouter(tags=["evidence"])
 
 # Providers show a short glyph + color chip next to the ticket in evidence lists.
 _PROVIDER_GLYPH = {"ado": "AD", "jira": "JR", "github": "GH"}
 _PROVIDER_COLOR = {"ado": "#0078d4", "jira": "#0052cc", "github": "#24292e"}
+
+
+def _check_result_owner(db: Session, result: ExecutionResult, user: User | None) -> None:
+    """404s unless ``user`` owns the run behind ``result``'s execution."""
+    if result.execution is not None:
+        get_owned_or_404(db, Run, result.execution.run_id, user)
 
 
 def _latest_execution(db: Session, run_id: int) -> Execution | None:
@@ -44,7 +54,10 @@ def _latest_execution(db: Session, run_id: int) -> Execution | None:
 
 
 @router.get("/runs/{run_id}/evidence")
-def get_run_evidence(run_id: int, db: Session = Depends(get_db)) -> dict:
+def get_run_evidence(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
+    get_owned_or_404(db, Run, run_id, user)
     execution = _latest_execution(db, run_id)
     results = list(execution.results) if execution else []
 
@@ -95,15 +108,20 @@ def get_run_evidence(run_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/results/{result_id}/evidence", response_model=list[EvidenceOut])
-def get_result_evidence(result_id: int, db: Session = Depends(get_db)) -> list[Evidence]:
+def get_result_evidence(
+    result_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[Evidence]:
     result = db.get(ExecutionResult, result_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Execution result not found")
+    _check_result_owner(db, result, user)
     return list(result.evidence)
 
 
 @router.post("/evidence/{evidence_id}/auto-annotate", response_model=EvidenceOut)
-def auto_annotate_evidence(evidence_id: int, db: Session = Depends(get_db)) -> Evidence:
+def auto_annotate_evidence(
+    evidence_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Evidence:
     """Analyze a failure screenshot with Claude vision and burn annotations on it.
 
     Stores the diagnosis + annotated-image path in ``meta`` and flips ``annotated``.
@@ -116,6 +134,8 @@ def auto_annotate_evidence(evidence_id: int, db: Session = Depends(get_db)) -> E
         raise HTTPException(status_code=400, detail="Only screenshot evidence can be annotated")
 
     result = db.get(ExecutionResult, evidence.result_id)
+    if result is not None:
+        _check_result_owner(db, result, user)
     error_message = result.error_message if result else ""
     if not evidence_analysis.annotate_screenshot(db, evidence, error_message or "", force=True):
         raise HTTPException(status_code=502, detail="Auto-annotation failed (see server logs)")
@@ -125,13 +145,19 @@ def auto_annotate_evidence(evidence_id: int, db: Session = Depends(get_db)) -> E
 
 @router.post("/evidence/{evidence_id}/annotate", response_model=EvidenceOut)
 def annotate_evidence(
-    evidence_id: int, body: AnnotateRequest, db: Session = Depends(get_db)
+    evidence_id: int,
+    body: AnnotateRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> Evidence:
     evidence = db.get(Evidence, evidence_id)
     if evidence is None:
         raise HTTPException(status_code=404, detail="Evidence not found")
     if evidence.kind != "screenshot":
         raise HTTPException(status_code=400, detail="Only screenshot evidence can be annotated")
+    result = db.get(ExecutionResult, evidence.result_id)
+    if result is not None:
+        _check_result_owner(db, result, user)
 
     src_path = settings.evidence_dir / evidence.path
     if not src_path.exists():
