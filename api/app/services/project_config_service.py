@@ -18,7 +18,6 @@ falling back to the sole configured project when only one exists.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,13 +25,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app import crypto
-from app.config import settings
 from app.models.knowledge import ProjectKnowledge, compose_key
 from app.models.project_config import ProjectConfig
 from app.models.provider_connection import ProviderConnection
 from app.models.ticket import Ticket
 from app.services import connection_service
 from app.services.adapters.base import ProviderError
+from app.services.workspace_scope import scoped_auth_dir, slug
 
 
 # --------------------------------------------------------------- persistence
@@ -210,32 +209,28 @@ def public_config(row: ProjectConfig | None, key: str, name: str = "") -> dict[s
 
 
 # --------------------------------------------------------------- manual auth
-def _slug(key: str) -> str:
-    """Filesystem-safe slug for a project key (mirrors knowledge_service._slug)."""
-    return re.sub(r"[^a-zA-Z0-9._-]+", "-", key).strip("-") or "project"
-
-
-def auth_path(project_key: str) -> Path:
+def auth_path(project_key: str, owner_id: int | None = None) -> Path:
     """Absolute path to a project's saved Playwright session file.
 
-    Located at ``settings.auth_dir / <project-slug> / "storageState.json"``.
-    The file may not exist yet (nothing is created here).
+    Located at the owner's scoped auth dir (ADR 0009):
+    ``scoped_auth_dir(owner_id) / <project-slug> / "storageState.json"``.
+    ``owner_id`` defaults to ``None`` (the shared namespace). The file may not
+    exist yet (nothing is created here).
     """
-    return settings.auth_dir / _slug(project_key) / "storageState.json"
+    return scoped_auth_dir(owner_id) / slug(project_key) / "storageState.json"
 
 
-def session_path(project_key: str) -> Path:
+def session_path(project_key: str, owner_id: int | None = None) -> Path:
     """Absolute path to a project's saved sessionStorage snapshot.
 
-    Sibling of the ``storageState.json`` at :func:`auth_path`, located at
-    ``settings.auth_dir / <project-slug> / "sessionStorage.json"``. Captures the
+    Sibling of the ``storageState.json`` at :func:`auth_path`. Captures the
     MSAL/SPA tokens that live in ``sessionStorage`` (which Playwright's
     ``storageState`` cannot persist). The file may not exist yet.
     """
-    return auth_path(project_key).parent / "sessionStorage.json"
+    return auth_path(project_key, owner_id).parent / "sessionStorage.json"
 
 
-def auth_state(project_key: str) -> dict[str, Any]:
+def auth_state(project_key: str, owner_id: int | None = None) -> dict[str, Any]:
     """Report whether a saved session exists and, if so, when it was captured.
 
     Returns a dict shaped for :class:`app.schemas.AuthStateOut`::
@@ -244,19 +239,19 @@ def auth_state(project_key: str) -> dict[str, Any]:
 
     ``capturedAt`` is derived from the session file's modification time (UTC).
     """
-    path = auth_path(project_key)
+    path = auth_path(project_key, owner_id)
     if not path.exists():
         return {"exists": False, "capturedAt": None}
     captured_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
     return {"exists": True, "capturedAt": captured_at}
 
 
-def clear_auth(project_key: str) -> dict[str, Any]:
+def clear_auth(project_key: str, owner_id: int | None = None) -> dict[str, Any]:
     """Delete a project's saved session file (if any) and return the empty state."""
-    path = auth_path(project_key)
+    path = auth_path(project_key, owner_id)
     if path.exists():
         path.unlink()
-    return auth_state(project_key)
+    return auth_state(project_key, owner_id)
 
 
 def base_url_for(db: Session, ticket: Ticket, env: str = "") -> str:
