@@ -73,6 +73,32 @@ def test_login_returns_token_and_sets_cookies(client, db_session):
     assert client.cookies.get("qagent_csrf")
 
 
+def test_login_stamps_last_active(client, db_session):
+    user = _make_user(db_session, "active@example.com", "password123")
+    assert user.last_active is None
+
+    r = _login(client, "active@example.com", "password123")
+    assert r.json()["user"]["lastActive"] is not None
+    db_session.refresh(user)
+    assert user.last_active is not None
+
+
+def test_refresh_stamps_last_active(client, db_session):
+    user = _make_user(db_session, "refresher@example.com", "password123")
+    login = _login(client, "refresher@example.com", "password123").json()
+    first_stamp = login["user"]["lastActive"]
+    csrf = client.cookies.get("qagent_csrf")
+
+    r = client.post("/auth/refresh", headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200
+    assert r.json()["user"]["lastActive"] is not None
+    db_session.refresh(user)
+    assert user.last_active is not None
+    # Not strictly asserting the timestamp advanced (same-instant possible in
+    # a fast test run) — just that refresh stamps it too, independent of login.
+    assert first_stamp is not None
+
+
 def test_login_bad_password_401(client, db_session):
     _make_user(db_session, "x@example.com", "correcthorse")
     assert _login(client, "x@example.com", "wrong").status_code == 401

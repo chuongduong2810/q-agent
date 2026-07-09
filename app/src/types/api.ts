@@ -666,6 +666,15 @@ export interface User {
   isActive: boolean;
   /** Whether the user has an active TOTP (authenticator app) enrollment. */
   totpEnabled: boolean;
+  /** Stamped on successful login/refresh (#95); `null` if never. */
+  lastActive: string | null;
+}
+
+/** `User` plus admin-only fields — GET /auth/users (#95). */
+export interface AdminUser extends User {
+  /** "personal" (has own credential), "shared" (falls back to the shared
+   * credential), or "none" (nothing resolves for this user). */
+  credentialSource: "personal" | "shared" | "none";
 }
 
 /** One active refresh session for the profile "Active sessions" list. */
@@ -792,6 +801,19 @@ export interface ClaudeCredentialsStatus {
   hasOwn: boolean;
   hasShared: boolean;
   mode: "own" | "shared" | "none";
+  own: ClaudeCredentialsMeta | null;
+  shared: ClaudeCredentialsMeta | null;
+}
+
+/** Per-credential metadata parsed from an uploaded `.credentials.json`. Never
+ * carries the token itself. */
+export interface ClaudeCredentialsMeta {
+  subscriptionType: string | null;
+  expiresAt: string | null; // ISO
+  scopes: string[];
+  lastRefreshed: string | null; // ISO — the row's updated_at
+  /** Active users with no own credential — only populated for the shared row. */
+  assignedUsers: number | null;
 }
 
 /** Body for PUT /ai/credentials and PUT /ai/credentials/shared — the raw

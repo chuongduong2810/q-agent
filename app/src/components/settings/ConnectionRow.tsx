@@ -100,7 +100,7 @@ export function ConnectionRow({
             e.stopPropagation();
             onRequestDelete();
           }}
-          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border border-white/[0.08] bg-white/[0.03] text-[#e06c75] hover:bg-white/[0.06]"
+          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border border-[rgba(255,255,255,.09)] bg-[rgba(255,255,255,.04)] text-[#8b8b9e] transition-colors hover:border-[rgba(244,63,94,.3)] hover:bg-[rgba(244,63,94,.14)] hover:text-[#fb7185]"
           title="Delete connection"
         >
           <Trash2 size={14} strokeWidth={2.1} />
@@ -139,8 +139,7 @@ export function ConnectionRow({
             <button
               onClick={handleTest}
               disabled={test.isPending}
-              className="flex items-center gap-2 rounded-[11px] px-4 py-2.5 text-[13px] font-semibold text-[#c4b5fd] disabled:opacity-60"
-              style={{ background: "rgba(139,92,246,.16)", border: "1px solid rgba(139,92,246,.32)" }}
+              className="flex items-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.32)] bg-[rgba(139,92,246,.16)] px-4 py-2.5 text-[13px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.24)] disabled:opacity-60"
             >
               {test.isPending ? <Spinner size={14} /> : <RefreshCw size={14} />}
               Test connection

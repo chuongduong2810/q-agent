@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import stat
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -62,6 +63,55 @@ def _validate(raw_credentials: str) -> str:
     return raw_credentials
 
 
+def _extract_metadata(raw_credentials: str) -> dict:
+    """Best-effort extraction of subscription metadata from an uploaded
+    ``.credentials.json``.
+
+    Reads from the ``claudeAiOauth`` object when present, else falls back to
+    top-level keys. Every field is optional — malformed/missing data yields
+    ``None`` rather than raising; the caller has already validated
+    ``raw_credentials`` parses as a JSON object.
+
+    Returns a dict with ``expires_at`` (``datetime | None``, converted from an
+    ``expiresAt`` epoch-ms value), ``scopes`` (``list[str] | None``), and
+    ``subscription_type`` (``str | None``).
+    """
+    empty = {"expires_at": None, "scopes": None, "subscription_type": None}
+    try:
+        parsed = json.loads(raw_credentials)
+    except json.JSONDecodeError:
+        return empty
+    if not isinstance(parsed, dict):
+        return empty
+
+    oauth = parsed.get("claudeAiOauth")
+    source = oauth if isinstance(oauth, dict) else parsed
+
+    expires_at = None
+    raw_expires_ms = source.get("expiresAt")
+    if isinstance(raw_expires_ms, (int, float)) and not isinstance(raw_expires_ms, bool):
+        try:
+            expires_at = datetime.fromtimestamp(raw_expires_ms / 1000, tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            expires_at = None
+
+    scopes = None
+    raw_scopes = source.get("scopes")
+    if isinstance(raw_scopes, list) and all(isinstance(s, str) for s in raw_scopes):
+        scopes = raw_scopes
+
+    subscription_type = None
+    raw_subscription_type = source.get("subscriptionType")
+    if isinstance(raw_subscription_type, str):
+        subscription_type = raw_subscription_type
+
+    return {
+        "expires_at": expires_at,
+        "scopes": scopes,
+        "subscription_type": subscription_type,
+    }
+
+
 def get_own(db: Session, owner_id: int) -> ClaudeCredentials | None:
     """Return the given user's own credential row, or None."""
     return (
@@ -86,9 +136,13 @@ def _upsert(db: Session, owner_id: int | None, raw_credentials: str, label: str)
     if row is None:
         row = ClaudeCredentials(owner_id=owner_id)
         db.add(row)
+    meta = _extract_metadata(validated)
     row.credentials = crypto.encrypt(validated) or ""
     row.label = label
     row.status = STATUS_ACTIVE
+    row.expires_at = meta["expires_at"]
+    row.scopes = meta["scopes"]
+    row.subscription_type = meta["subscription_type"]
     db.commit()
     db.refresh(row)
     return row
@@ -124,16 +178,57 @@ def delete_shared(db: Session) -> bool:
     return True
 
 
+def _meta_for(row: ClaudeCredentials | None, *, with_assigned_users: bool = False, db: Session | None = None) -> dict | None:
+    """Public metadata for one credential row (never the token). ``None`` if
+    ``row`` doesn't exist. ``assigned_users`` (shared credential only) counts
+    active users who fall back to it, i.e. have no own credential."""
+    if row is None:
+        return None
+    assigned_users = None
+    if with_assigned_users and db is not None:
+        from app.models.user import User
+
+        owned_ids = {
+            r[0]
+            for r in db.query(ClaudeCredentials.owner_id)
+            .filter(ClaudeCredentials.owner_id.isnot(None))
+            .all()
+        }
+        assigned_users = (
+            db.query(User).filter(User.is_active.is_(True), User.id.notin_(owned_ids)).count()
+            if owned_ids
+            else db.query(User).filter(User.is_active.is_(True)).count()
+        )
+    return {
+        "subscription_type": row.subscription_type,
+        "expires_at": row.expires_at,
+        "scopes": row.scopes or [],
+        "last_refreshed": row.updated_at,
+        "assigned_users": assigned_users,
+    }
+
+
 def status_for(db: Session, owner_id: int | None) -> dict:
     """Status summary for the AI settings screen: never leaks the token itself.
 
     ``mode`` is the credential that will actually be used for this user per
-    :func:`resolve_effective`'s precedence: "own" > "shared" > "none".
+    :func:`resolve_effective`'s precedence: "own" > "shared" > "none". ``own``
+    and ``shared`` carry each row's metadata (subscription/expiry/scopes/last
+    refresh), so the personal card and the admin shared-account card can both
+    render from one call.
     """
-    has_own = owner_id is not None and get_own(db, owner_id) is not None
-    has_shared = get_shared(db) is not None
+    own_row = get_own(db, owner_id) if owner_id is not None else None
+    shared_row = get_shared(db)
+    has_own = own_row is not None
+    has_shared = shared_row is not None
     mode = "own" if has_own else "shared" if has_shared else "none"
-    return {"hasOwn": has_own, "hasShared": has_shared, "mode": mode}
+    return {
+        "hasOwn": has_own,
+        "hasShared": has_shared,
+        "mode": mode,
+        "own": _meta_for(own_row),
+        "shared": _meta_for(shared_row, with_assigned_users=True, db=db),
+    }
 
 
 def resolve_ambient_owner_id() -> int | None:

@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db import Base, timestamp_column, utcnow
+from app.db import Base, UTCDateTime, timestamp_column, utcnow
 
 # Role values.
 ROLE_ADMIN = "admin"
@@ -37,3 +37,5 @@ class User(Base):
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)
+    # Stamped on successful login and token refresh (never backfilled).
+    last_active: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True, default=None)

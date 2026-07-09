@@ -8,13 +8,12 @@
  * The design (`design/…/Q-Agent.dc.html`, lines 1158–1215) shows a *list* of
  * shared accounts, each with subscription/expiry/scopes/assigned-user
  * metadata and a "set as default" action. The backend only tracks one shared
- * credential slot as a boolean (`hasShared`) — no per-account label, email,
- * subscription, expiry, scopes, or assignment data, and no concept of
- * multiple accounts. This renders that one slot as a single-item list,
- * "—" placeholders where the design has data the API doesn't return, and
- * drops "set as default" (meaningless with a single slot) rather than
- * inventing endpoints. Renders inside the app shell (child of `RequireAuth` →
- * `App`).
+ * credential slot (`hasShared`) — no concept of multiple accounts — but does
+ * carry that slot's subscription/expiry/scopes/assigned-user metadata (#95).
+ * This renders that one slot as a single-item list, populated from
+ * `status.shared`, and drops "set as default" (meaningless with a single
+ * slot) rather than inventing endpoints. Renders inside the app shell (child
+ * of `RequireAuth` → `App`).
  */
 
 import { AnimatePresence, motion } from "framer-motion";
@@ -25,12 +24,20 @@ import { toast } from "sonner";
 import { Pill } from "@/components/ui/badges";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ClaudeLogo, Spinner } from "@/components/ui/misc";
-import { AccessTokenRow, Field, readFileText } from "@/components/settings/ClaudeCredentialsCard";
+import {
+  AccessTokenRow,
+  Field,
+  FileDropLabel,
+  formatExpiry,
+  readFileText,
+  ScopeChips,
+} from "@/components/settings/ClaudeCredentialsCard";
 import {
   useClaudeCredentialsStatus,
   useDeleteSharedClaudeCredentials,
   useUploadSharedClaudeCredentials,
 } from "@/hooks/queries";
+import { relativeTime } from "@/screens/auth/profile/sessions";
 import { useAuth } from "@/store/auth";
 
 const MENU_WIDTH = 196;
@@ -216,26 +223,31 @@ export function ClaudeCredentials() {
             </div>
           </div>
 
-          <div className="mt-[18px] grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Field label="SUBSCRIPTION" value="—" />
-            <Field label="EXPIRES" value="—" />
-            <Field label="LAST REFRESHED" value="—" />
-            <Field label="ASSIGNED USERS" value="All members" />
+          <div className="mt-[18px] grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Field label="SUBSCRIPTION" value={status?.shared?.subscriptionType ?? "—"} />
+            <Field label="EXPIRES" value={formatExpiry(status?.shared?.expiresAt)} />
+            <Field label="SCOPES" value={<ScopeChips scopes={status?.shared?.scopes} />} />
+            <Field
+              label="LAST REFRESHED"
+              value={status?.shared?.lastRefreshed ? relativeTime(status.shared.lastRefreshed) : "—"}
+            />
+            <Field
+              label="ASSIGNED USERS"
+              value={status?.shared?.assignedUsers != null ? String(status.shared.assignedUsers) : "—"}
+            />
           </div>
 
           <AccessTokenRow accent="#c4b5fd" />
 
           <div className="mt-[14px] flex gap-[10px]">
-            <label className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.14)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.22)]">
-              <input
-                type="file"
-                accept=".json,application/json"
-                className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0])}
-              />
+            <FileDropLabel
+              onFile={handleFile}
+              className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.14)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.22)]"
+              dragClassName="border-[rgba(139,92,246,.7)] bg-[rgba(139,92,246,.28)]"
+            >
               <UploadCloud size={14} strokeWidth={2} />
               {uploadShared.isPending ? "Uploading…" : "Rotate / replace token"}
-            </label>
+            </FileDropLabel>
           </div>
         </div>
       ) : (
@@ -245,13 +257,11 @@ export function ClaudeCredentials() {
       )}
 
       {!status?.hasShared && (
-        <label className="flex cursor-pointer flex-col items-center gap-[9px] rounded-2xl border-[1.5px] border-dashed border-[rgba(139,92,246,.35)] bg-[rgba(139,92,246,.05)] p-[26px] text-center transition-colors hover:border-[rgba(139,92,246,.6)] hover:bg-[rgba(139,92,246,.09)]">
-          <input
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0])}
-          />
+        <FileDropLabel
+          onFile={handleFile}
+          className="flex cursor-pointer flex-col items-center gap-[9px] rounded-2xl border-[1.5px] border-dashed border-[rgba(139,92,246,.35)] bg-[rgba(139,92,246,.05)] p-[26px] text-center transition-colors hover:border-[rgba(139,92,246,.6)] hover:bg-[rgba(139,92,246,.09)]"
+          dragClassName="border-[rgba(139,92,246,.6)] bg-[rgba(139,92,246,.09)]"
+        >
           {uploadShared.isPending ? (
             <>
               <Spinner size={30} />
@@ -269,7 +279,7 @@ export function ClaudeCredentials() {
               </div>
             </>
           )}
-        </label>
+        </FileDropLabel>
       )}
       {fileError && <div className="mt-2 text-[12px] text-red-400">{fileError}</div>}
 

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import get_db, utcnow
 from app.deps_auth import (
     CSRF_HEADER,
     clear_auth_cookies,
@@ -30,6 +30,7 @@ from app.schemas import (
     AdminInviteUserRequest,
     AdminInviteUserResponse,
     AdminUpdateUserRequest,
+    AdminUserOut,
     ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
@@ -64,6 +65,9 @@ def _issue_login(db: Session, user: User, request: Request, response: Response, 
     session, refresh_token = auth_service.create_session(
         db, user, remember=remember, user_agent=ua, ip=ip
     )
+    user.last_active = utcnow()
+    db.add(user)
+    db.commit()
     csrf = auth_service.generate_csrf_token()
     set_auth_cookies(response, refresh_token=refresh_token, csrf_token=csrf, remember=remember)
     access = auth_service.create_access_token(user, session.id)
@@ -128,6 +132,9 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
     new_token = auth_service.rotate(db, session)
+    user.last_active = utcnow()
+    db.add(user)
+    db.commit()
     csrf = auth_service.generate_csrf_token()
     # Preserve the cookie lifetime bucket (remember) by reusing the session's ttl.
     remember = (session.expires_at - session.created_at).days >= 1 if session.expires_at and session.created_at else False
@@ -296,10 +303,26 @@ def _active_admin_count(db: Session, *, exclude_id: int | None = None) -> int:
     return query.count()
 
 
-@router.get("/auth/users", response_model=list[UserOut])
-def list_users(_: User = Depends(require_admin), db: Session = Depends(get_db)) -> list[UserOut]:
+@router.get("/auth/users", response_model=list[AdminUserOut])
+def list_users(_: User = Depends(require_admin), db: Session = Depends(get_db)) -> list[AdminUserOut]:
+    """List all users with each one's ``credentialSource`` (#95): "personal" if
+    they've uploaded their own Claude credential, else "shared" if a
+    workspace-shared credential exists to fall back to, else "none"."""
+    from app.models.claude_credentials import ClaudeCredentials
+
     rows = db.query(User).order_by(User.created_at.asc()).all()
-    return [UserOut.model_validate(u) for u in rows]
+    owned_ids = {
+        r[0]
+        for r in db.query(ClaudeCredentials.owner_id).filter(ClaudeCredentials.owner_id.isnot(None)).all()
+    }
+    has_shared = db.query(ClaudeCredentials).filter(ClaudeCredentials.owner_id.is_(None)).first() is not None
+
+    out: list[AdminUserOut] = []
+    for u in rows:
+        item = AdminUserOut.model_validate(u)
+        item.credential_source = "personal" if u.id in owned_ids else "shared" if has_shared else "none"
+        out.append(item)
+    return out
 
 
 @router.post("/auth/users/invite", response_model=AdminInviteUserResponse, status_code=201)
