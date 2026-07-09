@@ -31,6 +31,7 @@ from app.routers import (
     review,
     runs,
     tickets,
+    workspace,
 )
 from app.services import auth_service
 from app.services.workspace_scope import scope_for
@@ -267,6 +268,7 @@ def create_app() -> FastAPI:
         audit,
         providers,
         projects,
+        workspace,
         tickets,
         runs,
         review,

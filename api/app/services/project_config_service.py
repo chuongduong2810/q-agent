@@ -61,6 +61,40 @@ def upsert_config(db: Session, key: str, patch: dict[str, Any]) -> ProjectConfig
     if row is None:
         row = ProjectConfig(key=key, name=patch.get("name", key))
         db.add(row)
+    _apply_config_patch(row, patch)
+    return row
+
+
+def get_config_for_owner(db: Session, key: str, owner_id: int | None) -> ProjectConfig | None:
+    """Owner-scoped variant of :func:`get_config` (ADR 0009 clone/admin-shared, #120).
+
+    ``get_config`` matches the first row for ``key`` regardless of owner (kept
+    as-is for existing call sites, which additionally apply
+    ``check_owned_or_404``). This filters by ``owner_id`` explicitly so callers
+    that need exactly the shared row (``owner_id=None``) or a specific user's
+    row never match a different owner's same-keyed row.
+    """
+    return db.query(ProjectConfig).filter(ProjectConfig.key == key, ProjectConfig.owner_id == owner_id).first()
+
+
+def upsert_config_for_owner(
+    db: Session, key: str, patch: dict[str, Any], owner_id: int | None
+) -> ProjectConfig:
+    """Owner-scoped variant of :func:`upsert_config` — see :func:`get_config_for_owner`.
+
+    Used by the admin shared-namespace endpoints (``owner_id=None``) so writes
+    always target the shared row, never a same-keyed row owned by someone else.
+    """
+    row = get_config_for_owner(db, key, owner_id)
+    if row is None:
+        row = ProjectConfig(key=key, name=patch.get("name", key), owner_id=owner_id)
+        db.add(row)
+    _apply_config_patch(row, patch)
+    return row
+
+
+def _apply_config_patch(row: ProjectConfig, patch: dict[str, Any]) -> None:
+    """Apply a partial config patch onto ``row`` in place (shared by both upsert helpers)."""
     if "name" in patch and patch["name"]:
         row.name = patch["name"]
     # Per-project provider bindings (ADR 0006). Present-but-null clears the binding.
@@ -84,7 +118,6 @@ def upsert_config(db: Session, key: str, patch: dict[str, Any]) -> ProjectConfig
         row.test_accounts = _encrypt_accounts(patch["test_accounts"], row.test_accounts or [])
     if "manual_auth" in patch and patch["manual_auth"] is not None:
         row.manual_auth = bool(patch["manual_auth"])
-    return row
 
 
 def _normalize_repos(incoming: list[dict]) -> list[dict]:
