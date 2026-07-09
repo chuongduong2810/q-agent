@@ -1,6 +1,6 @@
 # ADR 0007 — Application authentication: email+password, JWT + refresh-cookie sessions, RBAC
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-09
 - **Deciders:** Operator (in-session), Q-Agent build
 - **Implements:** Phase 2 (identity core) + Phase 7 (frontend auth) of
@@ -148,10 +148,13 @@ First **Admin** is seeded on empty DB from `QAGENT_ADMIN_EMAIL` / `QAGENT_ADMIN_
 
 ## Consequences
 
-- Every request/WS becomes authenticated once the flag flips; `/artifacts` no longer
-  public. Local single-operator dev must now log in (seeded admin) after Wave C.
-- `settings.json` `userName`/`userRole` are superseded by the user profile (retired in
-  cleanup); `audit_logs.actor` becomes the real user.
+- Every request/WS becomes authenticated **when `QAGENT_AUTH_REQUIRED` is on**; `/artifacts`
+  no longer public. Enforcement stays **opt-in** (default off) so local single-operator dev
+  keeps working with no login; it is switched on at deploy (see §Rollout status below).
+- `settings.json` `userName`/`userRole` remain the identity fallback while enforcement is
+  opt-in (the sidebar reads `/auth/me` when signed in, else falls back). Fully retiring
+  them — and replacing `audit_logs.actor="You"` with the real user — lands with enforcement
+  at go-live / ownership scoping (plan Phase 3).
 - A `sessions` table introduces server-side session state (revocation, active-sessions
   UI) — the tradeoff for httpOnly-cookie security over stateless-JWT simplicity.
 - SSO, Postgres, and ownership scoping remain follow-on epics; this ADR is the foundation
@@ -164,3 +167,18 @@ First **Admin** is seeded on empty DB from `QAGENT_ADMIN_EMAIL` / `QAGENT_ADMIN_
 - **Postgres + Alembic** (plan Phase 1) — these tables migrate into the baseline then.
 - **Per-entity ownership scoping** (`owner_id` on runs/tickets/…, plan Phase 3) — next
   epic; artifact/ WS guards here are "authenticated", not yet "owner-scoped".
+
+## Rollout status (2026-07-09)
+
+Implemented and merged: backend core (`users`/`sessions`, argon2, JWT + httpOnly refresh
+cookie, `/auth/*`, flag-gated guard, seeded admin — #72), frontend plumbing (auth store,
+token/CSRF/401-refresh, `RequireAuth`, `AuthLayout` — #73), and all five screens — Login +
+Signed-out (#74), Admin user management (#75, admin-provisioned; replaces public signup),
+Forgot/reset (#76), Profile incl. 2FA/sessions/delete (#77), and the sidebar account menu +
+logout (#78). SSO providers are hidden per scope.
+
+**Enforcement is opt-in:** `QAGENT_AUTH_REQUIRED` defaults **off**. Set it to `true`
+(with `QAGENT_ADMIN_EMAIL`/`QAGENT_ADMIN_PASSWORD`) to require login — that switch, plus
+retiring the `settings.json` identity fallback and the real `audit_logs.actor`, is the
+go-live task (tracked on #79). An e2e (`app/e2e/auth.spec.ts`) exercises the full flow with
+the flag on.

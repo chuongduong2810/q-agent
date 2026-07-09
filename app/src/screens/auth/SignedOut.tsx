@@ -5,12 +5,21 @@
  * design source's "SIGNED OUT" section.
  */
 
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
+import { useAuth } from "@/store/auth";
 
 export function SignedOut() {
   const navigate = useNavigate();
+
+  // Finalize the local logout here, once we're safely on this public route.
+  // Clearing the session from the sidebar instead would race RequireAuth's
+  // anon-guard (it would redirect to /login before this navigation commits).
+  useEffect(() => {
+    useAuth.getState().logout();
+  }, []);
 
   return (
     <AuthLayout>
