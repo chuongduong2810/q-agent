@@ -689,10 +689,10 @@ export interface AuthTokens {
 /** POST /auth/login → either a session, or an MFA challenge to complete. */
 export type LoginResponse = AuthTokens | { mfaRequired: true; mfaToken: string };
 
-/** TOTP enrollment material returned by POST /auth/me/2fa/setup. */
+/** TOTP enrollment material returned by POST /auth/2fa/setup. */
 export interface TwoFactorSetup {
   secret: string;
-  otpauthUrl: string;
+  otpauthUri: string;
 }
 
 /** A single rolling usage window (session or week) for the top-bar panel. */

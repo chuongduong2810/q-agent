@@ -191,19 +191,18 @@ export const api = {
     updateMe: (body: Partial<Pick<User, "firstName" | "lastName" | "email">>) =>
       patch<User>("/auth/me", body),
     changePassword: (body: { currentPassword: string; newPassword: string }) =>
-      post<void>("/auth/me/password", body),
+      post<void>("/auth/change-password", body),
 
-    requestReset: (body: { email: string }) => post<void>("/auth/password/forgot", body),
-    reset: (body: { token: string; password: string }) => post<void>("/auth/password/reset", body),
+    requestReset: (body: { email: string }) => post<void>("/auth/request-reset", body),
+    reset: (body: { token: string; password: string }) => post<void>("/auth/reset", body),
 
-    twofaSetup: () => post<TwoFactorSetup>("/auth/me/2fa/setup"),
-    twofaEnable: (body: { code: string }) =>
-      post<{ recoveryCodes: string[] }>("/auth/me/2fa/enable", body),
-    twofaDisable: (body: { code: string }) => post<void>("/auth/me/2fa/disable", body),
+    twofaSetup: () => post<TwoFactorSetup>("/auth/2fa/setup"),
+    twofaEnable: (body: { code: string }) => post<void>("/auth/2fa/enable", body),
+    twofaDisable: (body: { code: string }) => post<void>("/auth/2fa/disable", body),
 
-    sessions: () => get<AuthSession[]>("/auth/me/sessions"),
-    revokeSession: (id: string) => del<void>(`/auth/me/sessions/${encodeURIComponent(id)}`),
-    revokeOthers: () => post<void>("/auth/me/sessions/revoke-others"),
+    sessions: () => get<AuthSession[]>("/auth/sessions"),
+    revokeSession: (id: string) => del<void>(`/auth/sessions/${encodeURIComponent(id)}`),
+    revokeOthers: () => post<void>("/auth/sessions/revoke-others"),
     deleteMe: () => del<void>("/auth/me"),
 
     // admin — user management (#78 / #77)
