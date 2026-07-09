@@ -31,6 +31,9 @@ evidence → publish results back to the originating ticket.
 | **Annotation** | Markup drawn on a screenshot (rectangle / arrow / highlight / circle / text) via Pillow, attached to a ticket comment. |
 | **Report** | Aggregated run outcome: overall result, per-ticket summary, pass/fail counts, AI failure analysis, timing, environment, evidence links. |
 | **Comment / Publish** | The prepared result comment pushed back to the provider ticket, with configurable status mapping (e.g. Ready for QA → Testing → Passed / QA Failed). |
+| **Workspace scope** | The per-owner slice of the on-disk workspace. Resolves to `workspace/users/<owner_id>/…` for an owned artifact and `workspace/shared/…` when there is no owner (`owner_id IS NULL`). Each scope holds its own `{specs, evidence, knowledge, repos, auth}` trees, so two users' same-named projects never collide. See [ADR 0009](adr/0009-per-user-workspace-filesystem-and-cloning.md). |
+| **Shared namespace** | The admin-managed shared workspace (`owner_id NULL` rows + `workspace/shared/…`). Admins build and maintain reference projects + knowledge there; members **clone from** it but cannot write to it. The filesystem analogue of ADR 0008's shared Claude credential. |
+| **Clone (project / knowledge)** | Copying a ready-built project — its `Project` + `ProjectConfig` (incl. encrypted test-account secrets) + `ProjectKnowledge` rows **and** the on-disk `knowledge/`, `repos/`, and `auth/` artifacts — from the shared namespace into the caller's own scope (re-stamping `owner_id`), so the expensive ~20-min `project-bootstrap` build is reused rather than repeated. |
 
 ## Pipeline stages (a Run's lifecycle)
 
@@ -96,7 +99,9 @@ isolation**: authentication (ADR 0007) plus per-user ownership of runs, tickets,
 projects, provider connections (each user's own PATs), knowledge, and Claude cost
 (ADR 0008). Roles are **admin** / **member** with RBAC enforcement, full member
 lifecycle, and self-service. Persistence runs on **PostgreSQL** (SQLite still
-supported for local dev) with Alembic migrations. See
+supported for local dev) with Alembic migrations. Isolation now extends to the
+**workspace filesystem** — per-user artifact trees plus an admin-managed **shared
+namespace** members clone from (ADR 0009). See
 [`docs/MULTI-USER-MIGRATION-PLAN.md`](MULTI-USER-MIGRATION-PLAN.md) for status.
 
 ## Non-goals (current)
