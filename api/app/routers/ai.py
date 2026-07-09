@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps_auth import current_user, require_role
+from app.deps_auth import current_user, require_admin
 from app.models.user import User
 from app.schemas import (
     ClaudeCredentialsStatusOut,
@@ -99,7 +99,7 @@ def delete_own_credentials(
 def upload_shared_credentials(
     body: ClaudeCredentialsUpload,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_role("admin")),
+    _admin: User = Depends(require_admin),
 ) -> OkResponse:
     """Admin-only: upload/replace the shared/fallback Claude CLI credentials."""
     try:
@@ -111,7 +111,7 @@ def upload_shared_credentials(
 
 @router.delete("/ai/credentials/shared", response_model=OkResponse)
 def delete_shared_credentials(
-    db: Session = Depends(get_db), _admin: User = Depends(require_role("admin"))
+    db: Session = Depends(get_db), _admin: User = Depends(require_admin)
 ) -> OkResponse:
     """Admin-only: delete the shared/fallback Claude CLI credentials."""
     delete_shared(db)
