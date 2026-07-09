@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Boxes,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -65,6 +66,7 @@ const ClaudeNavIcon = ({ size = 18, strokeWidth = 2 }: { size?: number; strokeWi
 const ADMIN_NAV: NavItem[] = [
   { path: "/settings/users", label: "Users", icon: Users },
   { path: "/settings/claude-credentials", label: "Claude credentials", icon: ClaudeNavIcon },
+  { path: "/settings/shared-workspace", label: "Shared workspace", icon: Boxes },
 ];
 
 /** The global (non-run) sidebar: brand header, two global nav groups, account

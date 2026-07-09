@@ -21,6 +21,7 @@ import type {
   AutomationStatus,
   BackendLogOut,
   BackendLogStats,
+  CloneResultOut,
   CreateLinkRequest,
   LinkedTestCaseOut,
   LinkStatusOut,
@@ -49,6 +50,8 @@ import type {
   RunTicketOut,
   SettingsOut,
   SettingsUpdate,
+  SharedProjectCreate,
+  SharedProjectOut,
   SprintOut,
   SyncRequest,
   SyncResult,
@@ -277,6 +280,20 @@ export const api = {
   // projects
   listProjects: () => get<ProjectOut[]>("/projects"),
   refreshProjects: () => post<ProjectOut[]>("/projects/refresh"),
+
+  // shared namespace (ADR 0009): admin-curated catalog members clone from.
+  listSharedProjects: () => get<SharedProjectOut[]>("/shared/projects"),
+  cloneSharedProject: (key: string) =>
+    post<CloneResultOut>(`/shared/projects/${encodeURIComponent(key)}/clone`),
+  createSharedProject: (key: string, body: SharedProjectCreate) =>
+    post<ProjectConfigOut>(`/shared/projects/${encodeURIComponent(key)}`, body),
+  buildSharedKnowledge: (key: string, body: KnowledgeBuildRequest) =>
+    post<ProjectKnowledgeOut>(`/shared/projects/${encodeURIComponent(key)}/knowledge/build`, body),
+  buildSharedRepoKnowledge: (key: string, repo: string, body: KnowledgeBuildRequest) =>
+    post<ProjectKnowledgeOut>(
+      `/shared/projects/${encodeURIComponent(key)}/repos/${encodeURIComponent(repo)}/knowledge/build`,
+      body,
+    ),
 
   // project knowledge
   listKnowledge: () => get<ProjectKnowledgeOut[]>("/projects/knowledge"),

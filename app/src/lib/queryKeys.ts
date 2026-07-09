@@ -11,6 +11,7 @@ export const queryKeys = {
   connectionRepos: (id: number) => ["connections", id, "repos"] as const,
   settings: ["settings"] as const,
   projects: ["projects"] as const,
+  sharedProjects: ["shared", "projects"] as const,
   knowledgeList: ["projects", "knowledge"] as const,
   projectKnowledge: (key: string) => ["projects", key, "knowledge"] as const,
   projectConfig: (key: string) => ["projects", key, "config"] as const,

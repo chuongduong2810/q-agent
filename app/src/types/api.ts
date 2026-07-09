@@ -177,6 +177,52 @@ export interface AuthState {
   capturing: boolean;
 }
 
+// ---------------------------------------------------- shared namespace (ADR 0009)
+/** One repo's (or the bare project's, when `repo` is blank) knowledge status
+ * within a shared-catalog entry (`GET /shared/projects`). */
+export interface SharedProjectKnowledgeOut {
+  repo: string;
+  status: KnowledgeStatus;
+  confidence: number;
+  version: string;
+  lastIndexed: string | null;
+}
+
+/** A shared-namespace project the catalog lists for members to browse/clone. */
+export interface SharedProjectOut {
+  key: string;
+  name: string;
+  providerKind: string;
+  hasConfig: boolean;
+  knowledge: SharedProjectKnowledgeOut[];
+  alreadyCloned: boolean;
+}
+
+/** Admin: create/update the shared project shell + its config
+ * (`POST /shared/projects/{key}`). */
+export interface SharedProjectCreate {
+  name?: string;
+  providerKind?: string;
+  externalId?: string;
+  baseUrl?: string;
+  repos?: ProjectRepo[];
+  environments?: EnvironmentCfg[];
+  testAccounts?: TestAccountIn[];
+  extra?: Record<string, string>;
+  manualAuth?: boolean;
+}
+
+/** Summary of what `POST /shared/projects/{key}/clone` copied. */
+export interface CloneResultOut {
+  projectKey: string;
+  projectsCloned: number;
+  configCloned: boolean;
+  knowledgeCloned: string[];
+  artifactsCopied: string[];
+  docPath: string;
+  lastError: string;
+}
+
 export type KnowledgeStatus = "not_indexed" | "indexing" | "indexed" | "stale" | "error";
 
 export interface ProjectKnowledgeOut {
