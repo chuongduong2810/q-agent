@@ -27,6 +27,7 @@ import { ClaudeLogo, Spinner } from "@/components/ui/misc";
 import {
   AccessTokenRow,
   Field,
+  FileDropLabel,
   formatExpiry,
   readFileText,
   ScopeChips,
@@ -239,16 +240,14 @@ export function ClaudeCredentials() {
           <AccessTokenRow accent="#c4b5fd" />
 
           <div className="mt-[14px] flex gap-[10px]">
-            <label className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.14)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.22)]">
-              <input
-                type="file"
-                accept=".json,application/json"
-                className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0])}
-              />
+            <FileDropLabel
+              onFile={handleFile}
+              className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.14)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.22)]"
+              dragClassName="border-[rgba(139,92,246,.7)] bg-[rgba(139,92,246,.28)]"
+            >
               <UploadCloud size={14} strokeWidth={2} />
               {uploadShared.isPending ? "Uploading…" : "Rotate / replace token"}
-            </label>
+            </FileDropLabel>
           </div>
         </div>
       ) : (
@@ -258,13 +257,11 @@ export function ClaudeCredentials() {
       )}
 
       {!status?.hasShared && (
-        <label className="flex cursor-pointer flex-col items-center gap-[9px] rounded-2xl border-[1.5px] border-dashed border-[rgba(139,92,246,.35)] bg-[rgba(139,92,246,.05)] p-[26px] text-center transition-colors hover:border-[rgba(139,92,246,.6)] hover:bg-[rgba(139,92,246,.09)]">
-          <input
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0])}
-          />
+        <FileDropLabel
+          onFile={handleFile}
+          className="flex cursor-pointer flex-col items-center gap-[9px] rounded-2xl border-[1.5px] border-dashed border-[rgba(139,92,246,.35)] bg-[rgba(139,92,246,.05)] p-[26px] text-center transition-colors hover:border-[rgba(139,92,246,.6)] hover:bg-[rgba(139,92,246,.09)]"
+          dragClassName="border-[rgba(139,92,246,.6)] bg-[rgba(139,92,246,.09)]"
+        >
           {uploadShared.isPending ? (
             <>
               <Spinner size={30} />
@@ -282,7 +279,7 @@ export function ClaudeCredentials() {
               </div>
             </>
           )}
-        </label>
+        </FileDropLabel>
       )}
       {fileError && <div className="mt-2 text-[12px] text-red-400">{fileError}</div>}
 

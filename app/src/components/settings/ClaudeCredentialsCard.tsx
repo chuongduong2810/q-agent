@@ -27,6 +27,50 @@ export function formatExpiry(iso: string | null | undefined): string {
   return `in ${days} day${days === 1 ? "" : "s"}`;
 }
 
+/** A file-picker `<label>` that also accepts drag-and-drop of a single file
+ * (#95 item 4) — used by every credential upload/replace control that isn't
+ * the big empty-state `UploadDropzone` below (which already had this).
+ * Applies `dragClassName` on top of the caller's `className` while a file is
+ * being dragged over it. Exported for reuse on the admin shared-account
+ * screen's "Rotate / replace token" and "Add a shared Claude account"
+ * controls. */
+export function FileDropLabel({
+  onFile,
+  className,
+  dragClassName,
+  children,
+}: {
+  onFile: (file: File | undefined) => void;
+  className: string;
+  dragClassName: string;
+  children: ReactNode;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  return (
+    <label
+      className={cn(className, dragOver && dragClassName)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        onFile(e.dataTransfer.files[0]);
+      }}
+    >
+      <input
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={(e) => onFile(e.target.files?.[0])}
+      />
+      {children}
+    </label>
+  );
+}
+
 /** Small pill chips for a credential's OAuth scopes; "—" if none. Exported for
  * reuse on the admin shared-account card. */
 export function ScopeChips({ scopes }: { scopes: string[] | null | undefined }) {
@@ -230,16 +274,14 @@ function PersonalAccountCard({
       </div>
       <AccessTokenRow />
       <div className="mt-4 flex flex-wrap gap-[10px] border-t border-white/[0.06] pt-[14px]">
-        <label className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1]">
-          <input
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => onReplace(e.target.files?.[0])}
-          />
+        <FileDropLabel
+          onFile={onReplace}
+          className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1]"
+          dragClassName="border-[rgba(34,211,238,.5)] bg-[rgba(34,211,238,.1)]"
+        >
           <UploadCloud size={14} strokeWidth={2} />
           {uploading ? "Uploading…" : "Replace file"}
-        </label>
+        </FileDropLabel>
         <button
           type="button"
           onClick={onRemove}
