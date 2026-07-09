@@ -14,6 +14,8 @@ import type {
   AuthState,
   AuthTokens,
   ClaudeStats,
+  ClaudeCredentialsStatus,
+  ClaudeCredentialsUpload,
   AutomationSpecOut,
   AutomationStatus,
   BackendLogOut,
@@ -197,6 +199,15 @@ export const api = {
   aiActivity: () => get<AiActivity>("/ai/activity"),
   aiStats: (force = false) => get<ClaudeStats>(`/ai/stats${force ? "?refresh=true" : ""}`),
   aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai${wsToken()}`,
+
+  // Claude CLI credentials management (#95): own (per-user) + shared (admin-only).
+  claudeCredentials: {
+    status: () => get<ClaudeCredentialsStatus>("/ai/credentials"),
+    uploadOwn: (body: ClaudeCredentialsUpload) => put<void>("/ai/credentials", body),
+    deleteOwn: () => del<void>("/ai/credentials"),
+    uploadShared: (body: ClaudeCredentialsUpload) => put<void>("/ai/credentials/shared", body),
+    deleteShared: () => del<void>("/ai/credentials/shared"),
+  },
 
   // auth (ADR 0007). SAME-ORIGIN relative paths so httpOnly refresh + CSRF
   // cookies flow (Vite proxy in dev; same host in prod) — do NOT prefix with

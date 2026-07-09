@@ -785,6 +785,22 @@ export interface AiActivity {
   recent: AiCall[];
 }
 
+/** Claude CLI credentials status (#95) — GET /ai/credentials. Never carries the
+ * token itself; `mode` is which credential is actually effective for the
+ * signed-in user (own beats shared). */
+export interface ClaudeCredentialsStatus {
+  hasOwn: boolean;
+  hasShared: boolean;
+  mode: "own" | "shared" | "none";
+}
+
+/** Body for PUT /ai/credentials and PUT /ai/credentials/shared — the raw
+ * contents of a Claude CLI `.credentials.json` file. */
+export interface ClaudeCredentialsUpload {
+  credentials: string;
+  label?: string;
+}
+
 /** WebSocket progress message shape. */
 export interface ProgressEvent {
   event: string;
