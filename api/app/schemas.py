@@ -754,5 +754,25 @@ class AdminUpdateUserRequest(ApiModel):
     is_active: bool | None = None
 
 
+class AdminInviteUserRequest(ApiModel):
+    """Invite a teammate by email — no password; they set one via /auth/reset."""
+
+    email: str
+    first_name: str = ""
+    last_name: str = ""
+    role: str = "member"
+
+
+class AdminInviteUserResponse(ApiModel):
+    """The newly-invited user plus the reset token needed to set a password.
+
+    Mirrors ``RequestResetResponse``: email delivery is a dev stub, so the
+    token is only echoed here when not in prod (``cookie_secure`` off).
+    """
+
+    user: UserOut
+    reset_token: str | None = None
+
+
 class OkResponse(ApiModel):
     ok: bool = True

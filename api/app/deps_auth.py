@@ -3,6 +3,7 @@
 - :func:`require_user` — decode the bearer access token, load the active user.
   401s when no/invalid token — for routes that must be authenticated.
 - :func:`require_role` — factory that additionally enforces a role.
+- :func:`require_admin` — admin-only shortcut (401 unauthenticated, 403 non-admin).
 - :func:`current_user` — best-effort variant used by ownership scoping (#91):
   never raises, so routers not yet migrated to per-user filtering stay usable.
 - Cookie helpers set/clear the refresh (HttpOnly) + csrf (readable) cookies. The
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models.user import User
+from app.models.user import ROLE_ADMIN, User
 from app.services import auth_service
 
 REFRESH_COOKIE = "qagent_refresh"
@@ -60,6 +61,18 @@ def require_role(role: str):
         return user
 
     return _dep
+
+
+def require_admin(user: User = Depends(require_user)) -> User:
+    """Dependency for admin-only routes (member management, #94).
+
+    401s (via :func:`require_user`) when there's no/invalid bearer token, 403s
+    when the authenticated user isn't an admin. Equivalent to
+    ``require_role(ROLE_ADMIN)`` but named for call-site clarity.
+    """
+    if user.role != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return user
 
 
 def current_user(

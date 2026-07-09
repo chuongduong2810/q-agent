@@ -678,6 +678,13 @@ export interface AuthSession {
   current: boolean;
 }
 
+/** Response to `POST /auth/users/invite` (#94) — the invited user plus a
+ * dev-stub reset token (email delivery isn't wired; `null` in prod). */
+export interface InviteUserResponse {
+  user: User;
+  resetToken: string | null;
+}
+
 /** A minted access token plus its principal (login success / refresh). */
 export interface AuthTokens {
   accessToken: string;

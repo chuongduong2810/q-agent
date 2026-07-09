@@ -19,14 +19,16 @@ from app.deps_auth import (
     clear_auth_cookies,
     read_csrf_cookie,
     read_refresh_cookie,
-    require_role,
+    require_admin,
     require_user,
     set_auth_cookies,
 )
 from app.logging import logger
-from app.models.user import USER_ROLES, User
+from app.models.user import ROLE_ADMIN, USER_ROLES, User
 from app.schemas import (
     AdminCreateUserRequest,
+    AdminInviteUserRequest,
+    AdminInviteUserResponse,
     AdminUpdateUserRequest,
     ChangePasswordRequest,
     LoginRequest,
@@ -286,14 +288,55 @@ def delete_me(response: Response, user: User = Depends(require_user), db: Sessio
 
 
 # ---------------------------------------------------------------- admin
+def _active_admin_count(db: Session, *, exclude_id: int | None = None) -> int:
+    """Count active admins, optionally excluding one user id (for lockout checks)."""
+    query = db.query(User).filter(User.role == ROLE_ADMIN, User.is_active.is_(True))
+    if exclude_id is not None:
+        query = query.filter(User.id != exclude_id)
+    return query.count()
+
+
 @router.get("/auth/users", response_model=list[UserOut])
-def list_users(_: User = Depends(require_role("admin")), db: Session = Depends(get_db)) -> list[UserOut]:
+def list_users(_: User = Depends(require_admin), db: Session = Depends(get_db)) -> list[UserOut]:
     rows = db.query(User).order_by(User.created_at.asc()).all()
     return [UserOut.model_validate(u) for u in rows]
 
 
+@router.post("/auth/users/invite", response_model=AdminInviteUserResponse, status_code=201)
+def invite_user(
+    body: AdminInviteUserRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)
+) -> AdminInviteUserResponse:
+    """Admin-only: create a user with no password and issue a reset token so
+    they can set one via the existing ``/auth/reset`` flow (dev-stub email,
+    same as ``/auth/request-reset``)."""
+    email = (body.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    if body.role not in USER_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role '{body.role}'")
+    if auth_service.get_user_by_email(db, email) is not None:
+        raise HTTPException(status_code=409, detail="A user with that email already exists")
+    user = User(
+        email=email,
+        first_name=body.first_name,
+        last_name=body.last_name,
+        role=body.role,
+        password_hash="",  # unusable until the invite's reset token is redeemed
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    token = auth_service.create_reset_token(user)
+    logger.info("User {} invited — set-password token: {}", user.email, token)
+    audit_service.record(
+        category="auth", actor_type="user", action="Invited user", target=email, meta=f"role={body.role}"
+    )
+    return AdminInviteUserResponse(user=UserOut.model_validate(user), reset_token=None if _is_prod() else token)
+
+
 @router.post("/auth/users", response_model=UserOut, status_code=201)
-def create_user(body: AdminCreateUserRequest, admin: User = Depends(require_role("admin")), db: Session = Depends(get_db)) -> UserOut:
+def create_user(body: AdminCreateUserRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> UserOut:
     email = (body.email or "").strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
@@ -317,16 +360,22 @@ def create_user(body: AdminCreateUserRequest, admin: User = Depends(require_role
 
 
 @router.patch("/auth/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, body: AdminUpdateUserRequest, admin: User = Depends(require_role("admin")), db: Session = Depends(get_db)) -> UserOut:
+def update_user(user_id: int, body: AdminUpdateUserRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> UserOut:
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
-    if body.role is not None:
-        if body.role not in USER_ROLES:
-            raise HTTPException(status_code=400, detail=f"Invalid role '{body.role}'")
-        target.role = body.role
-    if body.is_active is not None:
-        target.is_active = body.is_active
+    if body.role is not None and body.role not in USER_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role '{body.role}'")
+    new_role = body.role if body.role is not None else target.role
+    new_is_active = body.is_active if body.is_active is not None else target.is_active
+    # Lockout guard: block a role/status change that would leave zero active
+    # admins (covers an admin demoting/deactivating themselves or another).
+    was_active_admin = target.role == ROLE_ADMIN and target.is_active
+    will_be_active_admin = new_role == ROLE_ADMIN and new_is_active
+    if was_active_admin and not will_be_active_admin and _active_admin_count(db, exclude_id=target.id) == 0:
+        raise HTTPException(status_code=400, detail="Cannot leave the workspace with zero active admins")
+    target.role = new_role
+    target.is_active = new_is_active
     db.add(target)
     db.commit()
     db.refresh(target)
@@ -335,14 +384,15 @@ def update_user(user_id: int, body: AdminUpdateUserRequest, admin: User = Depend
 
 
 @router.delete("/auth/users/{user_id}", response_model=OkResponse)
-def delete_user(user_id: int, admin: User = Depends(require_role("admin")), db: Session = Depends(get_db)) -> OkResponse:
+def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> OkResponse:
     from app.models.session import Session as AuthSession
 
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
-    if target.id == admin.id:
-        raise HTTPException(status_code=400, detail="You cannot delete your own account here")
+    # Lockout guard: removing the last active admin (self or otherwise) is blocked.
+    if target.role == ROLE_ADMIN and target.is_active and _active_admin_count(db, exclude_id=target.id) == 0:
+        raise HTTPException(status_code=400, detail="Cannot remove the last active admin")
     db.query(AuthSession).filter(AuthSession.user_id == target.id).delete(synchronize_session=False)
     email = target.email
     db.delete(target)

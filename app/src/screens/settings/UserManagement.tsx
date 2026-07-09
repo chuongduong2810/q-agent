@@ -1,9 +1,10 @@
 /**
- * Admin user management (#75). Lists the workspace's users and lets an admin
- * create new ones, flip their role (admin ↔ member), activate/deactivate, and
- * delete them — all via `api.auth.*` (ADR 0007). Gated to `role === "admin"`;
- * everyone else gets a "Not authorized" panel. Premium dark styling ported from
- * the auth design source, reusing the shared auth field kit for the create form.
+ * Admin user management (#75, #94). Lists the workspace's users and lets an
+ * admin invite new ones by email (or create one with a temporary password),
+ * flip their role (admin ↔ member), activate/deactivate, and delete them —
+ * all via `api.auth.*` (ADR 0007). Gated to `role === "admin"`; everyone else
+ * gets a "Not authorized" panel. Premium dark styling ported from the auth
+ * design source, reusing the shared auth field kit for the create/invite form.
  *
  * Renders inside the app shell (child of `RequireAuth` → `App`).
  */
@@ -316,10 +317,16 @@ function IconAction({
   );
 }
 
-/** Create-user modal — the sign-up-style form (first/last name, work email,
- * organization, role, initial password). Portalled to `document.body` with
- * fixed positioning per the project overlay rule. `organization` is captured
- * for parity with the design but not sent (backend takes no org field). */
+/** Create/invite-user modal — the sign-up-style form (first/last name, work
+ * email, organization, role, optional initial password). Portalled to
+ * `document.body` with fixed positioning per the project overlay rule.
+ * `organization` is captured for parity with the design but not sent
+ * (backend takes no org field).
+ *
+ * With a password entered, this calls `createUser` (admin sets it directly).
+ * Left blank, it calls `inviteUser` (#94) instead — the user has no usable
+ * password until they redeem the reset token via the `/auth/reset` flow (the
+ * dev-stub token is surfaced in a toast since email delivery isn't wired). */
 function CreateUserModal({
   onClose,
   onCreated,
@@ -335,16 +342,34 @@ function CreateUserModal({
   const [password, setPassword] = useState("");
 
   const createMut = useMutation({
-    mutationFn: () =>
-      api.auth.createUser({
+    mutationFn: async () => {
+      const trimmedPassword = password.trim();
+      if (trimmedPassword) {
+        const u = await api.auth.createUser({
+          email: email.trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          role,
+          password: trimmedPassword,
+        });
+        return { user: u, invited: false, resetToken: null as string | null };
+      }
+      const invited = await api.auth.inviteUser({
         email: email.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         role,
-        password: password ? password : undefined,
-      }),
-    onSuccess: (u) => {
-      toast.success(`Created ${u.firstName} ${u.lastName}`.trim());
+      });
+      return { user: invited.user, invited: true, resetToken: invited.resetToken };
+    },
+    onSuccess: ({ user: u, invited, resetToken }) => {
+      const name = `${u.firstName} ${u.lastName}`.trim();
+      toast.success(invited ? `Invited ${name}` : `Created ${name}`);
+      if (resetToken) {
+        toast.message("Dev-only set-password link", {
+          description: `/forgot?token=${resetToken}`,
+        });
+      }
       onCreated();
     },
     onError: (e) => toast.error(errMsg(e, "Failed to create user")),
@@ -382,8 +407,10 @@ function CreateUserModal({
             <UserPlus size={17} color="#fff" strokeWidth={2.4} />
           </div>
           <div className="flex-1">
-            <div className="text-[16px] font-extrabold">Create user</div>
-            <div className="text-[12px] text-ink-dim">Add a teammate to your workspace</div>
+            <div className="text-[16px] font-extrabold">Add user</div>
+            <div className="text-[12px] text-ink-dim">
+              Invite a teammate by email, or set a temporary password yourself
+            </div>
           </div>
           <button
             type="button"
@@ -488,7 +515,13 @@ function CreateUserModal({
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={!canSubmit}>
-              {createMut.isPending ? "Creating…" : "Create user"}
+              {password.trim()
+                ? createMut.isPending
+                  ? "Creating…"
+                  : "Create user"
+                : createMut.isPending
+                  ? "Sending invite…"
+                  : "Send invite"}
             </Button>
           </div>
         </form>
