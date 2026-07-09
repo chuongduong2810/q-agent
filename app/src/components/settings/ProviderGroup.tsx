@@ -63,7 +63,7 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
         <button
           onClick={handleAdd}
           disabled={create.isPending}
-          className="flex items-center gap-1.5 rounded-[11px] border border-[rgba(139,92,246,.32)] bg-[rgba(139,92,246,.1)] px-3 py-2 text-[12.5px] font-semibold text-[#c4b5fd] hover:bg-[rgba(139,92,246,.18)] disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.16)] px-3 py-2 text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.26)] disabled:opacity-60"
         >
           <Plus size={14} strokeWidth={2.4} /> Add connection
         </button>
