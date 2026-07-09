@@ -4,12 +4,15 @@
  * TanStack Query hooks (see src/hooks/) using the keys in src/lib/queryKeys.ts.
  */
 
+import { useAuth } from "@/store/auth";
 import type {
   AiActivity,
   AnnotationShape,
   AuditEventOut,
   AuditStats,
+  AuthSession,
   AuthState,
+  AuthTokens,
   ClaudeStats,
   AutomationSpecOut,
   AutomationStatus,
@@ -54,6 +57,10 @@ import type {
   TicketFilters,
   TicketOut,
   TicketPage,
+  LoginResponse,
+  TwoFactorSetup,
+  User,
+  UserRole,
   WorkItemMetadataOut,
 } from "@/types/api";
 
@@ -71,11 +78,68 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(API_BASE + path, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    ...init,
-  });
+/** Read a browser cookie by name (used for the `qagent_csrf` double-submit
+ * token). Returns null when absent or in a non-DOM context. */
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const escaped = name.replace(/([.$?*|{}()[\]\\/+^])/g, "\\$1");
+  const match = document.cookie.match(new RegExp("(?:^|; )" + escaped + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** `/auth/*` calls are SAME-ORIGIN (relative path, via the Vite dev proxy /
+ * same-host in prod) so the httpOnly refresh + CSRF cookies flow. They also
+ * opt out of the silent 401→refresh retry to avoid recursion. */
+function isAuthPath(path: string): boolean {
+  return path === "/auth" || path.startsWith("/auth/");
+}
+
+/** Single in-flight refresh shared by all callers, so a burst of concurrent
+ * 401s triggers exactly one `POST /auth/refresh`. */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function tryRefresh(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = api.auth
+      .refresh()
+      .then(({ accessToken, user }) => {
+        useAuth.getState().setSession({ accessToken, user });
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
+  const authPath = isAuthPath(path);
+  const url = authPath ? path : API_BASE + path;
+
+  const token = useAuth.getState().accessToken;
+  const csrf = getCookie("qagent_csrf");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((init?.headers as Record<string, string> | undefined) ?? {}),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (csrf) headers["X-CSRF-Token"] = csrf;
+
+  const res = await fetch(url, { ...init, credentials: "include", headers });
+
+  // Silent recovery: on a 401 for a non-auth call, refresh the access token
+  // once and replay the request. If refresh fails, the session is dead — clear
+  // it and bounce to /login, then rethrow so the caller still sees the error.
+  if (res.status === 401 && !authPath && !retried) {
+    if (await tryRefresh()) return request<T>(path, init, true);
+    useAuth.getState().logout();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.assign("/login");
+    }
+  }
+
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -110,7 +174,52 @@ export const api = {
   capabilities: () => get<{ claude: boolean; version: string }>("/capabilities"),
   aiActivity: () => get<AiActivity>("/ai/activity"),
   aiStats: (force = false) => get<ClaudeStats>(`/ai/stats${force ? "?refresh=true" : ""}`),
-  aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai`,
+  aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai${wsToken()}`,
+
+  // auth (ADR 0007). SAME-ORIGIN relative paths so httpOnly refresh + CSRF
+  // cookies flow (Vite proxy in dev; same host in prod) — do NOT prefix with
+  // API_BASE.
+  auth: {
+    login: (body: { email: string; password: string; remember?: boolean }) =>
+      post<LoginResponse>("/auth/login", body),
+    loginMfa: (body: { mfaToken: string; code: string }) =>
+      post<AuthTokens>("/auth/login/mfa", body),
+    refresh: () => post<AuthTokens>("/auth/refresh"),
+    logout: () => post<void>("/auth/logout"),
+
+    me: () => get<User>("/auth/me"),
+    updateMe: (body: Partial<Pick<User, "firstName" | "lastName" | "email">>) =>
+      patch<User>("/auth/me", body),
+    changePassword: (body: { currentPassword: string; newPassword: string }) =>
+      post<void>("/auth/change-password", body),
+
+    requestReset: (body: { email: string }) => post<void>("/auth/request-reset", body),
+    reset: (body: { token: string; password: string }) => post<void>("/auth/reset", body),
+
+    twofaSetup: () => post<TwoFactorSetup>("/auth/2fa/setup"),
+    twofaEnable: (body: { code: string }) => post<void>("/auth/2fa/enable", body),
+    twofaDisable: (body: { code: string }) => post<void>("/auth/2fa/disable", body),
+
+    sessions: () => get<AuthSession[]>("/auth/sessions"),
+    revokeSession: (id: string) => del<void>(`/auth/sessions/${encodeURIComponent(id)}`),
+    revokeOthers: () => post<void>("/auth/sessions/revoke-others"),
+    deleteMe: () => del<void>("/auth/me"),
+
+    // admin — user management (#78 / #77)
+    users: () => get<User[]>("/auth/users"),
+    createUser: (body: {
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: UserRole;
+      password?: string;
+    }) => post<User>("/auth/users", body),
+    updateUser: (
+      id: number,
+      body: Partial<{ firstName: string; lastName: string; role: UserRole; isActive: boolean }>,
+    ) => patch<User>(`/auth/users/${id}`, body),
+    deleteUser: (id: number) => del<void>(`/auth/users/${id}`),
+  },
 
   // providers + connections (ADR 0006)
   listProviders: () => get<ProviderGroupOut[]>("/providers"),
@@ -262,5 +371,12 @@ export const api = {
   // artifacts
   artifactUrl: (path: string) => `${API_BASE}/artifacts/${path}`,
   wsUrl: (runId: number | string) =>
-    `${API_BASE.replace(/^http/, "ws")}/ws/runs/${runId}`,
+    `${API_BASE.replace(/^http/, "ws")}/ws/runs/${runId}${wsToken()}`,
 };
+
+/** `?token=<accessToken>` query suffix for WebSocket URLs (WS can't carry an
+ * Authorization header). Read from the auth store at connect time. */
+function wsToken(): string {
+  const t = useAuth.getState().accessToken;
+  return t ? `?token=${encodeURIComponent(t)}` : "";
+}

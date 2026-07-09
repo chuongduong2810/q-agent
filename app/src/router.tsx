@@ -1,6 +1,13 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import App from "@/App";
 import { RunLayout } from "@/screens/RunLayout";
+import { RequireAuth } from "@/screens/RequireAuth";
+
+import { Login } from "@/screens/auth/Login";
+import { ForgotPassword } from "@/screens/auth/ForgotPassword";
+import { SignedOut } from "@/screens/auth/SignedOut";
+import { Profile } from "@/screens/auth/Profile";
+import { UserManagement } from "@/screens/settings/UserManagement";
 
 import { Dashboard } from "@/screens/Dashboard";
 import { Projects } from "@/screens/Projects";
@@ -20,37 +27,54 @@ import { AuditLog } from "@/screens/AuditLog";
 import { Settings } from "@/screens/Settings";
 
 /**
- * The route tree from ADR 0003. `App` is the root layout (providers + shell +
- * <Outlet/> + global overlays). Run-scoped routes nest under `RunLayout`, which
- * owns the single run WebSocket. Vite base is '/', so no basename.
+ * The route tree from ADR 0003 + auth (ADR 0007). PUBLIC auth screens
+ * (`/login`, `/forgot`, `/signed-out`) are top-level siblings of `<App/>`, so
+ * they render WITHOUT the app shell. The entire authenticated app is gated by
+ * `RequireAuth`, which restores the session (via the refresh cookie) before
+ * mounting `<App/>` (providers + shell + <Outlet/>). Run-scoped routes nest
+ * under `RunLayout`, which owns the single run WebSocket. Vite base is '/', so
+ * no basename.
  */
 export const router = createBrowserRouter([
+  // Public (unauthenticated) — no app shell.
+  { path: "login", element: <Login /> },
+  { path: "forgot", element: <ForgotPassword /> },
+  { path: "signed-out", element: <SignedOut /> },
+
+  // Authenticated app subtree — RequireAuth gates every route below.
   {
-    element: <App />,
+    element: <RequireAuth />,
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: "projects", element: <Projects /> },
-      { path: "projects/:projectName", element: <ProjectDetail /> },
-      { path: "tickets", element: <Tickets /> },
-      { path: "tickets/:externalId", element: <TicketDetail /> },
-      { path: "runs", element: <Runs /> },
       {
-        path: "runs/:runId",
-        element: <RunLayout />,
+        element: <App />,
         children: [
-          { index: true, element: <RunDetail /> },
-          { path: "review", element: <ReviewCenter /> },
-          { path: "sync", element: <CreateLinkSync /> },
-          { path: "automation", element: <Automation /> },
-          { path: "execution", element: <Execution /> },
-          { path: "evidence", element: <Evidence /> },
-          { path: "comment", element: <CommentPublish /> },
+          { index: true, element: <Dashboard /> },
+          { path: "projects", element: <Projects /> },
+          { path: "projects/:projectName", element: <ProjectDetail /> },
+          { path: "tickets", element: <Tickets /> },
+          { path: "tickets/:externalId", element: <TicketDetail /> },
+          { path: "runs", element: <Runs /> },
+          {
+            path: "runs/:runId",
+            element: <RunLayout />,
+            children: [
+              { index: true, element: <RunDetail /> },
+              { path: "review", element: <ReviewCenter /> },
+              { path: "sync", element: <CreateLinkSync /> },
+              { path: "automation", element: <Automation /> },
+              { path: "execution", element: <Execution /> },
+              { path: "evidence", element: <Evidence /> },
+              { path: "comment", element: <CommentPublish /> },
+            ],
+          },
+          { path: "reports", element: <Reports /> },
+          { path: "audit", element: <AuditLog /> },
+          { path: "settings", element: <Settings /> },
+          { path: "settings/users", element: <UserManagement /> },
+          { path: "profile", element: <Profile /> },
+          { path: "*", element: <Navigate to="/" replace /> },
         ],
       },
-      { path: "reports", element: <Reports /> },
-      { path: "audit", element: <AuditLog /> },
-      { path: "settings", element: <Settings /> },
-      { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
 ]);

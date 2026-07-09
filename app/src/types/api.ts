@@ -652,6 +652,49 @@ export interface SettingsOut {
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 
+/* ── Auth (ADR 0007) ─────────────────────────────────────────────────────
+ * camelCase wire shapes for the multi-user auth vertical. The durable
+ * credential is an httpOnly refresh cookie; the access token is in-memory. */
+
+export type UserRole = "admin" | "member";
+
+/** The authenticated principal (GET /auth/me, embedded in login/refresh). */
+export interface User {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  isActive: boolean;
+  /** Whether the user has an active TOTP (authenticator app) enrollment. */
+  totpEnabled: boolean;
+}
+
+/** One active refresh session for the profile "Active sessions" list. */
+export interface AuthSession {
+  id: string;
+  userAgent: string;
+  ip: string;
+  lastSeenAt: string;
+  /** True for the session backing the current browser. */
+  current: boolean;
+}
+
+/** A minted access token plus its principal (login success / refresh). */
+export interface AuthTokens {
+  accessToken: string;
+  user: User;
+}
+
+/** POST /auth/login → either a session, or an MFA challenge to complete. */
+export type LoginResponse = AuthTokens | { mfaRequired: true; mfaToken: string };
+
+/** TOTP enrollment material returned by POST /auth/2fa/setup. */
+export interface TwoFactorSetup {
+  secret: string;
+  otpauthUri: string;
+}
+
 /** A single rolling usage window (session or week) for the top-bar panel. */
 export interface UsageWindow {
   costUsd: number; // spend in this window, USD
