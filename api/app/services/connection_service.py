@@ -51,43 +51,60 @@ __all__ = [
 
 
 # ------------------------------------------------------------------ helpers
-def get_connection(db: Session, connection_id: int | None) -> ProviderConnection | None:
-    """Return a connection by id, or None (also for a None/0 id)."""
+def get_connection(
+    db: Session, connection_id: int | None, owner_id: int | None = None
+) -> ProviderConnection | None:
+    """Return a connection by id, or None (also for a None/0 id).
+
+    ``owner_id`` (#93 — private per-user data) restricts the result to a
+    connection owned by that user; a connection with no owner (legacy/un-stamped)
+    is still returned, mirroring :func:`app.services.ownership.get_owned_or_404`'s
+    bridge semantics. ``None`` (the default) applies no ownership filtering.
+    """
     if not connection_id:
         return None
-    return db.get(ProviderConnection, connection_id)
+    conn = db.get(ProviderConnection, connection_id)
+    if conn is None:
+        return None
+    if owner_id is not None and conn.owner_id is not None and conn.owner_id != owner_id:
+        return None
+    return conn
 
 
-def first_of_kind(db: Session, kind: str) -> ProviderConnection | None:
-    """First connection of a provider kind (ordered by id), or None."""
-    return (
-        db.query(ProviderConnection)
-        .filter(ProviderConnection.kind == kind)
-        .order_by(ProviderConnection.id)
-        .first()
-    )
+def first_of_kind(db: Session, kind: str, owner_id: int | None = None) -> ProviderConnection | None:
+    """First connection of a provider kind (ordered by id), or None.
+
+    ``owner_id`` (#93) restricts the search to that user's own connections.
+    """
+    query = db.query(ProviderConnection).filter(ProviderConnection.kind == kind)
+    if owner_id is not None:
+        query = query.filter(ProviderConnection.owner_id == owner_id)
+    return query.order_by(ProviderConnection.id).first()
 
 
-def connections_with_capability(db: Session, capability: str) -> list[ProviderConnection]:
+def connections_with_capability(
+    db: Session, capability: str, owner_id: int | None = None
+) -> list[ProviderConnection]:
     """All connections whose kind's capabilities include ``capability``.
 
     A kind may carry more than one capability (e.g. ``ado`` is both
     ``work_item`` and ``repository``-eligible), so a connection can appear in
-    both capability lists.
+    both capability lists. ``owner_id`` (#93) restricts the result to that
+    user's own connections.
     """
     kinds = [k for k, caps in PROVIDER_CAPABILITIES.items() if capability in caps]
     if not kinds:
         return []
-    return (
-        db.query(ProviderConnection)
-        .filter(ProviderConnection.kind.in_(kinds))
-        .order_by(ProviderConnection.id)
-        .all()
-    )
+    query = db.query(ProviderConnection).filter(ProviderConnection.kind.in_(kinds))
+    if owner_id is not None:
+        query = query.filter(ProviderConnection.owner_id == owner_id)
+    return query.order_by(ProviderConnection.id).all()
 
 
-def _first_with_capability(db: Session, capability: str) -> ProviderConnection | None:
-    conns = connections_with_capability(db, capability)
+def _first_with_capability(
+    db: Session, capability: str, owner_id: int | None = None
+) -> ProviderConnection | None:
+    conns = connections_with_capability(db, capability, owner_id=owner_id)
     return conns[0] if conns else None
 
 
@@ -102,12 +119,15 @@ def resolve_work_item_for_ticket(db: Session, ticket: Ticket) -> ProviderConnect
     """Resolve the work-item connection a ticket's work should route through.
 
     Order: the ticket's stamped ``connection_id`` → the first work-item connection
-    of the ticket's ``provider_kind`` → :class:`ProviderError`.
+    of the ticket's ``provider_kind`` → :class:`ProviderError`. Scoped to the
+    ticket's own ``owner_id`` (#93 — private per-user data): an owned ticket only
+    ever routes through that same user's connections. A ticket with no owner
+    (legacy/un-stamped, or auth disabled) applies no ownership filtering.
     """
-    conn = get_connection(db, ticket.connection_id)
+    conn = get_connection(db, ticket.connection_id, owner_id=ticket.owner_id)
     if conn is not None:
         return conn
-    conn = first_of_kind(db, ticket.provider_kind)
+    conn = first_of_kind(db, ticket.provider_kind, owner_id=ticket.owner_id)
     if conn is not None and WORK_ITEM in categories_for(conn.kind):
         return conn
     raise ProviderError(
@@ -116,20 +136,23 @@ def resolve_work_item_for_ticket(db: Session, ticket: Ticket) -> ProviderConnect
 
 
 # ---------------------------------------------------------- repository routing
-def resolve_repository_for_project(db: Session, project_key: str | None) -> ProviderConnection:
+def resolve_repository_for_project(
+    db: Session, project_key: str | None, owner_id: int | None = None
+) -> ProviderConnection:
     """Resolve the repository connection a project's code work routes through.
 
     Order: the project's bound ``repository_connection_id`` (which may be an
     Azure DevOps connection — ADO is repository-capable) → the first
-    repository-capable connection → :class:`ProviderError`.
+    repository-capable connection → :class:`ProviderError`. ``owner_id`` (#93)
+    restricts both steps to that user's own connections.
     """
     if project_key:
         cfg = db.query(ProjectConfig).filter(ProjectConfig.key == project_key).first()
         if cfg is not None:
-            conn = get_connection(db, cfg.repository_connection_id)
+            conn = get_connection(db, cfg.repository_connection_id, owner_id=owner_id)
             if conn is not None:
                 return conn
-    conn = _first_with_capability(db, REPOSITORY)
+    conn = _first_with_capability(db, REPOSITORY, owner_id=owner_id)
     if conn is not None:
         return conn
     raise ProviderError("Repository provider is not configured")

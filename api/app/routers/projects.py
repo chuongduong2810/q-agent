@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 
 from app import crypto
 from app.db import get_db
+from app.deps_auth import current_user
 from app.models.knowledge import ProjectKnowledge, compose_key
 from app.models.project import Project
 from app.models.provider_connection import ProviderConnection
+from app.models.user import User
 from app.schemas import (
     AuthStateOut,
     AvailableReposOut,
@@ -33,25 +35,35 @@ from app.services import (
 )
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
+from app.services.ownership import check_owned_or_404, owned, stamp_owner
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.get("", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
-    return [ProjectOut.model_validate(p) for p in db.query(Project).all()]
+def list_projects(
+    db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[ProjectOut]:
+    """Projects scoped to ``user`` (#93 — private per-user data)."""
+    return [ProjectOut.model_validate(p) for p in owned(db.query(Project), Project, user).all()]
 
 
 @router.post("/refresh", response_model=list[ProjectOut])
-def refresh_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
+def refresh_projects(
+    db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[ProjectOut]:
     """Pull projects from every connected work-item connection and upsert Project rows.
 
     Each project is stamped with the connection that discovered it
     (``Project.connection_id``) — a convenience reference, not the credential router.
+    Both the source connections and the upserted projects are scoped to ``user``
+    (#93) — a user only ever refreshes from, and creates, their own data.
     """
-    connections = (
-        db.query(ProviderConnection).filter(ProviderConnection.connected.is_(True)).all()
-    )
+    connections = owned(
+        db.query(ProviderConnection).filter(ProviderConnection.connected.is_(True)),
+        ProviderConnection,
+        user,
+    ).all()
 
     for connection in connections:
         if connection_service.WORK_ITEM not in connection_service.categories_for(connection.kind):
@@ -70,14 +82,14 @@ def refresh_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
             if not external_id:
                 continue
             meta = {k: v for k, v in item.items() if k not in ("external_id", "name")}
-            existing = (
-                db.query(Project)
-                .filter(
+            existing = owned(
+                db.query(Project).filter(
                     Project.provider_kind == connection.kind,
                     Project.external_id == external_id,
-                )
-                .first()
-            )
+                ),
+                Project,
+                user,
+            ).first()
             if existing:
                 existing.name = item.get("name", existing.name)
                 existing.active = True
@@ -85,43 +97,62 @@ def refresh_projects(db: Session = Depends(get_db)) -> list[ProjectOut]:
                 existing.connection_id = connection.id
             else:
                 db.add(
-                    Project(
-                        provider_kind=connection.kind,
-                        external_id=external_id,
-                        name=item.get("name", external_id),
-                        active=True,
-                        connection_id=connection.id,
-                        meta=meta,
+                    stamp_owner(
+                        Project(
+                            provider_kind=connection.kind,
+                            external_id=external_id,
+                            name=item.get("name", external_id),
+                            active=True,
+                            connection_id=connection.id,
+                            meta=meta,
+                        ),
+                        user,
                     )
                 )
 
     db.commit()
-    return [ProjectOut.model_validate(p) for p in db.query(Project).all()]
+    return [ProjectOut.model_validate(p) for p in owned(db.query(Project), Project, user).all()]
 
 
 # ------------------------------------------------------------- Project Knowledge
 @router.get("/knowledge", response_model=list[ProjectKnowledgeOut])
-def list_knowledge(db: Session = Depends(get_db)) -> list[ProjectKnowledge]:
-    """All Project Knowledge Bases (drives the Projects grid's status badges)."""
-    return db.query(ProjectKnowledge).all()
+def list_knowledge(
+    db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[ProjectKnowledge]:
+    """All Project Knowledge Bases (drives the Projects grid's status badges).
+
+    Scoped to ``user`` (#93 — private per-user data).
+    """
+    return owned(db.query(ProjectKnowledge), ProjectKnowledge, user).all()
 
 
 @router.get("/{key}/knowledge", response_model=ProjectKnowledgeOut)
-def get_knowledge(key: str, db: Session = Depends(get_db)) -> ProjectKnowledge:
+def get_knowledge(
+    key: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> ProjectKnowledge:
     row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == key).first()
     if not row:
         raise HTTPException(status_code=404, detail=f"No knowledge base for project '{key}'")
+    check_owned_or_404(row, user, not_found=f"No knowledge base for project '{key}'")
     return row
 
 
 @router.post("/{key}/knowledge/build", response_model=ProjectKnowledgeOut)
 def build_knowledge(
-    key: str, body: KnowledgeBuildRequest, db: Session = Depends(get_db)
+    key: str,
+    body: KnowledgeBuildRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> ProjectKnowledge:
-    """Build (or rebuild) a project's knowledge base via Claude (project-bootstrap)."""
+    """Build (or rebuild) a project's knowledge base via Claude (project-bootstrap).
+
+    Scoped to ``user`` (#93): rebuilding another user's existing knowledge base
+    404s; a new row is stamped with the current user's ownership.
+    """
     row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == key).first()
+    check_owned_or_404(row, user, not_found=f"No knowledge base for project '{key}'")
     if not row:
-        row = ProjectKnowledge(key=key, project_key=key, name=body.name or key)
+        row = stamp_owner(ProjectKnowledge(key=key, project_key=key, name=body.name or key), user)
         db.add(row)
     row.project_key = row.project_key or key
     if body.name:
@@ -147,19 +178,36 @@ def build_knowledge(
 
 # --------------------------------------------------------------- Project Config
 @router.get("/{key}/config", response_model=ProjectConfigOut)
-def get_project_config(key: str, db: Session = Depends(get_db)) -> dict:
-    """Return a project's runtime config (test accounts masked)."""
+def get_project_config(
+    key: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
+    """Return a project's runtime config (test accounts masked).
+
+    Scoped to ``user`` (#93 — private per-user data): another user's config 404s.
+    """
     row = project_config_service.get_config(db, key)
+    check_owned_or_404(row, user, not_found=f"Project config '{key}' not found")
     return project_config_service.public_config(row, key)
 
 
 @router.put("/{key}/config", response_model=ProjectConfigOut)
 def save_project_config(
-    key: str, body: ProjectConfigUpdate, db: Session = Depends(get_db)
+    key: str,
+    body: ProjectConfigUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> dict:
-    """Create or update a project's runtime config from the Project Details page."""
+    """Create or update a project's runtime config from the Project Details page.
+
+    Scoped to ``user`` (#93): updating another user's config 404s; a newly
+    created config is stamped with the current user's ownership.
+    """
+    existing = project_config_service.get_config(db, key)
+    check_owned_or_404(existing, user, not_found=f"Project config '{key}' not found")
     patch = body.model_dump(exclude_none=True)
     row = project_config_service.upsert_config(db, key, patch)
+    if existing is None:
+        stamp_owner(row, user)
     db.commit()
     db.refresh(row)
     return project_config_service.public_config(row, key)
@@ -167,22 +215,34 @@ def save_project_config(
 
 # ---------------------------------------------------------- Manual-login session
 @router.get("/{key}/auth", response_model=AuthStateOut)
-def get_project_auth(key: str) -> dict:
-    """Report whether a project has a saved manual-login session (+ capture time)."""
+def get_project_auth(
+    key: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
+    """Report whether a project has a saved manual-login session (+ capture time).
+
+    Scoped to ``user`` (#93) via the underlying project config's ownership.
+    """
+    check_owned_or_404(
+        project_config_service.get_config(db, key), user, not_found=f"Project config '{key}' not found"
+    )
     return {**project_config_service.auth_state(key), "capturing": playwright_runner.is_capturing(key)}
 
 
 @router.post("/{key}/auth/capture", response_model=AuthStateOut)
-def capture_project_auth(key: str, db: Session = Depends(get_db)) -> dict:
+def capture_project_auth(
+    key: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
     """Open a headed browser so the operator can log in and save the session.
 
     Runs the capture in a background thread and returns immediately with
     ``capturing: true`` — the login is long/interactive, so the UI polls
     ``GET /{key}/auth`` for completion. If a capture is already in flight for
     this project, returns the current state without opening a second browser.
+    Scoped to ``user`` (#93) via the underlying project config's ownership.
     """
+    config = project_config_service.get_config(db, key)
+    check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
     if not playwright_runner.is_capturing(key):
-        config = project_config_service.get_config(db, key)
         base_url = (config.base_url if config else "") or ""
         if not base_url:
             raise HTTPException(status_code=400, detail="Set a base URL for the project first.")
@@ -191,24 +251,47 @@ def capture_project_auth(key: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.delete("/{key}/auth", response_model=AuthStateOut)
-def clear_project_auth(key: str) -> dict:
-    """Delete a project's saved session file, forcing re-capture on the next run."""
+def clear_project_auth(
+    key: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
+    """Delete a project's saved session file, forcing re-capture on the next run.
+
+    Scoped to ``user`` (#93) via the underlying project config's ownership.
+    """
+    check_owned_or_404(
+        project_config_service.get_config(db, key), user, not_found=f"Project config '{key}' not found"
+    )
     return project_config_service.clear_auth(key)
 
 
 # --------------------------------------------------------------- Project repos
-def _repository_connection_for_project(db: Session, key: str) -> ProviderConnection | None:
-    """The project's bound repository connection (ADR 0006), or None."""
+def _repository_connection_for_project(
+    db: Session, key: str, owner_id: int | None = None
+) -> ProviderConnection | None:
+    """The project's bound repository connection (ADR 0006), or None.
+
+    ``owner_id`` (#93 — private per-user data) restricts resolution to that
+    user's own connections.
+    """
     try:
-        return connection_service.resolve_repository_for_project(db, key)
+        return connection_service.resolve_repository_for_project(db, key, owner_id=owner_id)
     except ProviderError:
         return None
 
 
 @router.get("/{key}/repos/available", response_model=AvailableReposOut)
-def list_available_repos(key: str, db: Session = Depends(get_db)) -> dict:
-    """Discover the repositories the project's repository connection exposes."""
-    connection = _repository_connection_for_project(db, key)
+def list_available_repos(
+    key: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> dict:
+    """Discover the repositories the project's repository connection exposes.
+
+    Scoped to ``user`` (#93): another user's project config 404s, and the
+    repository connection is resolved from the current user's own connections.
+    """
+    check_owned_or_404(
+        project_config_service.get_config(db, key), user, not_found=f"Project config '{key}' not found"
+    )
+    connection = _repository_connection_for_project(db, key, owner_id=user.id if user else None)
     if not connection:
         return {"provider": "", "repos": [], "error": "No repository connection is bound to this project"}
     secrets = {k: crypto.decrypt(v) for k, v in (connection.secrets or {}).items()}
@@ -223,9 +306,15 @@ def list_available_repos(key: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/{key}/repos", response_model=list[RepoKnowledgeOut])
-def list_project_repos(key: str, db: Session = Depends(get_db)) -> list[dict]:
-    """The project's configured repos, each annotated with its knowledge-base status."""
+def list_project_repos(
+    key: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[dict]:
+    """The project's configured repos, each annotated with its knowledge-base status.
+
+    Scoped to ``user`` (#93): another user's project config 404s.
+    """
     config = project_config_service.get_config(db, key)
+    check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
     repos = project_config_service.get_repos(config)
     out: list[dict] = []
     for repo in repos:
@@ -254,7 +343,10 @@ def list_project_repos(key: str, db: Session = Depends(get_db)) -> list[dict]:
 
 
 @router.get("/{key}/repos/{repo}/knowledge", response_model=ProjectKnowledgeOut)
-def get_repo_knowledge(key: str, repo: str, db: Session = Depends(get_db)) -> ProjectKnowledge:
+def get_repo_knowledge(
+    key: str, repo: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> ProjectKnowledge:
+    """Scoped to ``user`` (#93): another user's per-repo knowledge base 404s."""
     row = (
         db.query(ProjectKnowledge)
         .filter(ProjectKnowledge.key == compose_key(key, repo))
@@ -262,15 +354,26 @@ def get_repo_knowledge(key: str, repo: str, db: Session = Depends(get_db)) -> Pr
     )
     if not row:
         raise HTTPException(status_code=404, detail=f"No knowledge base for repo '{repo}'")
+    check_owned_or_404(row, user, not_found=f"No knowledge base for repo '{repo}'")
     return row
 
 
 @router.post("/{key}/repos/{repo}/knowledge/build", response_model=ProjectKnowledgeOut)
 def build_repo_knowledge(
-    key: str, repo: str, body: KnowledgeBuildRequest, db: Session = Depends(get_db)
+    key: str,
+    repo: str,
+    body: KnowledgeBuildRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> ProjectKnowledge:
-    """Build (or rebuild) the per-repo knowledge base for one of a project's repos."""
+    """Build (or rebuild) the per-repo knowledge base for one of a project's repos.
+
+    Scoped to ``user`` (#93): another user's project config or existing
+    per-repo knowledge base 404s; a new row is stamped with the current user's
+    ownership.
+    """
     config = project_config_service.get_config(db, key)
+    check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
     repos = project_config_service.get_repos(config)
     repo_entry = next((r for r in repos if r["name"] == repo), None)
     if repo_entry is None:
@@ -280,15 +383,16 @@ def build_repo_knowledge(
 
     row_key = compose_key(key, repo)
     row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == row_key).first()
+    check_owned_or_404(row, user, not_found=f"No knowledge base for repo '{repo}'")
     if row is None:
-        row = ProjectKnowledge(key=row_key, project_key=key, name=key, repo=repo)
+        row = stamp_owner(ProjectKnowledge(key=row_key, project_key=key, name=key, repo=repo), user)
         db.add(row)
     row.project_key = key
     row.repo = repo
     if body.provider is not None:
         row.provider = body.provider
     elif not row.provider:
-        connection = _repository_connection_for_project(db, key)
+        connection = _repository_connection_for_project(db, key, owner_id=user.id if user else None)
         row.provider = connection.kind if connection else ""
     if body.framework:
         row.framework = body.framework
