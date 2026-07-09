@@ -35,8 +35,21 @@ class Settings(BaseSettings):
     database_url: str = ""  # derived from workspace_dir if empty
 
     # Secret used to derive the Fernet key that encrypts provider credentials.
+    # Also used to sign auth JWTs (access + short-lived MFA/reset tokens).
     # Override in production via QAGENT_SECRET_KEY.
     secret_key: str = "dev-only-insecure-change-me"
+
+    # Auth (ADR 0007). The global auth guard is OFF by default so local-first
+    # single-user installs keep working unchanged. Flip QAGENT_AUTH_REQUIRED=true
+    # for a shared/multi-user server deployment.
+    auth_required: bool = False
+    # Set the `Secure` flag on auth cookies. Default False so http-localhost dev
+    # works; set QAGENT_COOKIE_SECURE=true behind HTTPS in production.
+    cookie_secure: bool = False
+    # Optional admin seed: when both are set and the users table is empty, an
+    # active Admin is created on startup.
+    admin_email: str = ""
+    admin_password: str = ""
 
     # Claude CLI
     claude_bin: str = "claude"

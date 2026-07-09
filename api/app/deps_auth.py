@@ -1,0 +1,97 @@
+"""Auth FastAPI dependencies + cookie helpers (ADR 0007).
+
+- :func:`require_user` — decode the bearer access token, load the active user.
+- :func:`require_role` — factory that additionally enforces a role.
+- Cookie helpers set/clear the refresh (HttpOnly) + csrf (readable) cookies. The
+  ``Secure`` flag is gated on ``settings.cookie_secure`` so http-localhost dev
+  works while production behind HTTPS stays secure.
+"""
+
+from __future__ import annotations
+
+from fastapi import Depends, HTTPException, Request, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.db import get_db
+from app.models.user import User
+from app.services import auth_service
+
+REFRESH_COOKIE = "qagent_refresh"
+CSRF_COOKIE = "qagent_csrf"
+CSRF_HEADER = "X-CSRF-Token"
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def _unauthorized(detail: str = "Not authenticated") -> HTTPException:
+    return HTTPException(status_code=401, detail=detail)
+
+
+def require_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    """Resolve the current active user from the Authorization: Bearer token."""
+    if credentials is None or not credentials.credentials:
+        raise _unauthorized()
+    try:
+        payload = auth_service.decode_access_token(credentials.credentials)
+    except auth_service.AuthError as exc:
+        raise _unauthorized(str(exc)) from exc
+    user = db.get(User, int(payload.get("sub", 0) or 0))
+    if user is None or not user.is_active:
+        raise _unauthorized("User not found or inactive")
+    # Stash the sid so handlers (logout, sessions) can reach the current session.
+    user._sid = payload.get("sid")  # type: ignore[attr-defined]
+    return user
+
+
+def require_role(role: str):
+    """Dependency factory: 403 unless the current user has ``role``."""
+
+    def _dep(user: User = Depends(require_user)) -> User:
+        if user.role != role:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return user
+
+    return _dep
+
+
+# ---------------------------------------------------------------- cookies
+def set_auth_cookies(response: Response, *, refresh_token: str, csrf_token: str, remember: bool) -> None:
+    max_age = int(
+        (auth_service.REFRESH_TTL_REMEMBER if remember else auth_service.REFRESH_TTL_DEFAULT).total_seconds()
+    )
+    response.set_cookie(
+        REFRESH_COOKIE,
+        refresh_token,
+        max_age=max_age,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        path="/auth",
+    )
+    response.set_cookie(
+        CSRF_COOKIE,
+        csrf_token,
+        max_age=max_age,
+        httponly=False,  # readable by the SPA so it can echo it in X-CSRF-Token
+        secure=settings.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+
+
+def clear_auth_cookies(response: Response) -> None:
+    response.delete_cookie(REFRESH_COOKIE, path="/auth")
+    response.delete_cookie(CSRF_COOKIE, path="/")
+
+
+def read_refresh_cookie(request: Request) -> str | None:
+    return request.cookies.get(REFRESH_COOKIE)
+
+
+def read_csrf_cookie(request: Request) -> str | None:
+    return request.cookies.get(CSRF_COOKIE)

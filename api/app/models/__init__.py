@@ -14,10 +14,14 @@ from app.models.knowledge import ProjectKnowledge
 from app.models.linked import LinkedTestCase
 from app.models.audit import AuditLog
 from app.models.claude_usage import ClaudeUsage
+from app.models.user import User
+from app.models.session import Session
 
 __all__ = [
     "AuditLog",
     "ClaudeUsage",
+    "User",
+    "Session",
     "Provider",
     "ProviderConnection",
     "Project",
