@@ -40,6 +40,16 @@ def owned(query: Query[ModelT], model: type[ModelT], user: User | None) -> Query
     return query.filter(model.owner_id == user.id)
 
 
+def _ownership_mismatch(obj: object, user: User | None) -> bool:
+    """True when ``user`` is present and ``obj.owner_id`` names a *different* user.
+
+    A row with no owner (``owner_id`` is ``None`` — pre-ownership data) never
+    mismatches, so legacy/un-stamped rows stay accessible to everyone.
+    """
+    owner_id = getattr(obj, "owner_id", None)
+    return user is not None and owner_id is not None and owner_id != user.id
+
+
 def get_owned_or_404(db: Session, model: type[ModelT], id: int, user: User | None) -> ModelT:
     """Fetch ``model`` by primary key ``id``.
 
@@ -53,10 +63,22 @@ def get_owned_or_404(db: Session, model: type[ModelT], id: int, user: User | Non
     obj = db.get(model, id)
     if obj is None:
         raise HTTPException(status_code=404, detail=f"{model.__name__} not found")
-    owner_id = getattr(obj, "owner_id", None)
-    if user is not None and owner_id is not None and owner_id != user.id:
+    if _ownership_mismatch(obj, user):
         raise HTTPException(status_code=404, detail=f"{model.__name__} not found")
     return obj
+
+
+def check_owned_or_404(obj: object | None, user: User | None, *, not_found: str = "Not found") -> None:
+    """Raise 404 when ``obj`` exists and is owned by a *different* user (#93).
+
+    Complements :func:`get_owned_or_404` for models looked up by a non-primary-key
+    field (e.g. ``ProjectConfig``/``ProjectKnowledge``, both keyed by ``key`` — a
+    string — rather than ``id``): the caller fetches the row itself (or ``None``),
+    then calls this to apply the same bridge-aware ownership check. A no-op when
+    ``obj`` is ``None`` or ``user`` is ``None``.
+    """
+    if obj is not None and _ownership_mismatch(obj, user):
+        raise HTTPException(status_code=404, detail=not_found)
 
 
 def stamp_owner(obj: ModelT, user: User | None) -> ModelT:

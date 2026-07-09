@@ -57,14 +57,18 @@ def _derive_url(repo: str, provider_display: str) -> str:
     return ""
 
 
-def _repo_pat_for_project(db: Session, project_key: str) -> str:
+def _repo_pat_for_project(db: Session, project_key: str, owner_id: int | None = None) -> str:
     """PAT of the project's bound repository connection (ADR 0006), or "".
 
     Best-effort: an un-bound project (no repository connection resolvable) yields
     an empty PAT, so a public clone still proceeds without credentials.
+    ``owner_id`` (#93 — private per-user data) restricts resolution to that
+    user's own connections.
     """
     try:
-        connection = connection_service.resolve_repository_for_project(db, project_key)
+        connection = connection_service.resolve_repository_for_project(
+            db, project_key, owner_id=owner_id
+        )
     except ProviderError:
         return ""
     return crypto.decrypt((connection.secrets or {}).get("pat", "")) or ""
@@ -101,7 +105,12 @@ def _run_git(args: list[str]) -> bool:
 
 
 def materialize_remote(
-    db: Session, key: str, repo_url: str, provider_display: str = "", repo_name: str = ""
+    db: Session,
+    key: str,
+    repo_url: str,
+    provider_display: str = "",
+    repo_name: str = "",
+    owner_id: int | None = None,
 ) -> str | None:
     """Clone (or pull) ``repo_url`` into workspace/repos/<project>[/<repo>]; return path or None.
 
@@ -113,6 +122,8 @@ def materialize_remote(
             when only a bare ``org/repo`` identifier is available.
         repo_name: When set, clone into a per-repo subdirectory so a project's
             many repos each get their own checkout (per-repo knowledge).
+        owner_id: Restricts the repository-connection PAT lookup to that user's
+            own connections (#93 — private per-user data).
 
     Returns:
         The local checkout path, or None when no URL is resolvable or git fails.
@@ -121,7 +132,7 @@ def materialize_remote(
     if not url:
         return None
 
-    pat = _repo_pat_for_project(db, key)
+    pat = _repo_pat_for_project(db, key, owner_id=owner_id)
     authed = _authenticated_url(url, pat)
 
     dest = settings.repos_dir / _slug(key)
@@ -157,7 +168,12 @@ def _rmtree(path: Path) -> None:
 
 
 def resolve_repo_path(
-    db: Session, key: str, config, provider_display: str = "", repo: str = ""
+    db: Session,
+    key: str,
+    config,
+    provider_display: str = "",
+    repo: str = "",
+    owner_id: int | None = None,
 ) -> str | None:
     """Return a local checkout to traverse: configured local path, else a clone.
 
@@ -168,6 +184,8 @@ def resolve_repo_path(
         provider_display: Provider label for URL derivation/PAT lookup.
         repo: Repo identifier fallback (e.g. ProjectKnowledge.repo) when no
             explicit ``repo_url`` is configured.
+        owner_id: Restricts the clone PAT lookup to that user's own repository
+            connection (#93 — private per-user data).
 
     Returns:
         A local directory path, or None if nothing is available.
@@ -178,16 +196,21 @@ def resolve_repo_path(
     repo_url = (config.repo_url if config and config.repo_url else "") or repo
     if not repo_url:
         return None
-    return materialize_remote(db, key, repo_url, provider_display)
+    return materialize_remote(db, key, repo_url, provider_display, owner_id=owner_id)
 
 
 def resolve_one_repo(
-    db: Session, project_key: str, repo: dict, provider_display: str = ""
+    db: Session,
+    project_key: str,
+    repo: dict,
+    provider_display: str = "",
+    owner_id: int | None = None,
 ) -> str | None:
     """Resolve a single project repo to a local checkout for bootstrap traversal.
 
     Uses the repo's ``local_repo_path`` if it exists, else clones/pulls its
-    ``repo_url`` into ``workspace/repos/<project>/<repo>``.
+    ``repo_url`` into ``workspace/repos/<project>/<repo>``. ``owner_id`` (#93)
+    restricts the clone PAT lookup to that user's own repository connection.
     """
     local = (repo.get("local_repo_path") or "").strip()
     if local and Path(local).is_dir():
@@ -196,5 +219,5 @@ def resolve_one_repo(
     if not repo_url:
         return None
     return materialize_remote(
-        db, project_key, repo_url, provider_display, repo_name=repo.get("name", "")
+        db, project_key, repo_url, provider_display, repo_name=repo.get("name", ""), owner_id=owner_id
     )

@@ -14,8 +14,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db, utcnow
+from app.deps_auth import current_user
 from app.models.linked import LinkedTestCase
 from app.models.ticket import Ticket
+from app.models.user import User
 from app.schemas import (
     LinkedTestCaseOut,
     SyncRequest,
@@ -26,6 +28,7 @@ from app.schemas import (
 )
 from app.services import audit_service, connection_service
 from app.services.adapters.base import ProviderError
+from app.services.ownership import owned, stamp_owner
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -49,8 +52,10 @@ def list_tickets(
     page: int = 1,
     page_size: int = Query(25, alias="pageSize"),
     db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> TicketPageOut:
-    query = db.query(Ticket)
+    """Tickets scoped to ``user`` (#93 — private per-user data)."""
+    query = owned(db.query(Ticket), Ticket, user)
     if connection_id:
         query = query.filter(Ticket.connection_id == connection_id)
     if provider_kind:
@@ -94,8 +99,11 @@ def list_tickets(
 
 
 @router.get("/{external_id}", response_model=TicketDetailOut)
-def get_ticket(external_id: str, db: Session = Depends(get_db)) -> TicketDetailOut:
-    ticket = db.query(Ticket).filter(Ticket.external_id == external_id).first()
+def get_ticket(
+    external_id: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> TicketDetailOut:
+    """Scoped to ``user`` (#93 — private per-user data)."""
+    ticket = owned(db.query(Ticket), Ticket, user).filter(Ticket.external_id == external_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail=f"Ticket '{external_id}' not found")
 
@@ -150,16 +158,21 @@ def provider_test_cases(external_id: str, db: Session = Depends(get_db)) -> list
 
 
 @router.post("/sync", response_model=SyncResult)
-def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult:
+def sync_tickets(
+    body: SyncRequest, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> SyncResult:
     """Pull tickets from a work-item connection's adapter and upsert Ticket rows.
 
     Routes by the request's ``connectionId`` (a work-item connection); falls back
     to the first connection of ``providerKind``. Each synced ticket is stamped with
     the connection's id so downstream work-item work routes back to the same origin.
+    Both the connection and the synced tickets are scoped to ``user`` (#93 —
+    private per-user data): a user only ever syncs via, and into, their own data.
     """
-    connection = connection_service.get_connection(db, body.connection_id)
+    owner_id = user.id if user else None
+    connection = connection_service.get_connection(db, body.connection_id, owner_id=owner_id)
     if connection is None and body.provider_kind:
-        connection = connection_service.first_of_kind(db, body.provider_kind)
+        connection = connection_service.first_of_kind(db, body.provider_kind, owner_id=owner_id)
     if connection is None:
         raise HTTPException(
             status_code=404,
@@ -186,12 +199,12 @@ def sync_tickets(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResult
         if not external_id:
             continue
         ticket = (
-            db.query(Ticket)
+            owned(db.query(Ticket), Ticket, user)
             .filter(Ticket.external_id == external_id, Ticket.provider_kind == connection.kind)
             .first()
         )
         if not ticket:
-            ticket = Ticket(external_id=external_id, provider_kind=connection.kind)
+            ticket = stamp_owner(Ticket(external_id=external_id, provider_kind=connection.kind), user)
             db.add(ticket)
         ticket.connection_id = connection.id  # stamp the work-item origin
 

@@ -335,14 +335,22 @@ def apply_build(
 
 
 def _resolve_path_for_row(db, row: ProjectKnowledge, config) -> str | None:
-    """Resolve the checkout to traverse for a knowledge row (per-repo, else legacy)."""
+    """Resolve the checkout to traverse for a knowledge row (per-repo, else legacy).
+
+    The clone PAT lookup is scoped to the row's own ``owner_id`` (#93 — private
+    per-user data), so a build only ever clones with that user's own repository
+    connection credentials.
+    """
     project_key = row.project_key or row.key
+    owner_id = row.owner_id
     repos = project_config_service.get_repos(config)
     repo_entry = next((r for r in repos if r.get("name") == row.repo), None) if row.repo else None
     if repo_entry is not None:
-        return repo_service.resolve_one_repo(db, project_key, repo_entry, provider_display=row.provider)
+        return repo_service.resolve_one_repo(
+            db, project_key, repo_entry, provider_display=row.provider, owner_id=owner_id
+        )
     return repo_service.resolve_repo_path(
-        db, project_key, config, provider_display=row.provider, repo=row.repo
+        db, project_key, config, provider_display=row.provider, repo=row.repo, owner_id=owner_id
     )
 
 

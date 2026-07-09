@@ -52,10 +52,10 @@ from app.schemas import (
     TestConnectionResult,
     WorkItemMetadataOut,
 )
-from app.services import audit_service, connection_service, settings_store
+from app.services import audit_service, settings_store
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
-from app.services.ownership import stamp_owner
+from app.services.ownership import get_owned_or_404, owned, stamp_owner
 
 router = APIRouter(tags=["providers"])
 
@@ -83,11 +83,14 @@ def _to_connection_out(conn: ProviderConnection) -> ConnectionOut:
     )
 
 
-def _get_connection_or_404(db: Session, connection_id: int) -> ProviderConnection:
-    conn = connection_service.get_connection(db, connection_id)
-    if conn is None:
-        raise HTTPException(status_code=404, detail=f"Connection '{connection_id}' not found")
-    return conn
+def _get_connection_or_404(db: Session, connection_id: int, user: User | None) -> ProviderConnection:
+    """Fetch a connection by id, scoped to ``user`` (#93 — private per-user data).
+
+    Delegates the 404 semantics to :func:`get_owned_or_404`: missing row, or a
+    row owned by a *different* user, both 404. A no-op when ``user`` is ``None``
+    (auth disabled).
+    """
+    return get_owned_or_404(db, ProviderConnection, connection_id, user)
 
 
 def _require_capability(conn: ProviderConnection, capability: str) -> None:
@@ -99,10 +102,16 @@ def _require_capability(conn: ProviderConnection, capability: str) -> None:
 
 
 @router.get("/providers", response_model=list[ProviderGroupOut])
-def list_providers(db: Session = Depends(get_db)) -> list[ProviderGroupOut]:
-    """Grouped catalog: one group per kind, in fixed order (ado, jira, github)."""
+def list_providers(
+    db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> list[ProviderGroupOut]:
+    """Grouped catalog: one group per kind, in fixed order (ado, jira, github).
+
+    Connections are scoped to ``user`` (#93) — each user only sees their own.
+    """
     by_kind: dict[str, list[ProviderConnection]] = {k: [] for k in _KIND_ORDER}
-    for conn in db.query(ProviderConnection).order_by(ProviderConnection.id).all():
+    query = owned(db.query(ProviderConnection), ProviderConnection, user)
+    for conn in query.order_by(ProviderConnection.id).all():
         by_kind.setdefault(conn.kind, []).append(conn)
     groups: list[ProviderGroupOut] = []
     for kind in _KIND_ORDER:
@@ -149,10 +158,13 @@ def create_connection(
 
 @router.put("/connections/{connection_id}", response_model=ConnectionOut)
 def update_connection(
-    connection_id: int, body: ConnectionUpdate, db: Session = Depends(get_db)
+    connection_id: int,
+    body: ConnectionUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> ConnectionOut:
     """Save non-secret config + encrypt and persist secrets. Untouched secrets kept."""
-    conn = _get_connection_or_404(db, connection_id)
+    conn = _get_connection_or_404(db, connection_id, user)
     if body.name is not None:
         conn.name = body.name
     if body.config is not None:
@@ -172,9 +184,13 @@ def update_connection(
 
 
 @router.delete("/connections/{connection_id}", status_code=204)
-def delete_connection(connection_id: int, db: Session = Depends(get_db)) -> Response:
+def delete_connection(
+    connection_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> Response:
     """Delete a connection and null out every FK that referenced it."""
-    conn = _get_connection_or_404(db, connection_id)
+    conn = _get_connection_or_404(db, connection_id, user)
     db.query(Ticket).filter(Ticket.connection_id == connection_id).update(
         {Ticket.connection_id: None}, synchronize_session=False
     )
@@ -198,9 +214,13 @@ def delete_connection(connection_id: int, db: Session = Depends(get_db)) -> Resp
 
 
 @router.post("/connections/{connection_id}/test", response_model=TestConnectionResult)
-def test_connection(connection_id: int, db: Session = Depends(get_db)) -> TestConnectionResult:
+def test_connection(
+    connection_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> TestConnectionResult:
     """Instantiate the live adapter with decrypted config/secrets and probe connectivity."""
-    conn = _get_connection_or_404(db, connection_id)
+    conn = _get_connection_or_404(db, connection_id, user)
     decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
         adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
@@ -226,13 +246,17 @@ def test_connection(connection_id: int, db: Session = Depends(get_db)) -> TestCo
 
 
 @router.get("/connections/{connection_id}/sprints", response_model=list[SprintOut])
-def list_connection_sprints(connection_id: int, db: Session = Depends(get_db)) -> list[SprintOut]:
+def list_connection_sprints(
+    connection_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> list[SprintOut]:
     """Real sprints/iterations for a work-item connection's project.
 
     Resilient: an unconfigured/unsupported connection yields an empty list so the
     sprint picker degrades gracefully rather than erroring the UI.
     """
-    conn = _get_connection_or_404(db, connection_id)
+    conn = _get_connection_or_404(db, connection_id, user)
     _require_capability(conn, WORK_ITEM)
     decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
@@ -246,13 +270,15 @@ def list_connection_sprints(connection_id: int, db: Session = Depends(get_db)) -
 
 @router.get("/connections/{connection_id}/work-item-metadata", response_model=WorkItemMetadataOut)
 def connection_work_item_metadata(
-    connection_id: int, db: Session = Depends(get_db)
+    connection_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> WorkItemMetadataOut:
     """Filter options (area paths, work item types, states) for a work-item connection.
 
     Resilient: unconfigured/unsupported connections yield empty lists.
     """
-    conn = _get_connection_or_404(db, connection_id)
+    conn = _get_connection_or_404(db, connection_id, user)
     _require_capability(conn, WORK_ITEM)
     decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
@@ -266,13 +292,15 @@ def connection_work_item_metadata(
 
 @router.get("/connections/{connection_id}/repos", response_model=list[AvailableRepoOut])
 def list_connection_repos(
-    connection_id: int, db: Session = Depends(get_db)
+    connection_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> list[AvailableRepoOut]:
     """Discover the repositories a repository connection exposes (for the picker).
 
     Resilient: unconfigured/unsupported connections yield an empty list.
     """
-    conn = _get_connection_or_404(db, connection_id)
+    conn = _get_connection_or_404(db, connection_id, user)
     _require_capability(conn, REPOSITORY)
     decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
     try:
