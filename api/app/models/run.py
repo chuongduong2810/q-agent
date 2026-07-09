@@ -52,6 +52,9 @@ class Run(Base):
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     failed_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Per-user ownership (#91) — data is per-user private. Nullable until the
+    # cleanup issue (#98) backfills every row and enforces non-null.
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
     run_tickets: Mapped[list["RunTicket"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="RunTicket.position"

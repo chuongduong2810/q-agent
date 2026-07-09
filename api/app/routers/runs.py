@@ -24,6 +24,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db, utcnow
+from app.deps_auth import current_user
 from app.models.claude_usage import ClaudeUsage
 from app.models.comment import TicketComment
 from app.models.execution import Execution
@@ -32,6 +33,7 @@ from app.models.report import Report
 from app.models.run import TERMINAL_RUN_STATUSES, Run, RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
+from app.models.user import User
 from app.routers import automation as automation_router
 from app.routers import comments as comments_router
 from app.routers import execution as execution_router
@@ -45,6 +47,7 @@ from app.schemas import (
 )
 from app.services import ai_usage_service, audit_service, link_service, project_config_service, run_control
 from app.services.ai_service import run_generation_pipeline
+from app.services.ownership import stamp_owner
 from app.services.run_status import force_status, set_run_status
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -162,7 +165,9 @@ def list_runs(db: Session = Depends(get_db)) -> list[Run]:
 
 
 @router.post("", response_model=RunDetailOut)
-def create_run(body: RunCreate, db: Session = Depends(get_db)) -> Run:
+def create_run(
+    body: RunCreate, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Run:
     ticket_ids = list(body.ticket_ids or [])
     # For a sprint-scoped run without explicit ids, resolve the sprint's tickets
     # from the synced DB (matched on the sprint leaf name).
@@ -191,6 +196,7 @@ def create_run(body: RunCreate, db: Session = Depends(get_db)) -> Run:
         retry_policy=body.retry_policy,
         status="processing",
     )
+    stamp_owner(run, user)
     db.add(run)
     db.flush()
 

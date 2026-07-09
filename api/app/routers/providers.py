@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app import crypto
 from app.db import get_db, utcnow
+from app.deps_auth import current_user
 from app.logging import logger
 from app.models.project import Project
 from app.models.project_config import ProjectConfig
@@ -38,6 +39,7 @@ from app.models.provider_connection import (
     categories_for,
 )
 from app.models.ticket import Ticket
+from app.models.user import User
 from app.schemas import (
     AvailableRepoOut,
     ConnectionCreate,
@@ -53,6 +55,7 @@ from app.schemas import (
 from app.services import audit_service, connection_service, settings_store
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
+from app.services.ownership import stamp_owner
 
 router = APIRouter(tags=["providers"])
 
@@ -119,7 +122,10 @@ def list_providers(db: Session = Depends(get_db)) -> list[ProviderGroupOut]:
 
 @router.post("/providers/{kind}/connections", response_model=ConnectionOut, status_code=201)
 def create_connection(
-    kind: str, body: ConnectionCreate, db: Session = Depends(get_db)
+    kind: str,
+    body: ConnectionCreate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> ConnectionOut:
     """Create an empty connection under a provider kind."""
     _validate_kind(kind)
@@ -130,6 +136,7 @@ def create_connection(
         config={},
         secrets={},
     )
+    stamp_owner(conn, user)
     db.add(conn)
     db.commit()
     db.refresh(conn)

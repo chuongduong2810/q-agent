@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Integer, String
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, UTCDateTime, timestamp_column, utcnow
@@ -56,3 +56,8 @@ class ProjectKnowledge(Base):
 
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)
+    # Per-user ownership (#91) — data is per-user private. Nullable until the
+    # cleanup issue (#98) backfills every row and enforces non-null.
+    owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )

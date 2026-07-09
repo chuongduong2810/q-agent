@@ -1,7 +1,10 @@
 """Auth FastAPI dependencies + cookie helpers (ADR 0007).
 
 - :func:`require_user` — decode the bearer access token, load the active user.
+  401s when no/invalid token — for routes that must be authenticated.
 - :func:`require_role` — factory that additionally enforces a role.
+- :func:`current_user` — best-effort variant used by ownership scoping (#91):
+  never raises, so routers not yet migrated to per-user filtering stay usable.
 - Cookie helpers set/clear the refresh (HttpOnly) + csrf (readable) cookies. The
   ``Secure`` flag is gated on ``settings.cookie_secure`` so http-localhost dev
   works while production behind HTTPS stays secure.
@@ -57,6 +60,34 @@ def require_role(role: str):
         return user
 
     return _dep
+
+
+def current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Best-effort resolve the current user for ownership scoping (#91).
+
+    Unlike :func:`require_user`, this **never raises** — it returns ``None``
+    when there's no bearer token, the token is invalid/expired, or the user
+    can't be found/is inactive.
+
+    # BRIDGE (#91): callers (``app.services.ownership``) treat ``None`` as
+    "no scoping" so routes not yet migrated to per-user filtering (#92/#93),
+    and the whole test suite (which runs with ``auth_required`` off), keep
+    working unchanged. Remove this bridge in the cleanup issue (#98) once
+    every route requires an authenticated user.
+    """
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        payload = auth_service.decode_access_token(credentials.credentials)
+    except auth_service.AuthError:
+        return None
+    user = db.get(User, int(payload.get("sub", 0) or 0))
+    if user is None or not user.is_active:
+        return None
+    return user
 
 
 # ---------------------------------------------------------------- cookies
