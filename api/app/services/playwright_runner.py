@@ -307,7 +307,7 @@ def is_capturing(project_key: str) -> bool:
     return project_key in _capturing
 
 
-def start_capture(project_key: str, base_url: str) -> None:
+def start_capture(project_key: str, base_url: str, owner_id: int | None = None) -> None:
     """Kick off a background headed-browser login capture for a project.
 
     Guards on :data:`_capturing` so at most one browser is open per project. When
@@ -318,6 +318,9 @@ def start_capture(project_key: str, base_url: str) -> None:
     Args:
         project_key: The project whose session is being captured.
         base_url: The application URL to open for manual login.
+        owner_id: The project config's owner (ADR 0009 — scopes the saved
+            session under the owner's workspace, or the shared namespace when
+            ``None``).
     """
     if project_key in _capturing:
         return
@@ -325,7 +328,7 @@ def start_capture(project_key: str, base_url: str) -> None:
 
     def _worker() -> None:
         try:
-            capture_storage_state(base_url, project_config_service.auth_path(project_key))
+            capture_storage_state(base_url, project_config_service.auth_path(project_key, owner_id))
         finally:
             _capturing.discard(project_key)
 
@@ -635,7 +638,7 @@ def run_execution(execution_id: int) -> None:
             )
             storage_state = ""
             if manual_auth and project_key:
-                session_path = project_config_service.auth_path(project_key)
+                session_path = project_config_service.auth_path(project_key, run.owner_id)
                 if session_path.exists() and session_path.stat().st_size > 0:
                     storage_state = str(session_path)
                 elif base_url:
@@ -661,7 +664,11 @@ def run_execution(execution_id: int) -> None:
             # fixtures.ts + spec import rewrite, but only when a manual-auth session
             # (storageState + sessionStorage snapshot) actually exists. Non-auth runs
             # normalize spec imports back to '@playwright/test' and write no fixtures.
-            session_file = project_config_service.session_path(project_key) if project_key else spec_dir / "sessionStorage.json"
+            session_file = (
+                project_config_service.session_path(project_key, run.owner_id)
+                if project_key
+                else spec_dir / "sessionStorage.json"
+            )
             use_fixtures = bool(manual_auth and storage_state and session_file.exists())
             _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
 
@@ -996,10 +1003,10 @@ def heal_spec(case_id: int) -> None:
         storage_state = ""
         session_file = spec_dir / "sessionStorage.json"
         if manual_auth and project_key:
-            saved = project_config_service.auth_path(project_key)
+            saved = project_config_service.auth_path(project_key, run.owner_id)
             if saved.exists() and saved.stat().st_size > 0:
                 storage_state = str(saved)
-            session_file = project_config_service.session_path(project_key)
+            session_file = project_config_service.session_path(project_key, run.owner_id)
         use_fixtures = bool(manual_auth and storage_state and session_file.exists())
 
         context = spec_service.build_case_context(db, case, env=run.env)

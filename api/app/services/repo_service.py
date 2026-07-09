@@ -5,8 +5,8 @@ back to metadata inference):
 
 1. A configured ``local_repo_path`` that exists on disk — used as-is, no network.
 2. Otherwise a remote git URL (the project's ``repo_url``, or one derived from the
-   provider + repo identifier) is cloned/pulled into ``workspace/repos/<slug>`` and
-   that checkout is traversed.
+   provider + repo identifier) is cloned/pulled into the owner's scoped repos dir
+   (ADR 0009 — ``workspace/<scope>/repos/<slug>``) and that checkout is traversed.
 
 Private repos are authenticated by injecting the project's **repository
 connection** PAT (``secrets['pat']``) into the HTTPS URL (ADR 0006 — repository
@@ -24,10 +24,10 @@ from urllib.parse import urlparse, urlunparse
 from sqlalchemy.orm import Session
 
 from app import crypto
-from app.config import settings
 from app.logging import logger
 from app.services import connection_service
 from app.services.adapters.base import ProviderError
+from app.services.workspace_scope import scoped_repos_dir
 
 _CLONE_TIMEOUT_S = 180
 
@@ -112,7 +112,8 @@ def materialize_remote(
     repo_name: str = "",
     owner_id: int | None = None,
 ) -> str | None:
-    """Clone (or pull) ``repo_url`` into workspace/repos/<project>[/<repo>]; return path or None.
+    """Clone (or pull) ``repo_url`` into the owner's scoped repos dir
+    (``workspace/<scope>/repos/<project>[/<repo>]``); return path or None.
 
     Args:
         db: Active session (to look up the provider PAT for private repos).
@@ -135,7 +136,7 @@ def materialize_remote(
     pat = _repo_pat_for_project(db, key, owner_id=owner_id)
     authed = _authenticated_url(url, pat)
 
-    dest = settings.repos_dir / _slug(key)
+    dest = scoped_repos_dir(owner_id) / _slug(key)
     if repo_name:
         dest = dest / _slug(repo_name)
     if (dest / ".git").is_dir():

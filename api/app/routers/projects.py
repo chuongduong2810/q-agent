@@ -222,10 +222,13 @@ def get_project_auth(
 
     Scoped to ``user`` (#93) via the underlying project config's ownership.
     """
-    check_owned_or_404(
-        project_config_service.get_config(db, key), user, not_found=f"Project config '{key}' not found"
-    )
-    return {**project_config_service.auth_state(key), "capturing": playwright_runner.is_capturing(key)}
+    config = project_config_service.get_config(db, key)
+    check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
+    owner_id = config.owner_id if config else None
+    return {
+        **project_config_service.auth_state(key, owner_id),
+        "capturing": playwright_runner.is_capturing(key),
+    }
 
 
 @router.post("/{key}/auth/capture", response_model=AuthStateOut)
@@ -242,12 +245,16 @@ def capture_project_auth(
     """
     config = project_config_service.get_config(db, key)
     check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
+    owner_id = config.owner_id if config else None
     if not playwright_runner.is_capturing(key):
         base_url = (config.base_url if config else "") or ""
         if not base_url:
             raise HTTPException(status_code=400, detail="Set a base URL for the project first.")
-        playwright_runner.start_capture(key, base_url)
-    return {**project_config_service.auth_state(key), "capturing": playwright_runner.is_capturing(key)}
+        playwright_runner.start_capture(key, base_url, owner_id=owner_id)
+    return {
+        **project_config_service.auth_state(key, owner_id),
+        "capturing": playwright_runner.is_capturing(key),
+    }
 
 
 @router.delete("/{key}/auth", response_model=AuthStateOut)
@@ -258,10 +265,9 @@ def clear_project_auth(
 
     Scoped to ``user`` (#93) via the underlying project config's ownership.
     """
-    check_owned_or_404(
-        project_config_service.get_config(db, key), user, not_found=f"Project config '{key}' not found"
-    )
-    return project_config_service.clear_auth(key)
+    config = project_config_service.get_config(db, key)
+    check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
+    return project_config_service.clear_auth(key, config.owner_id if config else None)
 
 
 # --------------------------------------------------------------- Project repos

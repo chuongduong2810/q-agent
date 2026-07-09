@@ -15,7 +15,6 @@ propagate to the caller.
 from __future__ import annotations
 
 import json
-import re
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +26,7 @@ from app.models.knowledge import ProjectKnowledge, compose_key
 from app.services import audit_service, project_config_service, repo_service
 from app.services.claude_cli import run_json
 from app.services.skills import PROJECT_BOOTSTRAP
+from app.services.workspace_scope import scoped_knowledge_dir, slug
 
 if TYPE_CHECKING:
     from app.models.project_config import ProjectConfig
@@ -147,12 +147,9 @@ def build_knowledge_payload(
     return {"knowledge": knowledge, "confidence": confidence}
 
 
-def _slug(key: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9._-]+", "-", key).strip("-") or "project"
-
-
 def write_knowledge_files(row: ProjectKnowledge, config: "ProjectConfig | None" = None) -> str:
-    """Emit the skill's knowledge.json + knowledge.md artifacts under workspace/knowledge/<key>/.
+    """Emit the skill's knowledge.json + knowledge.md artifacts under the row owner's
+    scoped knowledge dir (ADR 0009 — ``workspace/<scope>/knowledge/<key>/``).
 
     project-bootstrap's contract is to persist the Project Knowledge Base as files
     (knowledge.md + knowledge.json) that downstream skills read; we mirror the DB
@@ -162,11 +159,11 @@ def write_knowledge_files(row: ProjectKnowledge, config: "ProjectConfig | None" 
     directory path.
     """
     kn = row.knowledge or {}
-    # Per-repo artifacts nest under the project: knowledge/<project>/<repo>/.
-    project_slug = _slug(row.project_key or row.key)
-    out_dir = settings.knowledge_dir / project_slug
+    # Per-repo artifacts nest under the project: <scope>/knowledge/<project>/<repo>/.
+    project_slug = slug(row.project_key or row.key)
+    out_dir = scoped_knowledge_dir(row.owner_id) / project_slug
     if row.repo:
-        out_dir = out_dir / _slug(row.repo)
+        out_dir = out_dir / slug(row.repo)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     base_url = (config.base_url if config and config.base_url else "") or kn.get("base_url", "")
