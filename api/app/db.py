@@ -77,12 +77,32 @@ def run_migrations() -> None:
     fixture that builds each test's isolated temp database — schema creation
     always goes through the same Alembic migration path instead of ad-hoc
     ``create_all``/``ALTER TABLE`` hacks.
+
+    Adopts Alembic on a **pre-Alembic** database: a DB created by the old
+    ``create_all`` bootstrap already has the baseline tables but no
+    ``alembic_version`` row, so a plain ``upgrade head`` would try to re-create
+    those tables and fail ("table already exists"). When we detect that shape we
+    first ``stamp`` the baseline revision so ``upgrade`` applies only the delta
+    migrations (e.g. owner columns, claude_credentials).
     """
     from alembic import command
     from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import inspect
 
     cfg = Config(str(API_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(API_DIR / "migrations"))
+
+    with engine.connect() as conn:
+        inspector = inspect(conn)
+        versioned = inspector.has_table("alembic_version")
+        # ``audit_logs`` is an original baseline table — its presence without an
+        # alembic_version table means the schema predates Alembic adoption.
+        legacy_schema = inspector.has_table("audit_logs")
+    if not versioned and legacy_schema:
+        baseline = ScriptDirectory.from_config(cfg).get_base()
+        command.stamp(cfg, baseline)
+
     command.upgrade(cfg, "head")
 
 
