@@ -20,9 +20,13 @@ the agent downloads Playwright's Chromium if it isn't already present (one-time,
 ## Install & run
 
 ```bash
-npx @qagent/agent pair <code> --server https://your-qagent-server.example.com
+npx @qagent/agent pair <code> --server https://your-qagent-server.example.com/api
 npx @qagent/agent start
 ```
+
+`--server` is the origin serving the API's `/agent/...` routes. On the
+same-origin (Cloudflare tunnel) deployment that's `<origin>/api`. In local dev
+with the API on its own port, use the API directly (e.g. `http://127.0.0.1:8787`).
 
 Or, if working from a checkout of this package:
 
