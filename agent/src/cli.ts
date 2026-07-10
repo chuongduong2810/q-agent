@@ -14,6 +14,7 @@ import * as os from "os";
 import { AgentConfig, clearConfig, loadConfig, saveConfig } from "./config";
 import { redeemDevice } from "./api";
 import { killActiveChild, runAgentLoop } from "./runner";
+import { startUi } from "./ui";
 
 /** How the user invoked this agent, for accurate "run X" hints: the bare command
  * inside a packaged bundle, else the `npx` form of the published package. */
@@ -88,6 +89,15 @@ program
   .action(() => {
     clearConfig();
     console.log(`Device token cleared. Run \`${invocation()} pair <code>\` to pair again.`);
+  });
+
+program
+  .command("ui", { isDefault: true })
+  .description("Open the local web UI to pair and watch progress in your browser (default)")
+  .option("--port <port>", "port for the local UI server (default 7420)")
+  .option("--no-open", "start the UI server without opening a browser")
+  .action((opts: { port?: string; open?: boolean }) => {
+    startUi({ port: opts.port ? Number(opts.port) : undefined, open: opts.open !== false });
   });
 
 program.parseAsync(process.argv).catch((err) => {
