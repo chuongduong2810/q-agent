@@ -10,10 +10,10 @@ pairing redemption.
 Pairing flow:
 
 1. The SPA (an already-authenticated user) requests a short-lived pairing code
-   (:func:`create_pairing_code`) — a signed JWT (``typ="pair"``, ~5 min TTL)
-   carrying the user's id. This reuses ``auth_service``'s ``_encode``/``_decode``
-   JWT plumbing directly rather than a separate one-time-code table.
-2. The user copies the code into the Local Agent CLI, which redeems it
+   (:func:`create_pairing_code`) — a 6-digit code held in an in-memory pending
+   store (~5 min TTL) mapped to the user's id. Kept safe by being single-use,
+   short-lived, and rate-limited at redemption (see :func:`redeem_pairing_code`).
+2. The user types the code into the Local Agent, which redeems it
    (:func:`redeem_pairing_code`) to create an :class:`AgentDevice` row and
    receive the one-time plaintext device token.
 3. The agent authenticates subsequent requests with ``Authorization: Bearer
@@ -25,44 +25,74 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import threading
+import time
 from datetime import timedelta
-from typing import Any
 
 from sqlalchemy.orm import Session as DbSession
 
 from app.db import utcnow
 from app.models.agent_device import AgentDevice
 from app.models.user import User
-from app.services.auth_service import _decode, _encode
+from app.services.auth_service import AuthError
 
-# Short-lived — long enough to copy/paste the code into the CLI, short enough
-# that a leaked code can't be redeemed later.
+# Short-lived — long enough to type the 6-digit code into the agent, short
+# enough that a leaked code can't be redeemed later.
 PAIR_TTL = timedelta(minutes=5)
+_CODE_SPACE = 1_000_000  # 6-digit codes: "000000".."999999"
+
+# In-memory pending pairing codes (single-process, like the run_control
+# registry): code -> (owner_id, expiry as time.monotonic()). A 6-digit code is
+# only 1M combinations, so pairing is kept safe by three properties: it is
+# single-use (popped on redeem), short-lived (PAIR_TTL), and redemption is
+# throttled below — brute-forcing 1M codes within 5 min is infeasible at the
+# allowed attempt rate.
+_pending: dict[str, tuple[int, float]] = {}
+# Sliding window of failed-redeem timestamps, to throttle guessing.
+_failures: list[float] = []
+_lock = threading.Lock()
+_FAIL_WINDOW_S = 60.0
+_FAIL_MAX = 10
 
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def create_pairing_code(db: DbSession, user: User) -> str:
-    """Issue a short-lived pairing code (signed JWT, ``typ="pair"``) for ``user``.
+def _purge_expired(now: float) -> None:
+    """Drop expired pending codes (caller holds ``_lock``)."""
+    for code in [c for c, (_owner, exp) in _pending.items() if exp <= now]:
+        _pending.pop(code, None)
 
-    The code is opaque to the agent — it just relays it back at redemption.
-    ``db`` is accepted for symmetry with the rest of this module's signatures
-    (unused here; no DB row is created until redemption).
+
+def create_pairing_code(db: DbSession, user: User) -> str:
+    """Issue a short-lived 6-digit pairing code for ``user``.
+
+    The code is held in the in-memory pending store until redeemed or expired.
+    ``db`` is accepted for signature symmetry (no row is created until redemption).
 
     Returns:
-        The signed pairing-code JWT, valid for :data:`PAIR_TTL`.
+        A zero-padded 6-digit code (e.g. ``"048213"``), valid for :data:`PAIR_TTL`.
     """
-    return _encode({"sub": str(user.id)}, PAIR_TTL, "pair")
+    now = time.monotonic()
+    with _lock:
+        _purge_expired(now)
+        code = f"{secrets.randbelow(_CODE_SPACE):06d}"
+        # Avoid clobbering another live code (extremely rare); retry a few times.
+        for _ in range(20):
+            if code not in _pending:
+                break
+            code = f"{secrets.randbelow(_CODE_SPACE):06d}"
+        _pending[code] = (int(user.id), now + PAIR_TTL.total_seconds())
+    return code
 
 
 def redeem_pairing_code(db: DbSession, code: str, name: str = "") -> tuple[AgentDevice, str]:
-    """Validate a pairing code and create a new paired device.
+    """Validate a 6-digit pairing code and create a new paired device.
 
     Args:
         db: Active session.
-        code: The pairing code minted by :func:`create_pairing_code`.
+        code: The 6-digit code minted by :func:`create_pairing_code`.
         name: Optional human-friendly device name (e.g. hostname), shown in the
             paired-devices list. Defaults to "Local Agent" when blank.
 
@@ -71,10 +101,22 @@ def redeem_pairing_code(db: DbSession, code: str, name: str = "") -> tuple[Agent
         stored row holds just its sha256 hash.
 
     Raises:
-        auth_service.AuthError: if the code is invalid/expired/wrong-type.
+        AuthError: if the code is invalid/expired, or redemption is throttled
+            after too many recent failed attempts.
     """
-    payload: dict[str, Any] = _decode(code, "pair")
-    owner_id = int(payload.get("sub", 0) or 0)
+    code = (code or "").strip()
+    now = time.monotonic()
+    with _lock:
+        _purge_expired(now)
+        _failures[:] = [t for t in _failures if now - t < _FAIL_WINDOW_S]
+        if len(_failures) >= _FAIL_MAX:
+            raise AuthError("Too many pairing attempts — wait a minute and try again.")
+        entry = _pending.pop(code, None)  # single-use: remove on redeem
+        if entry is None or entry[1] <= now:
+            _failures.append(now)
+            raise AuthError("Invalid or expired pairing code.")
+        owner_id = entry[0]
+
     token = secrets.token_urlsafe(48)
     device = AgentDevice(
         owner_id=owner_id,
