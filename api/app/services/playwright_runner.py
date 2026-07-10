@@ -45,6 +45,8 @@ from app.models.ticket import Ticket
 from app.services import (
     audit_service,
     evidence_analysis,
+    evidence_service,
+    execution_service,
     failure_classifier,
     placeholder_gate,
     project_config_service,
@@ -56,7 +58,7 @@ from app.services import (
 )
 from app.services.claude_cli import ClaudeError
 from app.services.run_status import set_run_status
-from app.services.workspace_scope import scoped_evidence_dir, scoped_specs_dir
+from app.services.workspace_scope import scoped_specs_dir
 from app.ws import hub
 
 _PLAYWRIGHT_CONFIG_TEMPLATE = """\
@@ -466,49 +468,17 @@ def _invoke_playwright(
     return popen.returncode, stdout, stderr
 
 
-def _match_result(
-    db_results: list[ExecutionResult], parsed: dict[str, Any]
-) -> ExecutionResult | None:
-    """Find the ExecutionResult row whose spec filename matches a parsed entry."""
-    file_name = Path(parsed["file"]).name
-    for result in db_results:
-        expected = f"{result.ticket_external_id.rsplit('-', 1)[-1]}-{result.case_code}.spec.ts"
-        if expected == file_name:
-            return result
-    return None
-
-
 def _store_evidence(db, run: Run, result: ExecutionResult, attachments: list[dict]) -> None:
     """Copy/record evidence artifacts for a result under the run owner's scoped
-    evidence dir (ADR 0009 §1). ``Evidence.path`` is stored relative to that
-    scoped root (``<RUN-CODE>/<ticket>/<case>/<file>``) — see ``evidence_analysis``
-    and ``routers/evidence.py`` for how the owner scope is prepended when the
-    served ``/artifacts`` URL is built.
+    evidence dir (ADR 0009 §1). Thin wrapper over
+    :func:`app.services.evidence_service.store_uploaded_evidence` (shared with
+    the Local Agent's multipart evidence upload) — each attachment's on-disk
+    ``path`` is copied in using its own basename as the destination filename.
     """
-    import shutil
-
-    evidence_root = scoped_evidence_dir(run.owner_id)
-    dest_dir = evidence_root / run.code / result.ticket_external_id / result.case_code
-    dest_dir.mkdir(parents=True, exist_ok=True)
     for att in attachments:
-        src = Path(att["path"])
-        if not src.exists():
-            continue
-        dest = dest_dir / src.name
-        try:
-            shutil.copy2(src, dest)
-        except OSError as exc:
-            logger.warning("Failed to copy evidence {}: {}", src, exc)
-            continue
-        rel_path = dest.relative_to(evidence_root).as_posix()
-        evidence = Evidence(
-            result_id=result.id,
-            kind=att["kind"],
-            path=rel_path,
-            filename=dest.name,
-            size_bytes=dest.stat().st_size,
+        evidence_service.store_uploaded_evidence(
+            db, run, result, att["kind"], att["path"], Path(att["path"]).name
         )
-        db.add(evidence)
 
 
 def _resolve_project_for_run(db, run: Run, env: str) -> tuple[str | None, str, bool, str]:
@@ -736,18 +706,16 @@ def run_execution(execution_id: int) -> None:
             passed = failed = 0
             matched_ids: set[int] = set()
             for entry in parsed:
-                result = _match_result(results, entry)
+                entry = dict(entry)
+                entry["duration_ms"] = entry["duration_ms"] or elapsed_ms
+                result = execution_service.apply_result(db, results, entry)
                 if result is None:
                     continue
                 matched_ids.add(result.id)
-                result.status = entry["status"]
-                result.duration_ms = entry["duration_ms"] or elapsed_ms
-                result.error_message = entry["error_message"]
                 if result.status == "pass":
                     passed += 1
                 elif result.status == "fail":
                     failed += 1
-                db.commit()
                 _store_evidence(db, run, result, entry["attachments"])
                 db.commit()
                 hub.publish(
@@ -821,28 +789,11 @@ def run_execution(execution_id: int) -> None:
             # run_error text so the log still explains why the run failed. Keep the
             # LAST ~20000 chars so the failing tail survives truncation.
             log_text = proc_output or run_error or ""
-            execution.log = log_text[-20000:]
 
             execution.passed = passed
             execution.failed = failed
             execution.total = total
-            execution.progress = 100
-            execution.status = "done"
-            from datetime import datetime, timezone
-
-            execution.finished_at = datetime.now(timezone.utc)
-            db.commit()
-
-            hub.publish(run_id_str, "exec.progress", {"progress": 100, "passed": passed, "failed": failed, "remaining": 0})
-            hub.publish(run_id_str, "exec.done", {"passed": passed, "failed": failed})
-            set_run_status(db, run, "evidence")
-
-            audit_service.record(
-                category="execution", actor_type="ai", action="Executed test run",
-                target=f"{run.code} · {total} cases",
-                status="warning" if failed else "success",
-                meta=f"{passed} passed · {failed} failed",
-            )
+            execution_service.finalize(db, execution, run, log_text)
         except Exception as exc:  # noqa: BLE001 - never crash the worker thread silently
             logger.error("Execution crashed for run {}: {}", run.code, exc)
             db.rollback()

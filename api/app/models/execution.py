@@ -10,6 +10,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base, UTCDateTime, timestamp_column
 
 EXEC_STATUSES = ("queued", "running", "passed", "failed", "done")
+# Where an Execution's Playwright run happens (Local Agent feature): "server"
+# (legacy — spawned in a background thread on this process) or "local-agent"
+# (queued for a paired device to claim via /agent/jobs/next).
+EXEC_TARGETS = ("server", "local-agent")
 CASE_RESULT_STATUSES = ("pending", "running", "pass", "fail", "skipped")
 EVIDENCE_KINDS = ("screenshot", "video", "trace", "console", "network", "summary")
 # Root-cause classification of a failed result (see failure_classifier). "" = unclassified.
@@ -22,6 +26,12 @@ class Execution(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
     status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    # See EXEC_TARGETS. "local-agent" executions are created status="queued" and
+    # never spawn the in-process runner thread — a paired device claims them.
+    target: Mapped[str] = mapped_column(String(16), default="server")
+    claimed_by_device_id: Mapped[int | None] = mapped_column(
+        ForeignKey("agent_devices.id"), nullable=True
+    )
     env: Mapped[str] = mapped_column(String(32), default="Staging")
     browser: Mapped[str] = mapped_column(String(32), default="chromium")
     workers: Mapped[int] = mapped_column(Integer, default=4)
