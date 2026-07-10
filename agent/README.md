@@ -12,9 +12,10 @@ Q-Agent server. This means:
 ## Prerequisites
 
 - Node.js 18+
-- A Chromium install for Playwright: `npx playwright install chromium`
-  (run once, from anywhere with this package's dependencies available —
-  e.g. after `npm install` in this directory).
+
+Chromium is installed automatically: the first time you run `qagent-agent start`
+the agent downloads Playwright's Chromium if it isn't already present (one-time,
+~100 MB, with visible progress). No manual `npx playwright install` step is needed.
 
 ## Install & run
 

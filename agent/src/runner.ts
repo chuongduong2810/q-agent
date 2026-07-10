@@ -12,6 +12,7 @@ import * as os from "os";
 import * as path from "path";
 import * as api from "./api";
 import { AgentConfig } from "./config";
+import { ensureChromium } from "./ensureBrowser";
 import { applyAuthFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
@@ -351,6 +352,10 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
  * between empty claims. Runs until `signal.aborted`.
  */
 export async function runAgentLoop(cfg: AgentConfig, signal: { aborted: boolean }): Promise<void> {
+  if (!(await ensureChromium())) {
+    console.error("Chromium is required to run tests — aborting.");
+    return;
+  }
   console.log(`Local Agent started — polling ${cfg.serverUrl} as device #${cfg.deviceId} (${cfg.deviceName})`);
   while (!signal.aborted) {
     let job: api.Job | null = null;
