@@ -1,0 +1,26 @@
+{
+  "name": "@qagent/agent",
+  "version": "0.1.0",
+  "description": "Q-Agent Local Agent — claims execution jobs from the Q-Agent server and runs Playwright locally, so manual login/MFA happens on the user's own machine and session credentials never leave it.",
+  "license": "UNLICENSED",
+  "private": true,
+  "bin": {
+    "qagent-agent": "dist/src/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.61.1",
+    "commander": "^12.1.0",
+    "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -17,6 +17,7 @@ from app.logging import logger, setup_logging
 from app.models.run import Run
 from app.services.audit_context import bind_audit_actor
 from app.routers import (
+    agent,
     ai,
     audit,
     auth,
@@ -229,6 +230,15 @@ def create_app() -> FastAPI:
             return await call_next(request)
         if request.method == "OPTIONS" or path in _AUTH_ALLOWLIST:
             return await call_next(request)
+        if path.startswith("/agent"):
+            # Local Agent routes authenticate themselves per-route: device
+            # management uses require_user (a normal bearer access token, so it
+            # would pass the check below anyway), the job protocol uses
+            # require_agent (a device token, which is NOT a valid access token
+            # and would otherwise be rejected here), and /agent/devices/redeem
+            # is authenticated by the pairing code itself. Let all of them
+            # through the HTTP guard and defer to their own dependency.
+            return await call_next(request)
         # Static artifacts bypass router deps → validate a ?token= access token,
         # then (#92) confirm the token's user owns the run the path serves from
         # (``_artifact_access_allowed`` also enforces the same evidence-subtree
@@ -277,6 +287,7 @@ def create_app() -> FastAPI:
         evidence,
         reports,
         comments,
+        agent,
     ):
         app.include_router(module.router, dependencies=[Depends(bind_audit_actor)])
 

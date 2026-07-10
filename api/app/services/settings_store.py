@@ -22,6 +22,10 @@ DEFAULTS: dict[str, Any] = {
     "neuralBackground": True,
     "claudeModel": "claude-sonnet-5",
     "weeklyTokenBudget": 0,
+    # Default execution target for new runs when a request doesn't specify one
+    # (Local Agent feature — see EXEC_TARGETS): "server" (legacy in-process
+    # runner) or "local-agent" (queued for a paired device to claim).
+    "executionTarget": "server",
 }
 
 

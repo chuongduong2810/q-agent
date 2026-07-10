@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models.user import ROLE_ADMIN, User
-from app.services import auth_service
+from app.services import agent_device_service, auth_service
 
 REFRESH_COOKIE = "qagent_refresh"
 CSRF_COOKIE = "qagent_csrf"
@@ -49,6 +49,32 @@ def require_user(
         raise _unauthorized("User not found or inactive")
     # Stash the sid so handlers (logout, sessions) can reach the current session.
     user._sid = payload.get("sid")  # type: ignore[attr-defined]
+    return user
+
+
+def require_agent(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    """Resolve the owning User from a Local Agent device's Bearer token.
+
+    Distinct from :func:`require_user`: this decodes no JWT — it hashes the raw
+    bearer token and looks up a non-revoked ``AgentDevice`` via
+    ``agent_device_service.authenticate_token``. 401s when missing/invalid/
+    revoked. Touches the device's ``last_seen_at`` on success and returns the
+    device's owning ``User`` (stashing the device on ``user._device``) so
+    downstream ownership checks and job-claim handlers work unchanged.
+    """
+    if credentials is None or not credentials.credentials:
+        raise _unauthorized()
+    device = agent_device_service.authenticate_token(db, credentials.credentials)
+    if device is None:
+        raise _unauthorized("Invalid device token")
+    agent_device_service.touch_last_seen(db, device)
+    user = db.get(User, device.owner_id)
+    if user is None or not user.is_active:
+        raise _unauthorized("User not found or inactive")
+    user._device = device  # type: ignore[attr-defined]
     return user
 
 

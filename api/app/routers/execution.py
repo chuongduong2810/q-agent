@@ -20,16 +20,45 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps_auth import current_user
-from app.models.execution import Evidence, Execution, ExecutionResult
+from app.models.agent_device import AgentDevice
+from app.models.execution import EXEC_TARGETS, Evidence, Execution, ExecutionResult
 from app.models.run import Run
 from app.models.testcase import TestCase
 from app.models.user import User
+from app.services import settings_store
 from app.services.ownership import get_owned_or_404
 from app.services.playwright_runner import run_execution
 from app.services.run_status import set_run_status
 from app.services.workspace_scope import served_evidence_path
 
 router = APIRouter(tags=["execution"])
+
+
+def _resolve_target(body: dict) -> str:
+    """Resolve the execution target ("server" | "local-agent") for a new run.
+
+    ``body["target"]`` wins when it's a valid target; otherwise falls back to
+    the workspace-wide ``executionTarget`` setting (Local Agent feature).
+    """
+    requested = (body.get("target") or "").strip().lower()
+    if requested in EXEC_TARGETS:
+        return requested
+    default = settings_store.load_settings().get("executionTarget", "server")
+    return default if default in EXEC_TARGETS else "server"
+
+
+def _require_paired_device(db: Session, owner_id: int | None) -> None:
+    """409s unless ``owner_id`` has at least one non-revoked paired Local Agent."""
+    has_device = (
+        db.query(AgentDevice)
+        .filter(AgentDevice.owner_id == owner_id, AgentDevice.revoked_at.is_(None))
+        .first()
+        is not None
+    )
+    if not has_device:
+        raise HTTPException(
+            status_code=409, detail="No local agent paired — start your local agent"
+        )
 
 
 @router.post("/runs/{run_id}/execution")
@@ -61,15 +90,19 @@ def start_execution(
 
     workers = body.get("workers") or run.workers
     env = body.get("env") or run.env
+    target = _resolve_target(body)
+    if target == "local-agent":
+        _require_paired_device(db, run.owner_id)
 
     execution = Execution(
         run_id=run_id,
-        status="running",
+        status="running" if target == "server" else "queued",
+        target=target,
         env=env,
         browser=run.browser,
         workers=workers,
         total=len(cases),
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(timezone.utc) if target == "server" else None,
     )
     db.add(execution)
     db.flush()
@@ -89,21 +122,26 @@ def start_execution(
     set_run_status(db, run, "executing")
     db.refresh(execution)
 
-    thread = threading.Thread(target=run_execution, args=(execution.id,), daemon=True)
-    thread.start()
+    if target == "server":
+        thread = threading.Thread(target=run_execution, args=(execution.id,), daemon=True)
+        thread.start()
 
     return _execution_out(db, execution, run.owner_id)
 
 
 @router.post("/cases/{case_id}/spec/run")
 def run_single_spec(
-    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+    case_id: int,
+    body: dict = Body(default_factory=dict),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> dict:
     """Execute just one test case's spec (the "run this test" action).
 
     Creates an Execution with a single pending ExecutionResult and runs only that
     spec (run_execution runs one file when the execution has one result). 404 if
-    the case/spec/run is missing; 400 if the case isn't automatable.
+    the case/spec/run is missing; 400 if the case isn't automatable; 409 if
+    ``target`` resolves to "local-agent" but no device is paired.
     """
     case = db.get(TestCase, case_id)
     if case is None:
@@ -116,15 +154,19 @@ def run_single_spec(
             detail="Spec is blocked or a product defect — resolve the block or route the defect to the report; it is not runnable",
         )
     run = get_owned_or_404(db, Run, case.run_id, user)
+    target = _resolve_target(body)
+    if target == "local-agent":
+        _require_paired_device(db, run.owner_id)
 
     execution = Execution(
         run_id=run.id,
-        status="running",
+        status="running" if target == "server" else "queued",
+        target=target,
         env=run.env,
         browser=run.browser,
         workers=1,
         total=1,
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(timezone.utc) if target == "server" else None,
     )
     db.add(execution)
     db.flush()
@@ -141,7 +183,8 @@ def run_single_spec(
     set_run_status(db, run, "executing")
     db.refresh(execution)
 
-    threading.Thread(target=run_execution, args=(execution.id,), daemon=True).start()
+    if target == "server":
+        threading.Thread(target=run_execution, args=(execution.id,), daemon=True).start()
     return _execution_out(db, execution, run.owner_id)
 
 
@@ -185,6 +228,7 @@ def _execution_out(db: Session, execution: Execution, owner_id: int | None) -> d
         "id": execution.id,
         "runId": execution.run_id,
         "status": execution.status,
+        "target": execution.target,
         "env": execution.env,
         "browser": execution.browser,
         "workers": execution.workers,

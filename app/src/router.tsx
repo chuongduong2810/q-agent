@@ -12,6 +12,7 @@ import { ClaudeCredentials } from "@/screens/settings/ClaudeCredentials";
 import { SharedWorkspace } from "@/screens/settings/SharedWorkspace";
 
 import { Dashboard } from "@/screens/Dashboard";
+import { GettingStarted } from "@/screens/GettingStarted";
 import { Projects } from "@/screens/Projects";
 import { ProjectDetail } from "@/screens/ProjectDetail";
 import { Tickets } from "@/screens/Tickets";
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
         element: <App />,
         children: [
           { index: true, element: <Dashboard /> },
+          { path: "getting-started", element: <GettingStarted /> },
           { path: "projects", element: <Projects /> },
           { path: "projects/:projectName", element: <ProjectDetail /> },
           { path: "tickets", element: <Tickets /> },

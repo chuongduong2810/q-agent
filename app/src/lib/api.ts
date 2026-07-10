@@ -354,6 +354,10 @@ export const api = {
   // runs
   listRuns: () => get<RunOut[]>("/runs"),
   createRun: (body: RunCreate) => post<RunDetailOut>("/runs", body),
+  // Seed (or return the existing) fully-populated demo run for the product tour
+  // / Getting Started page. No AI pipeline — the backend inserts the row graph
+  // directly, owner-stamped and idempotent (one `RUN-DEMO` per user).
+  createSampleRun: () => post<RunDetailOut>("/runs/sample"),
   getRun: (runId: number | string) => get<RunDetailOut>(`/runs/${runId}`),
   regenerateRun: (runId: number | string) => post<RunDetailOut>(`/runs/${runId}/regenerate`),
   cancelRun: (runId: number | string) => post<RunOut>(`/runs/${runId}/cancel`),

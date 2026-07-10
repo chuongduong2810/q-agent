@@ -410,6 +410,20 @@ export const useCreateRun = () => {
   });
 };
 
+// Seed (or fetch the existing) sample run for the product tour / Getting Started
+// page. Idempotent server-side; on success refresh the Runs list and prime the
+// run detail cache so navigating straight into it is instant.
+export const useEnsureSampleRun = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.createSampleRun(),
+    onSuccess: (run) => {
+      qc.invalidateQueries({ queryKey: queryKeys.runs });
+      qc.setQueryData(queryKeys.run(run.id), run);
+    },
+  });
+};
+
 export const useRegenerateRun = (runId: number | string) => {
   const qc = useQueryClient();
   return useMutation({

@@ -2,6 +2,7 @@ import {
   BarChart3,
   Boxes,
   FolderKanban,
+  GraduationCap,
   LayoutDashboard,
   LogOut,
   Settings,
@@ -38,6 +39,7 @@ const PRIMARY_NAV: NavItem[] = [
 
 const SECONDARY_NAV: NavItem[] = [
   { path: "/reports", label: "Reports", icon: BarChart3 },
+  { path: "/getting-started", label: "Getting Started", icon: GraduationCap },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -97,6 +99,7 @@ export function GlobalSidebar() {
     return (
       <button
         key={n.path}
+        data-tour={`nav-${n.label.toLowerCase().replace(/\s+/g, "-")}`}
         onClick={() => navigate(n.path)}
         className={cn(
           "flex w-full items-center gap-3 rounded-xl border-none px-3 py-[9px] text-left text-[13.5px] font-semibold transition-colors",

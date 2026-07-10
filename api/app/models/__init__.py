@@ -17,6 +17,7 @@ from app.models.claude_usage import ClaudeUsage
 from app.models.claude_credentials import ClaudeCredentials
 from app.models.user import User
 from app.models.session import Session
+from app.models.agent_device import AgentDevice
 
 __all__ = [
     "AuditLog",
@@ -24,6 +25,7 @@ __all__ = [
     "ClaudeCredentials",
     "User",
     "Session",
+    "AgentDevice",
     "Provider",
     "ProviderConnection",
     "Project",
