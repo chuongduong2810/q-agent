@@ -38,7 +38,6 @@ const PRIMARY_NAV: NavItem[] = [
 
 const SECONDARY_NAV: NavItem[] = [
   { path: "/reports", label: "Reports", icon: BarChart3 },
-  { path: "/audit", label: "Audit Log", icon: ShieldCheck },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -67,6 +66,7 @@ const ADMIN_NAV: NavItem[] = [
   { path: "/settings/users", label: "Users", icon: Users },
   { path: "/settings/claude-credentials", label: "Claude credentials", icon: ClaudeNavIcon },
   { path: "/settings/shared-workspace", label: "Shared workspace", icon: Boxes },
+  { path: "/audit", label: "Audit Log", icon: ShieldCheck },
 ];
 
 /** The global (non-run) sidebar: brand header, two global nav groups, account
