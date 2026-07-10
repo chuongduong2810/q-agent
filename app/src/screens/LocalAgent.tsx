@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Cpu, Laptop, Terminal, Trash2 } from "lucide-react";
+import { Check, Copy, Cpu, Laptop, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -88,7 +88,15 @@ export function LocalAgent() {
         </Button>
       </div>
 
-      {pairing && <PairingCommand command={command} expiresAt={pairing.expiresAt} onExpire={() => setPairing(null)} />}
+      {pairing && (
+        <PairingCommand
+          code={pairing.code}
+          serverUrl={`${window.location.origin}/api`}
+          command={command}
+          expiresAt={pairing.expiresAt}
+          onExpire={() => setPairing(null)}
+        />
+      )}
 
       <GlassCard className="p-2">
         {isLoading ? (
@@ -134,20 +142,24 @@ export function LocalAgent() {
   );
 }
 
-/** The generated pairing command with a copy button and a live expiry
- * countdown. Calls `onExpire` once the code's TTL elapses so the caller can
- * clear it (the user must generate a new one). */
+/** Prominent 6-digit pairing code + server URL (to type into the Local Agent
+ * app), with the CLI command as a secondary option and a live expiry countdown.
+ * Calls `onExpire` once the code's TTL elapses so the caller can clear it. */
 function PairingCommand({
+  code,
+  serverUrl,
   command,
   expiresAt,
   onExpire,
 }: {
+  code: string;
+  serverUrl: string;
   command: string;
   expiresAt: number;
   onExpire: () => void;
 }) {
   const [remainingMs, setRemainingMs] = useState(() => expiresAt - Date.now());
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -165,11 +177,11 @@ function PairingCommand({
   const mm = Math.floor(totalSec / 60);
   const ss = totalSec % 60;
 
-  const copy = async () => {
+  const copyText = async (text: string, key: string) => {
     try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1400);
     } catch {
       toast.error("Couldn't copy to clipboard");
     }
@@ -177,30 +189,59 @@ function PairingCommand({
 
   return (
     <GlassCard className="mb-3 p-[18px]">
-      <div className="mb-2.5 flex items-center gap-2">
-        <Terminal size={15} className="text-violet" strokeWidth={2.2} />
-        <span className="text-[13px] font-semibold">Run this on your machine</span>
+      <div className="mb-3 flex items-center gap-2">
+        <Laptop size={15} className="text-violet" strokeWidth={2.2} />
+        <span className="text-[13px] font-semibold">Pair a device</span>
         <span className="ml-auto font-mono text-[12px] text-[#8b8b9e]">
           Expires in {mm}:{ss.toString().padStart(2, "0")}
         </span>
       </div>
-      <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-2.5 pl-3.5">
+
+      <div className="text-[11px] font-semibold tracking-[0.06em] text-[#6c6c7e]">PAIRING CODE</div>
+      <div className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-3 pl-4">
+        <span className="flex-1 font-mono text-[30px] font-bold tracking-[0.28em] text-ink">{code}</span>
+        <button
+          type="button"
+          onClick={() => copyText(code, "code")}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#8b8b9e] transition-colors hover:bg-white/[0.08] hover:text-white"
+          aria-label="Copy code"
+        >
+          {copied === "code" ? <Check size={16} className="text-[#6ee7b7]" /> : <Copy size={16} />}
+        </button>
+      </div>
+
+      <div className="mt-3 text-[11px] font-semibold tracking-[0.06em] text-[#6c6c7e]">SERVER URL</div>
+      <div className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-2.5 pl-3.5">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[12.5px] text-ink">
+          {serverUrl}
+        </code>
+        <button
+          type="button"
+          onClick={() => copyText(serverUrl, "server")}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#8b8b9e] transition-colors hover:bg-white/[0.08] hover:text-white"
+          aria-label="Copy server URL"
+        >
+          {copied === "server" ? <Check size={15} className="text-[#6ee7b7]" /> : <Copy size={15} />}
+        </button>
+      </div>
+
+      <p className="mt-3 mb-0 text-[11.5px] leading-[1.55] text-[#8b8b9e]">
+        In the Local Agent app, enter this code and server URL, then <b className="text-[#c3c3d0]">Connect</b>.
+        Or, from a terminal:
+      </p>
+      <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-2.5 pl-3.5">
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[12px] text-[#c3c3d0]">
           {command}
         </code>
         <button
           type="button"
-          onClick={copy}
+          onClick={() => copyText(command, "cmd")}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#8b8b9e] transition-colors hover:bg-white/[0.08] hover:text-white"
           aria-label="Copy command"
         >
-          {copied ? <Check size={15} className="text-[#6ee7b7]" /> : <Copy size={15} />}
+          {copied === "cmd" ? <Check size={15} className="text-[#6ee7b7]" /> : <Copy size={15} />}
         </button>
       </div>
-      <p className="mt-2 mb-0 text-[11.5px] leading-[1.5] text-[#8b8b9e]">
-        Running the API on a separate port in local dev? Point <code className="font-mono">--server</code> at
-        it directly, e.g. <code className="font-mono">http://localhost:8787</code>.
-      </p>
     </GlassCard>
   );
 }
