@@ -72,6 +72,17 @@ export async function redeemDevice(
   return (await res.json()) as { deviceToken: string; deviceId: number };
 }
 
+/** Self-revoke this device on the server (the "Disconnect" action). Best-effort:
+ * the caller wipes the local token regardless, so a failure here only means the
+ * server list clears on `last_seen_at` staleness instead of immediately. */
+export async function disconnectDevice(cfg: AgentConfig): Promise<void> {
+  const res = await fetch(`${cfg.serverUrl}/agent/disconnect`, {
+    method: "POST",
+    headers: authHeaders(cfg.deviceToken),
+  });
+  await throwIfNotOk(res);
+}
+
 /** Long-poll claim the next queued job for this device's owner. `null` on 204 (nothing queued). */
 export async function claimNextJob(cfg: AgentConfig): Promise<Job | null> {
   const res = await fetch(`${cfg.serverUrl}/agent/jobs/next`, {

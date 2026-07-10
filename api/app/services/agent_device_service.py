@@ -157,6 +157,20 @@ def list_devices(db: DbSession, user: User) -> list[AgentDevice]:
     )
 
 
+def revoke_self(db: DbSession, device: AgentDevice) -> None:
+    """Revoke a device on the device's own behalf (Local Agent "Disconnect").
+
+    Called by the paired agent itself (``POST /agent/disconnect``) when the user
+    clicks Disconnect — which also wipes the agent's locally-stored token — so
+    the device drops out of the owner's paired-devices list immediately instead
+    of lingering as "online" until its ``last_seen_at`` goes stale. Idempotent.
+    """
+    if device.revoked_at is None:
+        device.revoked_at = utcnow()
+        db.add(device)
+        db.commit()
+
+
 def revoke(db: DbSession, user: User, device_id: int) -> AgentDevice | None:
     """Revoke a device owned by ``user``.
 

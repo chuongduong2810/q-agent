@@ -119,6 +119,28 @@ def test_pair_code_redeem_list_revoke_http_flow(client, db_session):
     assert job_resp.status_code == 401
 
 
+def test_disconnect_self_revokes_device_and_removes_from_list(client, db_session):
+    user = _make_user(db_session, "disconnect@example.com")
+    device, device_token = _pair_device(db_session, user)
+    token = _login(client, "disconnect@example.com")
+    user_headers = {"Authorization": f"Bearer {token}"}
+
+    assert len(client.get("/agent/devices", headers=user_headers).json()) == 1
+
+    # The device disconnects itself (authenticated by its own device token).
+    resp = client.post("/agent/disconnect", headers={"Authorization": f"Bearer {device_token}"})
+    assert resp.status_code == 200
+
+    # It drops off the owner's list immediately, and its token no longer works.
+    assert client.get("/agent/devices", headers=user_headers).json() == []
+    assert client.post("/agent/jobs/next", headers={"Authorization": f"Bearer {device_token}"}).status_code == 401
+
+
+def test_disconnect_requires_a_device_token(client):
+    assert client.post("/agent/disconnect").status_code == 401
+    assert client.post("/agent/disconnect", headers={"Authorization": "Bearer bogus"}).status_code == 401
+
+
 def test_redeem_rejects_garbage_code(client):
     resp = client.post("/agent/devices/redeem", json={"code": "not-a-real-code"})
     assert resp.status_code == 401
