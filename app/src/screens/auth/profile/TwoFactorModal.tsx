@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { QRCodeSVG } from "qrcode.react";
 import { Check, Copy } from "lucide-react";
 import { AuthLabel, TextInput } from "@/components/auth/fields";
 import { api } from "@/lib/api";
 import type { TwoFactorSetup } from "@/types/api";
 import { Modal, Spinner } from "./Modal";
 
-/** Copyable inline value (secret / otpauth URI) — no QR library available. */
+/** Copyable inline value (secret / otpauth URI). */
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -125,7 +126,7 @@ export function TwoFactorModal({
       title={isSetup ? "Set up two-factor authentication" : "Disable two-factor authentication"}
       subtitle={
         isSetup
-          ? "Add the secret below to your authenticator app, then enter the 6-digit code it generates."
+          ? "Scan the QR code with your authenticator app, then enter the 6-digit code it generates."
           : "Enter the current 6-digit code from your authenticator app to turn off 2FA."
       }
       onClose={close}
@@ -140,8 +141,15 @@ export function TwoFactorModal({
             </div>
           ) : (
             <>
+              <div className="flex flex-col items-center gap-3">
+                <div className="rounded-2xl bg-white p-3">
+                  <QRCodeSVG value={setup.otpauthUri} size={168} marginSize={0} level="M" />
+                </div>
+                <p className="text-center text-[12px] text-muted">
+                  Can't scan it? Enter this key manually in your app.
+                </p>
+              </div>
               <CopyRow label="Secret key" value={setup.secret} />
-              <CopyRow label="otpauth URI" value={setup.otpauthUri} />
             </>
           )
         ) : null}
