@@ -19,9 +19,9 @@ let win = null;
 function createWindow() {
   win = new BrowserWindow({
     width: 420,
-    height: 600,
+    height: 720,
     minWidth: 380,
-    minHeight: 520,
+    minHeight: 600,
     title: "Q-Agent Local Agent",
     backgroundColor: "#0a0a0f",
     frame: false,

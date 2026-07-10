@@ -413,7 +413,7 @@ function logMsg(ev){
   }
 }
 function addLog(ev){
-  if (ev.type === "agent-status") { if (ev.running === false) setPill("idle"); return; }
+  if (ev.type === "agent-status") return; // status events aren't log lines; pill is driven by view state
   var msg = logMsg(ev); if (!msg) return;
   var row = document.createElement("div");
   row.style.cssText = "display:flex;gap:10px;animation:logIn .4s ease both";
@@ -455,7 +455,9 @@ function showConnected(s){
   setPill("connected");
   el("machineName").textContent = s.machine || "this machine";
   el("sessionId").textContent = "device #" + (s.deviceId==null?"?":s.deviceId);
-  el("log").innerHTML = ""; (s.events||[]).forEach(addLog); openStream();
+  // The SSE stream replays the recent-events buffer on connect, so seed the log
+  // ONLY from the stream (seeding from /api/state too would double every line).
+  el("log").innerHTML = ""; openStream();
 }
 function refresh(){
   fetch("/api/state").then(function(r){ return r.json(); }).then(function(s){
