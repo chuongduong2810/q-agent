@@ -39,8 +39,11 @@ export function LocalAgent() {
     });
   };
 
+  // The agent calls the API's `/agent/...` routes; on the same-origin (tunnel)
+  // deployment those live under `/api`. Local dev with a separate API port
+  // should instead point --server straight at the API (see the note below).
   const command = pairing
-    ? `npx @qagent/agent pair ${pairing.code} --server ${window.location.origin}`
+    ? `npx @qagent/agent pair ${pairing.code} --server ${window.location.origin}/api`
     : "";
 
   return (
@@ -194,6 +197,10 @@ function PairingCommand({
           {copied ? <Check size={15} className="text-[#6ee7b7]" /> : <Copy size={15} />}
         </button>
       </div>
+      <p className="mt-2 mb-0 text-[11.5px] leading-[1.5] text-[#8b8b9e]">
+        Running the API on a separate port in local dev? Point <code className="font-mono">--server</code> at
+        it directly, e.g. <code className="font-mono">http://localhost:8787</code>.
+      </p>
     </GlassCard>
   );
 }
