@@ -73,6 +73,22 @@ Chromium still auto-installs on first `start`. Build the bundle on Windows with 
 Node 20+ that supports SEA (the local `node.exe` is used as the executable base —
 no compiler or download needed).
 
+## Desktop app (Electron)
+
+A native window that wraps the same web UI:
+
+```bash
+cd agent
+npm install
+npm run desktop        # dev: builds, then opens the app window
+npm run dist:desktop   # build a Windows installer (electron-builder → dist-bin/desktop/)
+```
+
+The Electron shell runs the agent's UI server in-process and shows it in a
+window — pair by entering the 6-digit code + server URL, then watch progress.
+Child processes (Playwright / login capture) run via Electron-as-Node
+(`ELECTRON_RUN_AS_NODE`), so no separate Node install is needed.
+
 ## Commands
 
 | Command | Description |
