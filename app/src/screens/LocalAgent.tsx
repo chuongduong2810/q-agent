@@ -72,12 +72,7 @@ export function LocalAgent() {
           </div>
           <ul className="m-0 list-none space-y-1 p-0 text-[12.5px] text-[#c3c3d0]">
             <li>&middot; Node.js 18 or newer</li>
-            <li>
-              &middot; Playwright browsers installed once:{" "}
-              <code className="rounded-md bg-black/30 px-1.5 py-0.5 font-mono text-[11.5px] text-[#e0a58c]">
-                npx playwright install chromium
-              </code>
-            </li>
+            <li>&middot; Chromium is installed automatically the first time you run the agent</li>
           </ul>
         </div>
       </GlassCard>
