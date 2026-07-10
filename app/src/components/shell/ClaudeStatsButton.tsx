@@ -1,12 +1,19 @@
-import { ChevronDown, Info, RefreshCw, SlidersHorizontal, Star } from "lucide-react";
+import { ChevronDown, Info, RefreshCw, SlidersHorizontal, Star, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { formatExpiry, readFileText } from "@/components/settings/ClaudeCredentialsCard";
 import { Pill } from "@/components/ui/badges";
 import { ClaudeLogo } from "@/components/ui/misc";
-import { useAiStats, useClaudeCredentialsStatus, useRefreshAiStats } from "@/hooks/queries";
+import {
+  useAiStats,
+  useClaudeCredentialsStatus,
+  useDeleteOwnClaudeCredentials,
+  useRefreshAiStats,
+  useUploadOwnClaudeCredentials,
+} from "@/hooks/queries";
 import { cn } from "@/lib/cn";
-import type { ByModelUsage, ClaudeStats, UsageWindow } from "@/types/api";
+import type { ByModelUsage, ClaudeCredentialsStatus, ClaudeStats, UsageWindow } from "@/types/api";
 
 const PANEL_WIDTH = 300;
 
@@ -196,10 +203,10 @@ function StatsPanel({
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   stats: ClaudeStats;
 }) {
-  const navigate = useNavigate();
   const refresh = useRefreshAiStats();
   const { data: credStatus } = useClaudeCredentialsStatus();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [managing, setManaging] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -237,15 +244,6 @@ function StatsPanel({
 
   if (!open || !pos) return null;
 
-  // Navigates to the Settings → Claude account section, pinning which panel
-  // (shared vs. personal) it lands on via a query param — these are
-  // shortcuts to view/manage that source, not a live toggle: the backend
-  // always prefers a configured personal credential over the shared one.
-  const goToClaudeAccount = (source: "shared" | "personal") => {
-    navigate(`/settings?claudeSource=${source}#claude-account`);
-    onClose();
-  };
-
   const credMode = credStatus?.mode ?? "none";
   const credBadge = credMode === "own" ? "Personal" : credMode === "shared" ? "Shared" : "Not set";
   const credName =
@@ -259,7 +257,7 @@ function StatsPanel({
       ? "Using your own Claude plan"
       : credMode === "shared"
         ? "Maintained by your workspace admin"
-        : "Upload one in Settings";
+        : "Upload one below";
 
   const short = shortModel(stats.modelLabel);
   const limitsStatus = stats.limitsStatus ?? "unavailable";
@@ -341,7 +339,7 @@ function StatsPanel({
         <div className="mt-[11px] flex gap-1.5">
           <button
             type="button"
-            onClick={() => goToClaudeAccount("shared")}
+            onClick={() => setManaging(true)}
             className={cn(
               "flex-1 rounded-lg py-1.5 text-[11.5px] font-semibold transition-colors",
               credMode === "shared" || credMode === "none"
@@ -353,7 +351,7 @@ function StatsPanel({
           </button>
           <button
             type="button"
-            onClick={() => goToClaudeAccount("personal")}
+            onClick={() => setManaging(true)}
             className={cn(
               "flex-1 rounded-lg py-1.5 text-[11.5px] font-semibold transition-colors",
               credMode === "own"
@@ -418,18 +416,143 @@ function StatsPanel({
         </span>
       </div>
 
-      {/* Manage Claude account & credentials */}
-      <button
-        onClick={() => {
-          navigate("/settings#claude-account");
-          onClose();
-        }}
-        className="mt-[15px] flex w-full items-center justify-center gap-2 rounded-[10px] border border-white/[0.1] bg-white/[0.05] py-2.5 text-[12px] font-semibold text-ink-soft hover:bg-white/[0.09]"
-      >
-        <SlidersHorizontal size={13} strokeWidth={2} />
-        Manage Claude account &amp; credentials
-      </button>
+      {/* Manage Claude account & credentials — inline, no navigation to Settings */}
+      {managing ? (
+        <InlineCredentialManager status={credStatus} onDone={() => setManaging(false)} />
+      ) : (
+        <button
+          onClick={() => setManaging(true)}
+          className="mt-[15px] flex w-full items-center justify-center gap-2 rounded-[10px] border border-white/[0.1] bg-white/[0.05] py-2.5 text-[12px] font-semibold text-ink-soft hover:bg-white/[0.09]"
+        >
+          <SlidersHorizontal size={13} strokeWidth={2} />
+          Manage Claude account &amp; credentials
+        </button>
+      )}
     </div>,
     document.body,
+  );
+}
+
+/**
+ * Inline personal-credential editor shown inside the stats popover, so a user can
+ * upload/replace or remove their own Claude credentials without leaving for the
+ * Settings page. Uses the same upload/delete mutations as the Settings card (which
+ * invalidate the credential status, so the CREDENTIAL summary above updates live).
+ * Shared credentials stay admin-managed and are only referenced as the fallback.
+ */
+function InlineCredentialManager({
+  status,
+  onDone,
+}: {
+  status: ClaudeCredentialsStatus | undefined;
+  onDone: () => void;
+}) {
+  const upload = useUploadOwnClaudeCredentials();
+  const remove = useDeleteOwnClaudeCredentials();
+  const hasOwn = !!status?.hasOwn;
+  const hasShared = !!status?.hasShared;
+  const own = status?.own;
+  const busy = upload.isPending || remove.isPending;
+
+  const onFile = async (file: File | null | undefined) => {
+    if (!file) return;
+    let contents: string;
+    try {
+      contents = await readFileText(file);
+    } catch {
+      toast.error("Couldn't read that file");
+      return;
+    }
+    try {
+      await upload.mutateAsync({ credentials: contents });
+      toast.success("Personal Claude credentials saved");
+    } catch (err) {
+      toast.error((err as Error).message || "Upload failed");
+    }
+  };
+
+  const onRemove = async () => {
+    try {
+      await remove.mutateAsync();
+      toast.success(hasShared ? "Removed — using the shared account" : "Personal credentials removed");
+    } catch (err) {
+      toast.error((err as Error).message || "Remove failed");
+    }
+  };
+
+  return (
+    <div className="mt-[15px] rounded-[10px] border border-white/[0.1] bg-white/[0.04] p-3">
+      <div className="mb-2 flex items-center">
+        <span className="text-[10px] font-bold tracking-[0.06em] text-ink-dim">MANAGE CREDENTIALS</span>
+        <button
+          type="button"
+          onClick={onDone}
+          className="ml-auto text-[11px] font-semibold text-ink-dim hover:text-ink"
+        >
+          Done
+        </button>
+      </div>
+
+      {hasOwn ? (
+        <>
+          <div className="text-[11.5px] font-semibold text-ink">
+            Personal · {own?.subscriptionType ?? "—"}
+          </div>
+          <div className="mb-2.5 text-[10.5px] text-ink-dim">
+            Token expires {formatExpiry(own?.expiresAt)}
+          </div>
+          <div className="flex gap-1.5">
+            <label
+              className={cn(
+                "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/[0.1] bg-white/[0.05] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/[0.09]",
+                busy && "pointer-events-none opacity-60",
+              )}
+            >
+              <Upload size={12} strokeWidth={2} />
+              Replace
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => onFile(e.target.files?.[0])}
+              />
+            </label>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onRemove}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/[0.08] px-2.5 py-1.5 text-[11.5px] font-semibold text-rose-300 hover:bg-rose-500/[0.14] disabled:opacity-60"
+            >
+              <Trash2 size={12} strokeWidth={2} />
+              Remove
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <label
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/[0.16] bg-white/[0.03] px-3 py-4 text-center hover:bg-white/[0.06]",
+              busy && "pointer-events-none opacity-60",
+            )}
+          >
+            <Upload size={16} strokeWidth={2} className="text-ink-dim" />
+            <span className="text-[11.5px] font-semibold text-ink-soft">Upload .credentials.json</span>
+            <span className="text-[10px] text-ink-dim">Uses your own Claude plan on this machine</span>
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => onFile(e.target.files?.[0])}
+            />
+          </label>
+          {hasShared && (
+            <div className="mt-2 text-[10px] text-ink-dim">
+              Until then, the shared workspace account is used.
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
