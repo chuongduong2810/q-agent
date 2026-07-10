@@ -713,6 +713,9 @@ export interface SettingsOut {
   neuralBackground: boolean;
   claudeModel: string;
   weeklyTokenBudget: number;
+  /** Default execution target for new runs — the server, or a paired Local
+   * Agent on the user's machine. Configured on the Settings screen. */
+  executionTarget: ExecutionTarget;
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 

@@ -679,6 +679,10 @@ class SettingsOut(ApiModel):
     neural_background: bool = True
     claude_model: str = "claude-sonnet-5"
     weekly_token_budget: int = 0
+    # Default execution target for new runs (Local Agent feature — see
+    # EXEC_TARGETS): "server" (legacy in-process runner) or "local-agent"
+    # (queued for a paired device to claim).
+    execution_target: str = "server"
 
 
 class SettingsUpdate(ApiModel):
@@ -692,6 +696,7 @@ class SettingsUpdate(ApiModel):
     neural_background: bool | None = None
     claude_model: str | None = None
     weekly_token_budget: int | None = None
+    execution_target: str | None = None
 
 
 # ---------------------------------------------------------------- Auth (ADR 0007)

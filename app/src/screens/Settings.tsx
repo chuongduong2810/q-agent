@@ -8,7 +8,7 @@ import { ProviderGroup } from "@/components/settings/ProviderGroup";
 import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMeta";
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
-import type { ProviderGroupOut, ProviderKind } from "@/types/api";
+import type { ExecutionTarget, ProviderGroupOut, ProviderKind } from "@/types/api";
 
 /** A never-configured provider: the backend catalog omits it (fresh machine),
  * so synthesize an empty group the user can add a first connection under. */
@@ -27,11 +27,12 @@ export function Settings() {
   const updateSettings = useUpdateSettings();
   const location = useLocation();
 
-  // Deep-link support for the AI status popover's "Manage Claude account &
-  // credentials" button (navigates to `/settings#claude-account`).
+  // Deep-link support for in-page anchors — e.g. the AI status popover's
+  // "Manage Claude account" button (`/settings#claude-account`) and the
+  // Execution screen's target chip (`/settings#execution`).
   useEffect(() => {
-    if (location.hash !== "#claude-account") return;
-    document.getElementById("claude-account")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [location.hash]);
 
   // Always render one group per known kind — synthesize an empty group when the
@@ -74,7 +75,7 @@ export function Settings() {
         </div>
       </GlassCard>
 
-      <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">DEFAULT EXECUTION</div>
+      <div id="execution" className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">DEFAULT EXECUTION</div>
       <GlassCard className="p-[22px]">
         {settingsLoading || !settings ? (
           <div className="flex justify-center py-10">
@@ -82,6 +83,26 @@ export function Settings() {
           </div>
         ) : (
           <>
+            <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
+              <div>
+                <div className="text-[14px] font-semibold">Execution target</div>
+                <div className="text-[12px] text-muted">
+                  Where runs execute — the server, or a paired Local Agent on your machine
+                </div>
+              </div>
+              <div className="w-[170px]">
+                <Select
+                  value={settings.executionTarget}
+                  onChange={(v) => v && updateSettings.mutate({ executionTarget: v as ExecutionTarget })}
+                  placeholder="Select target"
+                  allowClear={false}
+                  options={[
+                    { value: "server", label: "Server" },
+                    { value: "local-agent", label: "My machine" },
+                  ]}
+                />
+              </div>
+            </div>
             <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
               <div>
                 <div className="text-[14px] font-semibold">Parallel workers</div>
