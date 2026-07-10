@@ -64,6 +64,9 @@ function SharedProjectRow({
   const kind = (project.providerKind || "ado") as ProviderKind;
   const [glyph, glyphBg] = providerGlyph[kind] ?? ["?", "#6b7280"];
   const glyphColor = kind === "github" ? "#12121a" : "#fff";
+  // Cloning reuses already-built knowledge — there's nothing to reuse until at
+  // least one repo is indexed, so block the clone otherwise (mirrors the API).
+  const ready = project.knowledge.some((k) => k.status === "indexed");
 
   return (
     <div
@@ -100,7 +103,14 @@ function SharedProjectRow({
           <Check size={14} strokeWidth={2.4} /> Cloned
         </span>
       ) : (
-        <Button variant="glass" size="sm" className="shrink-0" disabled={cloning} onClick={onClone}>
+        <Button
+          variant="glass"
+          size="sm"
+          className="shrink-0"
+          disabled={cloning || !ready}
+          onClick={onClone}
+          title={ready ? undefined : "Not ready — no knowledge built yet"}
+        >
           {cloning ? <Spinner size={13} /> : <Copy size={13} strokeWidth={2.2} />}
           {cloning ? "Cloning…" : "Clone"}
         </Button>

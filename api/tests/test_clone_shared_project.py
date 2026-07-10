@@ -143,6 +143,24 @@ def test_clone_second_time_conflicts_409(client, db_session, monkeypatch):
     assert second.status_code == 409
 
 
+def test_clone_unbuilt_shared_project_422(client, db_session, monkeypatch):
+    """A shared project with no indexed knowledge has nothing to reuse — block it."""
+    _auth_on(monkeypatch)
+    key = "Unbuilt Project"
+    db_session.add(
+        Project(provider_kind="ado", external_id="shared-nb", name=key, active=True, owner_id=None)
+    )
+    db_session.add(ProjectConfig(key=key, name=key, base_url="https://x.test", owner_id=None))
+    db_session.add(
+        ProjectKnowledge(key=key, project_key=key, name=key, status="not_indexed", owner_id=None)
+    )
+    db_session.commit()
+
+    user = _make_user(db_session, "unbuilt@example.com")
+    resp = client.post(f"/shared/projects/{key}/clone", headers=_auth_headers(user))
+    assert resp.status_code == 422
+
+
 def test_clone_missing_shared_project_404(client, db_session, monkeypatch):
     _auth_on(monkeypatch)
     user = _make_user(db_session, "ghost@example.com")

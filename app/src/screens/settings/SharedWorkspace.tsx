@@ -2,31 +2,35 @@
  * Admin "Shared workspace" screen (#121, ADR 0009 §2). Manages the admin-only
  * shared namespace (`owner_id IS NULL`) that members clone ready-built
  * projects from instead of rebuilding knowledge. Lets an admin browse the
- * shared catalog, create a shared project shell, and trigger a shared
- * knowledge build. Gated to `role === "admin"`, mirroring `UserManagement` /
- * `ClaudeCredentials`. Renders inside the app shell (child of `RequireAuth` →
- * `App`).
+ * shared catalog, create/edit a shared project (base URL, repository
+ * connection, repos), and trigger a per-repo knowledge build. Gated to
+ * `role === "admin"`, mirroring `UserManagement` / `ClaudeCredentials`.
+ * Renders inside the app shell (child of `RequireAuth` → `App`).
  */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Boxes, Lock, Plus, RefreshCw, X } from "lucide-react";
+import { Boxes, Lock, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { AuthLabel, TextInput } from "@/components/auth/fields";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { Select } from "@/components/ui/Dropdown";
 import { Pill, providerGlyph } from "@/components/ui/badges";
 import { Spinner } from "@/components/ui/misc";
+import { PROVIDER_META } from "@/components/settings/providerMeta";
+import { ReposManager } from "@/screens/ProjectDetail";
 import { cn } from "@/lib/cn";
 import { ApiError } from "@/lib/api";
 import { knowledgeStatusStyle } from "@/data/projects";
 import {
-  useBuildSharedKnowledge,
+  useBuildSharedRepoKnowledge,
   useCreateSharedProject,
+  useProviders,
   useSharedProjects,
 } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
-import type { ProviderKind, SharedProjectOut } from "@/types/api";
+import type { ProjectRepo, ProviderKind, SharedProjectOut } from "@/types/api";
 
 const errMsg = (e: unknown, fallback: string) =>
   e instanceof ApiError || e instanceof Error ? e.message : fallback;
@@ -34,8 +38,9 @@ const errMsg = (e: unknown, fallback: string) =>
 export function SharedWorkspace() {
   const me = useAuth((s) => s.user);
   const { data: shared, isLoading, isError, error } = useSharedProjects();
-  const buildKnowledge = useBuildSharedKnowledge();
+  const buildRepo = useBuildSharedRepoKnowledge();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<SharedProjectOut | null>(null);
 
   // ── Admin gate ────────────────────────────────────────────────────────────
   if (me && me.role !== "admin") {
@@ -53,11 +58,11 @@ export function SharedWorkspace() {
     );
   }
 
-  const onBuild = (key: string) =>
-    buildKnowledge.mutate(
-      { key, body: {} },
+  const onBuildRepo = (key: string, repo: string) =>
+    buildRepo.mutate(
+      { key, repo, body: {} },
       {
-        onSuccess: () => toast.success(`Knowledge build started for ${key}`),
+        onSuccess: () => toast.success(`Knowledge build started for ${repo}`),
         onError: (e) => toast.error(errMsg(e, "Failed to start knowledge build")),
       },
     );
@@ -90,8 +95,8 @@ export function SharedWorkspace() {
         <p className="m-0 text-[13px] leading-[1.65] text-[#c3c3d0]">
           Projects here live in the <b className="font-bold text-[#ececf1]">shared namespace</b> —
           members can clone them into their own workspace instead of rebuilding knowledge from
-          scratch. Only admins can write here; a cloned project drops its provider-connection
-          bindings, so members re-bind their own connections after cloning.
+          scratch. Add a repository and build its knowledge once; a cloned project drops its
+          provider-connection bindings, so members re-bind their own connections after cloning.
         </p>
       </div>
 
@@ -123,14 +128,27 @@ export function SharedWorkspace() {
               key={p.key}
               project={p}
               index={i}
-              building={buildKnowledge.isPending && buildKnowledge.variables?.key === p.key}
-              onBuild={() => onBuild(p.key)}
+              buildingRepo={
+                buildRepo.isPending && buildRepo.variables?.key === p.key
+                  ? buildRepo.variables?.repo ?? null
+                  : null
+              }
+              onBuildRepo={(repo) => onBuildRepo(p.key, repo)}
+              onEdit={() => setEditing(p)}
             />
           ))}
         </div>
       )}
 
-      {createOpen && <CreateSharedProjectModal onClose={() => setCreateOpen(false)} />}
+      {(createOpen || editing) && (
+        <SharedProjectModal
+          project={editing}
+          onClose={() => {
+            setCreateOpen(false);
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -138,17 +156,21 @@ export function SharedWorkspace() {
 function SharedProjectRow({
   project,
   index,
-  building,
-  onBuild,
+  buildingRepo,
+  onBuildRepo,
+  onEdit,
 }: {
   project: SharedProjectOut;
   index: number;
-  building: boolean;
-  onBuild: () => void;
+  buildingRepo: string | null;
+  onBuildRepo: (repo: string) => void;
+  onEdit: () => void;
 }) {
   const kind = (project.providerKind || "ado") as ProviderKind;
   const [glyph, glyphBg] = providerGlyph[kind] ?? ["?", "#6b7280"];
   const glyphColor = kind === "github" ? "#12121a" : "#fff";
+  const statusFor = (repo: string) =>
+    project.knowledge.find((k) => k.repo === repo) ?? null;
 
   return (
     <GlassCard index={index} className="p-[16px_18px]">
@@ -164,42 +186,96 @@ function SharedProjectRow({
             <span className="truncate text-[14px] font-bold">{project.name}</span>
             <span className="shrink-0 font-mono text-[11px] text-[#6c6c7e]">{project.key}</span>
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {!project.hasConfig && (
-              <span className="text-[11px] text-[#6c6c7e]">No config yet</span>
-            )}
-            {project.knowledge.length === 0 ? (
-              <span className="text-[11px] text-[#6c6c7e]">No knowledge built yet</span>
-            ) : (
-              project.knowledge.map((k) => {
-                const [label, color, bg] = knowledgeStatusStyle(k.status);
-                return (
-                  <Pill key={k.repo || "_"} color={color} bg={bg}>
-                    {k.repo ? `${k.repo} · ` : ""}
-                    {label}
-                    {k.status === "indexed" ? ` · ${k.confidence}%` : ""}
-                  </Pill>
-                );
-              })
-            )}
-          </div>
+          {project.repos.length === 0 && (
+            <div className="mt-1.5 text-[11px] text-[#6c6c7e]">
+              No repository configured — edit to add one before building knowledge.
+            </div>
+          )}
         </div>
-        <Button variant="glass" size="sm" className="shrink-0" disabled={building} onClick={onBuild}>
-          {building ? <Spinner size={13} /> : <RefreshCw size={13} strokeWidth={2.2} />}
-          {building ? "Building…" : "Build knowledge"}
+        <Button variant="glass" size="sm" className="shrink-0" onClick={onEdit}>
+          <Pencil size={13} strokeWidth={2.2} /> Edit
         </Button>
       </div>
+
+      {project.repos.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.06] pt-3">
+          {project.repos.map((repo) => {
+            const kn = statusFor(repo.name);
+            const building = buildingRepo === repo.name;
+            return (
+              <div key={repo.name} className="flex items-center gap-2.5">
+                <span className="truncate font-mono text-[12px] text-ink-soft">{repo.name}</span>
+                {kn ? (
+                  (() => {
+                    const [label, color, bg] = knowledgeStatusStyle(kn.status);
+                    return (
+                      <Pill color={color} bg={bg}>
+                        {label}
+                        {kn.status === "indexed" ? ` · ${kn.confidence}%` : ""}
+                      </Pill>
+                    );
+                  })()
+                ) : (
+                  <span className="text-[11px] text-[#6c6c7e]">Not built yet</span>
+                )}
+                <div className="flex-1" />
+                <Button
+                  variant="glass"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={building}
+                  onClick={() => onBuildRepo(repo.name)}
+                >
+                  {building ? <Spinner size={13} /> : <RefreshCw size={13} strokeWidth={2.2} />}
+                  {building ? "Building…" : "Build knowledge"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </GlassCard>
   );
 }
 
-/** Create the shared project shell (`POST /shared/projects/{key}`) — a
- * minimal name + key + provider kind so knowledge can be built against it. */
-function CreateSharedProjectModal({ onClose }: { onClose: () => void }) {
-  const [key, setKey] = useState("");
-  const [name, setName] = useState("");
-  const [providerKind, setProviderKind] = useState<ProviderKind>("ado");
+/** Create or edit a shared project (`POST /shared/projects/{key}` — idempotent
+ * upsert). Collects the base URL, the repository connection used only to build
+ * shared knowledge (dropped on clone), and the project's repos so the knowledge
+ * build has a real checkout to traverse. */
+function SharedProjectModal({
+  project,
+  onClose,
+}: {
+  project: SharedProjectOut | null;
+  onClose: () => void;
+}) {
+  const isEdit = project !== null;
+  const [key, setKey] = useState(project?.key ?? "");
+  const [name, setName] = useState(project?.name ?? "");
+  const [providerKind, setProviderKind] = useState<ProviderKind>(
+    (project?.providerKind || "ado") as ProviderKind,
+  );
+  const [baseUrl, setBaseUrl] = useState(project?.baseUrl ?? "");
+  const [repositoryConnectionId, setRepositoryConnectionId] = useState<number | null>(
+    project?.repositoryConnectionId ?? null,
+  );
+  const [repos, setRepos] = useState<ProjectRepo[]>(project?.repos ?? []);
   const create = useCreateSharedProject();
+
+  // Repository connections (admin's own — used only to build shared knowledge).
+  const { data: providers } = useProviders();
+  const allConnections = (providers ?? []).flatMap((g) => g.connections);
+  const repositoryConnections = allConnections.filter((c) => c.categories.includes("repository"));
+  const repositoryOptions = repositoryConnections.map((c) => ({
+    value: String(c.id),
+    label: `${PROVIDER_META[c.kind].name} · ${c.name}`,
+  }));
+  const repoConn = repositoryConnections.find((c) => c.id === repositoryConnectionId) ?? null;
+
+  // If the stored binding is missing from the catalog, still reflect it.
+  useEffect(() => {
+    if (project) setRepositoryConnectionId(project.repositoryConnectionId ?? null);
+  }, [project]);
 
   const canSubmit = key.trim().length > 0 && !create.isPending;
 
@@ -207,13 +283,22 @@ function CreateSharedProjectModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     if (!canSubmit) return;
     create.mutate(
-      { key: key.trim(), body: { name: name.trim() || key.trim(), providerKind } },
+      {
+        key: key.trim(),
+        body: {
+          name: name.trim() || key.trim(),
+          providerKind,
+          baseUrl: baseUrl.trim(),
+          repositoryConnectionId,
+          repos,
+        },
+      },
       {
         onSuccess: () => {
-          toast.success(`Created shared project "${key.trim()}"`);
+          toast.success(isEdit ? `Saved "${key.trim()}"` : `Created shared project "${key.trim()}"`);
           onClose();
         },
-        onError: (err) => toast.error(errMsg(err, "Failed to create shared project")),
+        onError: (err) => toast.error(errMsg(err, "Failed to save shared project")),
       },
     );
   };
@@ -226,17 +311,21 @@ function CreateSharedProjectModal({ onClose }: { onClose: () => void }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[min(430px,100%)] rounded-[20px] border border-white/[0.12] p-6"
+        className="flex max-h-[88vh] w-[min(680px,100%)] flex-col rounded-[20px] border border-white/[0.12]"
         style={{ background: "#15151c", boxShadow: "0 40px 90px -30px #000", animation: "fadeInUp .25s ease both" }}
       >
-        <div className="mb-[18px] flex items-center gap-3">
+        <div className="flex items-center gap-3 border-b border-white/[0.08] p-6 pb-[18px]">
           <div className="accent-gradient flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px]">
             <Boxes size={19} color="#fff" strokeWidth={2.2} />
           </div>
           <div className="flex-1">
-            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">New shared project</h2>
+            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">
+              {isEdit ? "Edit shared project" : "New shared project"}
+            </h2>
             <p className="m-0 mt-0.5 text-[12.5px] text-muted">
-              Creates the shared project shell members will be able to clone.
+              {isEdit
+                ? "Update the repo and connection used to build shared knowledge."
+                : "Creates the shared project members will be able to clone."}
             </p>
           </div>
           <button
@@ -249,59 +338,97 @@ function CreateSharedProjectModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <form onSubmit={submit}>
-          <div className="mb-4">
-            <AuthLabel htmlFor="sp-key">Project key</AuthLabel>
-            <TextInput
-              id="sp-key"
-              placeholder="surency-core"
-              autoFocus
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-            />
-            <p className="mb-0 mt-1.5 text-[11.5px] text-faint">
-              Stays unchanged when a member clones it — pick something stable.
-            </p>
-          </div>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <AuthLabel htmlFor="sp-key">Project key</AuthLabel>
+                <TextInput
+                  id="sp-key"
+                  placeholder="surency-core"
+                  autoFocus={!isEdit}
+                  disabled={isEdit}
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                />
+                <p className="mb-0 mt-1.5 text-[11.5px] text-faint">
+                  Stays unchanged when a member clones it — pick something stable.
+                </p>
+              </div>
+              <div>
+                <AuthLabel htmlFor="sp-name">Display name</AuthLabel>
+                <TextInput
+                  id="sp-name"
+                  placeholder="Surency Core"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+            </div>
 
-          <div className="mb-4">
-            <AuthLabel htmlFor="sp-name">Display name</AuthLabel>
-            <TextInput
-              id="sp-name"
-              placeholder="Surency Core"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
+            <div className="mt-4">
+              <AuthLabel>Provider</AuthLabel>
+              <div className="flex gap-2 rounded-xl bg-black/25 p-1">
+                {(["ado", "jira", "github"] as const).map((k) => {
+                  const on = providerKind === k;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setProviderKind(k)}
+                      className={cn(
+                        "flex-1 rounded-[10px] py-[10px] text-[13px] font-bold transition-colors",
+                        on ? "accent-gradient text-white" : "bg-white/[0.05] text-[#9a9aae]",
+                      )}
+                    >
+                      {k === "ado" ? "Azure DevOps" : k === "jira" ? "Jira" : "GitHub"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-          <div className="mb-5">
-            <AuthLabel>Provider</AuthLabel>
-            <div className="flex gap-2 rounded-xl bg-black/25 p-1">
-              {(["ado", "jira", "github"] as const).map((k) => {
-                const on = providerKind === k;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setProviderKind(k)}
-                    className={cn(
-                      "flex-1 rounded-[10px] py-[10px] text-[13px] font-bold transition-colors",
-                      on ? "accent-gradient text-white" : "bg-white/[0.05] text-[#9a9aae]",
-                    )}
-                  >
-                    {k === "ado" ? "Azure DevOps" : k === "jira" ? "Jira" : "GitHub"}
-                  </button>
-                );
-              })}
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <AuthLabel htmlFor="sp-baseurl">Base URL</AuthLabel>
+                <TextInput
+                  id="sp-baseurl"
+                  placeholder="https://staging.example.com"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                />
+              </div>
+              <div>
+                <AuthLabel>Repository connection</AuthLabel>
+                <Select
+                  value={repositoryConnectionId != null ? String(repositoryConnectionId) : null}
+                  options={repositoryOptions}
+                  placeholder="Select a connection"
+                  onChange={(v) => setRepositoryConnectionId(v ? Number(v) : null)}
+                  emptyLabel="No repository connections"
+                />
+                <p className="mb-0 mt-1.5 text-[11.5px] text-faint">
+                  Used only to build shared knowledge — dropped when a member clones.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <ReposManager
+                repoConnectionId={repoConn?.id ?? null}
+                repoConnectionName={repoConn?.name ?? ""}
+                repos={repos}
+                setRepos={setRepos}
+              />
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5">
+          <div className="flex items-center justify-end gap-2.5 border-t border-white/[0.08] p-6 py-[18px]">
             <Button type="button" variant="glass" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={!canSubmit}>
-              {create.isPending ? "Creating…" : "Create shared project"}
+              {create.isPending ? "Saving…" : isEdit ? "Save changes" : "Create shared project"}
             </Button>
           </div>
         </form>

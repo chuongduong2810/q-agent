@@ -194,6 +194,10 @@ export interface SharedProjectOut {
   name: string;
   providerKind: string;
   hasConfig: boolean;
+  baseUrl: string;
+  repos: ProjectRepo[];
+  workItemConnectionId: number | null;
+  repositoryConnectionId: number | null;
   knowledge: SharedProjectKnowledgeOut[];
   alreadyCloned: boolean;
 }
@@ -206,6 +210,8 @@ export interface SharedProjectCreate {
   externalId?: string;
   baseUrl?: string;
   repos?: ProjectRepo[];
+  workItemConnectionId?: number | null;
+  repositoryConnectionId?: number | null;
   environments?: EnvironmentCfg[];
   testAccounts?: TestAccountIn[];
   extra?: Record<string, string>;

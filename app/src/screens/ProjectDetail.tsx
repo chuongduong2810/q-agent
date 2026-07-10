@@ -1103,7 +1103,7 @@ function ManualLoginStatus({
  * or add manually, pick which repo automation targets by default, and set an
  * optional local path. Remember to Save settings to persist changes.
  */
-function ReposManager({
+export function ReposManager({
   repoConnectionId,
   repoConnectionName,
   repos,
