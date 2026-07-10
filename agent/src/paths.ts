@@ -62,15 +62,26 @@ export function agentNodeModules(): string {
     const nm = path.join(root, "node_modules");
     if (fs.existsSync(nm)) return nm;
   }
-  return (
-    firstExisting([path.join(__dirname, "..", "..", "node_modules"), path.join(__dirname, "..", "node_modules")]) ??
-    path.join(__dirname, "..", "..", "node_modules")
-  );
+  // From source / npx / global install, let Node's own resolver find the
+  // node_modules that actually holds the deps. npm (and `npx`) HOIST
+  // `@playwright/test` and `playwright` to a parent node_modules — the npx
+  // cache root or the global root — rather than nesting them under the package,
+  // so a hardcoded relative guess misses them (the cause of the
+  // "Cannot find module '@playwright/test'" failure on npx/global installs).
+  // `.../node_modules/@playwright/test/package.json` → `.../node_modules`.
+  const testPkgJson = require.resolve("@playwright/test/package.json");
+  return path.dirname(path.dirname(path.dirname(testPkgJson)));
 }
 
 /** Playwright's CLI entry — drives both `test` (run specs) and `install` (browsers). */
 export function playwrightCli(): string {
-  return path.join(agentNodeModules(), "playwright", "cli.js");
+  const root = packagedRoot();
+  if (root) {
+    const bundled = path.join(root, "node_modules", "playwright", "cli.js");
+    if (fs.existsSync(bundled)) return bundled;
+  }
+  // Resolve via Node so it works whether npm nested or hoisted `playwright`.
+  return path.join(path.dirname(require.resolve("playwright/package.json")), "cli.js");
 }
 
 /** The vendored headed-login capture script (`capture_auth.cjs`). */
