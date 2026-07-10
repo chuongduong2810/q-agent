@@ -71,9 +71,25 @@ import type {
   WorkItemMetadataOut,
 } from "@/types/api";
 
+// Default to the same-origin `/api` prefix, which the Vite dev proxy forwards
+// to the backend (prefix stripped). Same-origin means no CORS and it works
+// behind a single tunnel; the `/api` prefix keeps API calls from colliding
+// with the SPA's own client routes (`/runs`, `/projects`, …). Override with
+// `VITE_API_BASE` (e.g. an absolute `https://api.example.com`) when the API is
+// served from a different origin.
 export const API_BASE: string =
-  (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ??
-  "http://127.0.0.1:8787";
+  (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "/api";
+
+/** Absolute websocket base for `new WebSocket(...)`. When `API_BASE` is an
+ * absolute http(s) URL, swap the scheme to ws(s). When it's a same-origin
+ * relative prefix (the default `/api`), derive scheme + host from the current
+ * page so the URL is absolute (relative WS URLs are invalid). */
+function wsBase(): string {
+  if (/^https?:\/\//.test(API_BASE)) return API_BASE.replace(/^http/, "ws");
+  const proto = typeof location !== "undefined" && location.protocol === "https:" ? "wss:" : "ws:";
+  const host = typeof location !== "undefined" ? location.host : "127.0.0.1:8787";
+  return `${proto}//${host}${API_BASE}`;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -202,7 +218,7 @@ export const api = {
   capabilities: () => get<{ claude: boolean; version: string }>("/capabilities"),
   aiActivity: () => get<AiActivity>("/ai/activity"),
   aiStats: (force = false) => get<ClaudeStats>(`/ai/stats${force ? "?refresh=true" : ""}`),
-  aiWsUrl: () => `${API_BASE.replace(/^http/, "ws")}/ws/ai${wsToken()}`,
+  aiWsUrl: () => `${wsBase()}/ws/ai${wsToken()}`,
 
   // Claude CLI credentials management (#95): own (per-user) + shared (admin-only).
   claudeCredentials: {
@@ -423,8 +439,7 @@ export const api = {
 
   // artifacts
   artifactUrl: (path: string) => `${API_BASE}/artifacts/${path}`,
-  wsUrl: (runId: number | string) =>
-    `${API_BASE.replace(/^http/, "ws")}/ws/runs/${runId}${wsToken()}`,
+  wsUrl: (runId: number | string) => `${wsBase()}/ws/runs/${runId}${wsToken()}`,
 };
 
 /** `?token=<accessToken>` query suffix for WebSocket URLs (WS can't carry an
