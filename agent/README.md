@@ -38,6 +38,30 @@ node dist/src/cli.js pair <code> --server http://127.0.0.1:8787
 node dist/src/cli.js start
 ```
 
+## Windows binary (no Node required)
+
+For machines without Node, build a self-contained Windows bundle:
+
+```bash
+cd agent
+npm install
+npm run package:win
+```
+
+This produces `dist-bin/qagent-agent-win-x64/` — a `qagent-agent.exe` (the CLI as
+a Node Single Executable Application) plus a bundled Node runtime, production
+`node_modules`, and `vendor/`. Zip that folder for distribution; the user unzips
+and runs it with **no global Node installed**:
+
+```bat
+qagent-agent.exe pair <code> --server https://your-qagent-server.example.com/api
+qagent-agent.exe start
+```
+
+Chromium still auto-installs on first `start`. Build the bundle on Windows with a
+Node 20+ that supports SEA (the local `node.exe` is used as the executable base —
+no compiler or download needed).
+
 ## Commands
 
 | Command | Description |

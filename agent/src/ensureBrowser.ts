@@ -8,22 +8,7 @@
  */
 import { spawn } from "child_process";
 import * as fs from "fs";
-import * as path from "path";
-
-function firstExisting(paths: string[]): string | null {
-  for (const p of paths) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
-/** The agent package's own node_modules (mirrors runner.ts's resolver). */
-function agentNodeModules(): string {
-  return (
-    firstExisting([path.join(__dirname, "..", "..", "node_modules"), path.join(__dirname, "..", "node_modules")]) ??
-    path.join(__dirname, "..", "..", "node_modules")
-  );
-}
+import { nodeBin, playwrightCli } from "./paths";
 
 /** Path Playwright expects the Chromium build at, or null if it can't be resolved. */
 function chromiumExecutable(): string | null {
@@ -40,7 +25,9 @@ function chromiumExecutable(): string | null {
  * Ensure Chromium is installed, running `playwright install chromium` if it's missing.
  *
  * Fast no-op once the browser exists. Streams the download progress so a first-run
- * fetch (~100 MB) is visible rather than a silent hang.
+ * fetch (~100 MB) is visible rather than a silent hang. Invokes Playwright's CLI
+ * through the resolved node runtime (`node cli.js install chromium`) so it works
+ * from source, via npx, and in a packaged bundle alike.
  *
  * Returns:
  *   true when Chromium is available (already present, or installed successfully);
@@ -51,14 +38,8 @@ export async function ensureChromium(): Promise<boolean> {
   if (exe && fs.existsSync(exe)) return true;
 
   console.log("Chromium not found — installing Playwright's Chromium (one-time download)...");
-  const nm = agentNodeModules();
-  const bin = path.join(nm, ".bin", process.platform === "win32" ? "playwright.cmd" : "playwright");
-  const useBin = fs.existsSync(bin);
-  const cmd = useBin ? bin : "npx";
-  const args = useBin ? ["install", "chromium"] : ["playwright", "install", "chromium"];
-
   const code = await new Promise<number | null>((resolve) => {
-    const child = spawn(cmd, args, { stdio: "inherit", shell: process.platform === "win32" });
+    const child = spawn(nodeBin(), [playwrightCli(), "install", "chromium"], { stdio: "inherit" });
     child.on("close", resolve);
     child.on("error", () => resolve(null));
   });
