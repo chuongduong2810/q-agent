@@ -174,7 +174,15 @@ def claim_next_job(
         if spec is None:
             continue
         specs.append(
-            {"filename": spec_service.spec_filename(r.ticket_external_id, r.case_code), "code": spec.code}
+            {
+                "filename": spec_service.spec_filename(r.ticket_external_id, r.case_code),
+                "code": spec.code,
+                # Explicit identity so the agent can match /jobs/{id}/evidence by exact
+                # ticket_external_id (the filename convention drops the provider prefix,
+                # e.g. "SUR-1428" -> "1428", which would 404 the evidence upload).
+                "ticketExternalId": r.ticket_external_id,
+                "caseCode": r.case_code,
+            }
         )
 
     return {
