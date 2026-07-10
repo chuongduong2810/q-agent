@@ -45,7 +45,14 @@ from app.schemas import (
     RunTicketOut,
     RunTicketRepoUpdate,
 )
-from app.services import ai_usage_service, audit_service, link_service, project_config_service, run_control
+from app.services import (
+    ai_usage_service,
+    audit_service,
+    link_service,
+    project_config_service,
+    run_control,
+    sample_run_service,
+)
 from app.services.ai_service import run_generation_pipeline
 from app.services.ownership import get_owned_or_404, owned, stamp_owner
 from app.services.run_status import force_status, set_run_status
@@ -217,6 +224,25 @@ def create_run(
     # its own session — refresh so this response reflects the final state.
     db.refresh(run)
 
+    return run
+
+
+@router.post("/sample", response_model=RunDetailOut)
+def create_sample_run(
+    db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Run:
+    """Seed (or return) a fully-populated DEMO run for the product tour.
+
+    Idempotent — one ``RUN-DEMO`` run per user; a repeat call returns it
+    unchanged. Inserts the whole run row graph directly (tickets, cases, specs,
+    links, execution results, evidence, report, publish comments) so every
+    run-scoped screen renders. Never runs the AI generation pipeline.
+    """
+    run = sample_run_service.ensure_sample_run(db, user)
+    audit_service.record(
+        category="run", actor_type="user", action="Seeded sample run",
+        target=f"{run.code} · {run.name}",
+    )
     return run
 
 

@@ -8,6 +8,7 @@ import { useUI } from "@/store/ui";
 import { KnowledgeBuildOverlay } from "@/screens/KnowledgeBuildOverlay";
 import { CommandPalette } from "@/screens/CommandPalette";
 import { CreateRunModal } from "@/screens/CreateRunModal";
+import { TourOverlay } from "@/components/tour/TourOverlay";
 
 /**
  * Root layout element for the data router (see router.tsx). Wraps the app in the
@@ -42,6 +43,7 @@ export default function App() {
       <CommandPalette />
       <CreateRunModal />
       <KnowledgeBuildOverlay />
+      <TourOverlay />
       <Toaster
         theme="dark"
         position="bottom-center"

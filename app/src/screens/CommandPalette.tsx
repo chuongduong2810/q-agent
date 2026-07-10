@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BarChart3,
   CheckSquare,
+  Compass,
   CornerDownLeft,
   Image,
   LayoutDashboard,
@@ -18,6 +19,7 @@ import {
 import { type ComponentType, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRunRouteId } from "@/hooks/useRunRouteId";
+import { useTour } from "@/store/tour";
 import { useUI } from "@/store/ui";
 
 /** Section headings, rendered in this order as grouped blocks. */
@@ -72,6 +74,17 @@ export function CommandPalette() {
       run: () => {
         openCreateRun();
         closePalette();
+      },
+    },
+    {
+      id: "start-tour",
+      label: "Start product tour",
+      description: "Guided walkthrough of Q‑Agent",
+      section: "Actions",
+      icon: Compass,
+      run: () => {
+        closePalette();
+        useTour.getState().start();
       },
     },
     { id: "run-execution", label: "Run execution", description: "Launch the run pipeline", section: "Actions", icon: Terminal, run: go(runPath("execution")), runScoped: true },

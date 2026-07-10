@@ -17,6 +17,7 @@ export function TopBar() {
   return (
     <header className="glass-strong flex h-[56px] shrink-0 items-center gap-3.5 rounded-[18px] px-[18px]">
       <button
+        data-tour="topbar-search"
         onClick={openPalette}
         className="flex h-[38px] max-w-[420px] flex-1 cursor-text items-center gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.04] px-3.5 text-[#7a7a8c] hover:border-[rgba(139,92,246,.4)]"
       >
@@ -32,6 +33,7 @@ export function TopBar() {
         <ProjectStatusButton />
         <ClaudeStatsButton />
         <button
+          data-tour="topbar-newrun"
           onClick={openCreateRun}
           className="accent-gradient flex h-[38px] items-center gap-2 rounded-xl px-4 text-[13px] font-semibold text-white shadow-[0_8px_22px_-8px_rgba(139,92,246,.8)] hover:brightness-110"
         >

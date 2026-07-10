@@ -197,6 +197,7 @@ export function RunSidebar({ runId }: { runId: number }) {
           return clickable ? (
             <button
               key={step.label}
+              data-tour={`stage-${step.seg}`}
               onClick={() => navigate(`/runs/${runId}/${step.seg}`)}
               className={cn(stepClass, "w-full border-none")}
               style={stepStyle}
