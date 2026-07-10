@@ -136,8 +136,10 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
   res.end("Not found");
 }
 
-/** Start the UI server, begin the loop if already paired, and open the browser. */
-export function startUi(opts: { port?: number; open?: boolean } = {}): void {
+/** Start the UI server, begin the loop if already paired, and open the browser.
+ * `onListening` receives the actual URL (the port may bump if 7420 is taken) —
+ * the Electron shell uses it to load the window. */
+export function startUi(opts: { port?: number; open?: boolean; onListening?: (url: string) => void } = {}): void {
   let port = opts.port ?? 7420;
   const server = http.createServer((req, res) => {
     handle(req, res).catch(() => {
@@ -158,6 +160,7 @@ export function startUi(opts: { port?: number; open?: boolean } = {}): void {
     console.log(`Local Agent UI → ${addr}`);
     const cfg = loadConfig();
     if (cfg) startLoop(cfg);
+    opts.onListening?.(addr);
     if (opts.open !== false) openBrowser(addr);
   });
 }

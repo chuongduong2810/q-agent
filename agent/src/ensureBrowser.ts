@@ -8,7 +8,7 @@
  */
 import { spawn } from "child_process";
 import * as fs from "fs";
-import { nodeBin, playwrightCli } from "./paths";
+import { childNodeEnv, nodeBin, playwrightCli } from "./paths";
 
 /** Path Playwright expects the Chromium build at, or null if it can't be resolved. */
 function chromiumExecutable(): string | null {
@@ -39,7 +39,10 @@ export async function ensureChromium(): Promise<boolean> {
 
   console.log("Chromium not found — installing Playwright's Chromium (one-time download)...");
   const code = await new Promise<number | null>((resolve) => {
-    const child = spawn(nodeBin(), [playwrightCli(), "install", "chromium"], { stdio: "inherit" });
+    const child = spawn(nodeBin(), [playwrightCli(), "install", "chromium"], {
+      stdio: "inherit",
+      env: { ...process.env, ...childNodeEnv() },
+    });
     child.on("close", resolve);
     child.on("error", () => resolve(null));
   });

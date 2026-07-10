@@ -14,7 +14,7 @@ import * as api from "./api";
 import { emit } from "./bus";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
-import { agentNodeModules, nodeBin, playwrightCli, vendorCaptureScript } from "./paths";
+import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorCaptureScript } from "./paths";
 import { applyAuthFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
@@ -39,7 +39,7 @@ export function killActiveChild(): void {
 
 function nodePathEnv(nm: string): NodeJS.ProcessEnv {
   const existing = process.env.NODE_PATH;
-  return { ...process.env, NODE_PATH: existing ? `${nm}${path.delimiter}${existing}` : nm };
+  return { ...process.env, ...childNodeEnv(), NODE_PATH: existing ? `${nm}${path.delimiter}${existing}` : nm };
 }
 
 interface ProcResult {

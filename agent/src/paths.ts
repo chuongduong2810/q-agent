@@ -21,6 +21,21 @@ export function firstExisting(candidates: string[]): string | null {
   return null;
 }
 
+/** True when running inside Electron (the desktop app) rather than plain Node. */
+export function isElectron(): boolean {
+  return Boolean((process as { versions?: { electron?: string } }).versions?.electron);
+}
+
+/**
+ * Environment additions for spawned child node processes. Under Electron,
+ * `process.execPath` is the Electron binary, so `nodeBin()` returns it — set
+ * ELECTRON_RUN_AS_NODE=1 so it runs the given script as Node rather than
+ * launching another app window.
+ */
+export function childNodeEnv(): NodeJS.ProcessEnv {
+  return isElectron() ? { ELECTRON_RUN_AS_NODE: "1" } : {};
+}
+
 /** True when running as a Node Single Executable Application (the packaged .exe). */
 function isSea(): boolean {
   try {
