@@ -163,6 +163,16 @@ def clone_shared_project(db: Session, project_key: str, dest_owner: User | None)
             status_code=409, detail=f"You already have a project named '{project_key}'"
         )
 
+    # The point of cloning is to reuse already-built knowledge (ADR 0009 §4).
+    # Cloning a project whose knowledge never indexed copies nothing useful and
+    # would force the member to rebuild — block it (the catalog also disables the
+    # button, this is the server-side backstop).
+    if not any(k.status == "indexed" for k in knowledge_rows):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Shared project '{project_key}' has no built knowledge to clone yet.",
+        )
+
     # Copy on-disk artifacts first — a failure here must leave the DB untouched.
     artifacts_copied: list[str] = []
     if _copy_scope_subtree(scoped_knowledge_dir, project_key, dest_owner_id):

@@ -258,6 +258,10 @@ class SharedProjectOut(ApiModel):
     name: str
     provider_kind: str = ""
     has_config: bool = False
+    base_url: str = ""
+    repos: list[ProjectRepo] = Field(default_factory=list)
+    work_item_connection_id: int | None = None
+    repository_connection_id: int | None = None
     knowledge: list[SharedProjectKnowledgeOut] = Field(default_factory=list)
     already_cloned: bool = False
 
@@ -270,6 +274,9 @@ class SharedProjectCreate(ApiModel):
     external_id: str = ""
     base_url: str = ""
     repos: list[ProjectRepo] = Field(default_factory=list)
+    # Connections used only to build shared knowledge — dropped on clone (ADR 0009 §4).
+    work_item_connection_id: int | None = None
+    repository_connection_id: int | None = None
     environments: list[EnvironmentCfg] = Field(default_factory=list)
     test_accounts: list[TestAccountIn] = Field(default_factory=list)
     extra: dict = Field(default_factory=dict)

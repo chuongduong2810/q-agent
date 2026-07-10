@@ -69,6 +69,7 @@ def list_shared_projects(
     catalog: list[dict] = []
     for key, name in sorted(names.items()):
         provider_kind = next((p.provider_kind for p in projects if p.name == key), "")
+        cfg = configs.get(key)
         knowledge_out = [
             {
                 "repo": k.repo,
@@ -85,7 +86,11 @@ def list_shared_projects(
                 "key": key,
                 "name": name,
                 "providerKind": provider_kind,
-                "hasConfig": key in configs,
+                "hasConfig": cfg is not None,
+                "baseUrl": cfg.base_url if cfg else "",
+                "repos": project_config_service.get_repos(cfg),
+                "workItemConnectionId": cfg.work_item_connection_id if cfg else None,
+                "repositoryConnectionId": cfg.repository_connection_id if cfg else None,
                 "knowledge": knowledge_out,
                 "alreadyCloned": clone_service.dest_already_has_project(db, key, dest_owner_id),
             }

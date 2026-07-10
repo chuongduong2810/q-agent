@@ -371,7 +371,14 @@ def _run_build(row_key: str) -> None:
         if row is None:
             return
         project_key = row.project_key or row.key
-        config = project_config_service.get_config(db, project_key)
+        # Shared builds (owner_id is None) must read the shared config, not a
+        # same-keyed row a member owns (their clone) — scope the lookup to the
+        # row's owner. Normal per-user builds keep the existing behavior.
+        config = (
+            project_config_service.get_config_for_owner(db, project_key, None)
+            if row.owner_id is None
+            else project_config_service.get_config(db, project_key)
+        )
         try:
             repo_path = _resolve_path_for_row(db, row, config)
             payload = build_knowledge_payload(
