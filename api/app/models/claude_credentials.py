@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, JSON, String, Text
+from sqlalchemy import Boolean, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, UTCDateTime, timestamp_column, utcnow
@@ -44,5 +44,10 @@ class ClaudeCredentials(Base):
     expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True, default=None)
     scopes: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
     subscription_type: Mapped[str | None] = mapped_column(String(40), nullable=True, default=None)
+    # Own-row only: the user has their own credential on file but prefers to use
+    # the shared account instead. Lets the AI-stats popover switch Personal↔Shared
+    # without deleting the uploaded token. Meaningless (always False) on the
+    # shared row. See app.services.claude_credentials resolution precedence.
+    prefer_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = timestamp_column()
     updated_at: Mapped[datetime] = timestamp_column(onupdate=utcnow)
