@@ -22,18 +22,59 @@ import { useAgentDevices, usePairCode, useRevokeDevice } from "@/hooks/queries";
 import { relativeTime } from "@/screens/auth/profile/sessions";
 import type { AgentDeviceOut } from "@/types/api";
 
+/** A device whose `lastSeenAt` is within this window is treated as "Connected".
+ * The agent idle-polls the job queue every ~3s (each poll refreshes
+ * `lastSeenAt` server-side), so a generous window absorbs network jitter and
+ * the client's own 5s device-list poll while still flipping to "Offline" a few
+ * seconds after the agent stops. */
+const ONLINE_WINDOW_MS = 30_000;
+
+function isDeviceOnline(device: AgentDeviceOut, now: number): boolean {
+  if (!device.lastSeenAt) return false;
+  return now - Date.parse(device.lastSeenAt) < ONLINE_WINDOW_MS;
+}
+
 export function LocalAgent() {
   const { data: devices, isLoading } = useAgentDevices();
   const pairCode = usePairCode();
   const revokeDevice = useRevokeDevice();
 
-  const [pairing, setPairing] = useState<{ code: string; expiresAt: number } | null>(null);
+  const [pairing, setPairing] = useState<{
+    code: string;
+    expiresAt: number;
+    knownIds: number[];
+  } | null>(null);
   const [revoking, setRevoking] = useState<AgentDeviceOut | null>(null);
+
+  // A clock that ticks every 5s so the Connected/Offline badge (and relative
+  // "last seen") recompute even when the polled device list is unchanged —
+  // React Query's structural sharing skips re-renders when data is deep-equal.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-dismiss the pairing card once the device it paired shows up in the
+  // polled list (issue: the code stayed on screen after a successful pair).
+  useEffect(() => {
+    if (!pairing || !devices) return;
+    const known = new Set(pairing.knownIds);
+    const paired = devices.find((d) => !known.has(d.id));
+    if (paired) {
+      toast.success(`"${paired.name || "Device"}" paired`);
+      setPairing(null);
+    }
+  }, [devices, pairing]);
 
   const handleAddDevice = () => {
     pairCode.mutate(undefined, {
       onSuccess: (data) =>
-        setPairing({ code: data.code, expiresAt: Date.now() + data.expiresIn * 1000 }),
+        setPairing({
+          code: data.code,
+          expiresAt: Date.now() + data.expiresIn * 1000,
+          knownIds: (devices ?? []).map((d) => d.id),
+        }),
       onError: (err) =>
         toast.error(err instanceof Error ? err.message : "Failed to generate a pairing code"),
     });
@@ -112,7 +153,12 @@ export function LocalAgent() {
         ) : (
           <div className="flex flex-col gap-2 p-2">
             {devices.map((d) => (
-              <DeviceRow key={d.id} device={d} onRevoke={() => setRevoking(d)} />
+              <DeviceRow
+                key={d.id}
+                device={d}
+                online={isDeviceOnline(d, now)}
+                onRevoke={() => setRevoking(d)}
+              />
             ))}
           </div>
         )}
@@ -246,14 +292,27 @@ function PairingCommand({
   );
 }
 
-function DeviceRow({ device, onRevoke }: { device: AgentDeviceOut; onRevoke: () => void }) {
+function DeviceRow({
+  device,
+  online,
+  onRevoke,
+}: {
+  device: AgentDeviceOut;
+  online: boolean;
+  onRevoke: () => void;
+}) {
   return (
     <div className="flex items-center gap-3.5 rounded-[13px] border border-white/[0.06] bg-white/[0.03] p-3">
       <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-white/[0.05] text-ink-dim">
         <Laptop size={16} strokeWidth={2} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13.5px] font-semibold text-ink">{device.name || "Unnamed device"}</div>
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[13.5px] font-semibold text-ink">
+            {device.name || "Unnamed device"}
+          </span>
+          <StatusBadge online={online} />
+        </div>
         <div className="text-[11.5px] text-muted">
           Last seen {device.lastSeenAt ? relativeTime(device.lastSeenAt) : "never"} &middot; Paired{" "}
           {relativeTime(device.createdAt)}
@@ -268,5 +327,26 @@ function DeviceRow({ device, onRevoke }: { device: AgentDeviceOut; onRevoke: () 
         Revoke
       </button>
     </div>
+  );
+}
+
+/** Live connection pill for a paired device. "Connected" means the agent has
+ * checked in within {@link ONLINE_WINDOW_MS}; "Offline" devices stay paired and
+ * reconnect on their own next launch (no re-pairing needed). */
+function StatusBadge({ online }: { online: boolean }) {
+  return (
+    <span
+      className={
+        online
+          ? "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[rgba(52,211,153,.3)] bg-[rgba(52,211,153,.12)] px-2 py-0.5 text-[10.5px] font-semibold text-[#6ee7b7]"
+          : "inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10.5px] font-semibold text-muted"
+      }
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${online ? "bg-[#34d399]" : "bg-[#6c6c7e]"}`}
+        aria-hidden
+      />
+      {online ? "Connected" : "Offline"}
+    </span>
   );
 }

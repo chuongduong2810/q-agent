@@ -670,9 +670,17 @@ export const useStartExecution = (runId: number | string) => {
 };
 
 // -------------------------------------------------------------- local agent devices
-/** Paired Local Agent devices for the current user (Local Agent feature). */
+/** Paired Local Agent devices for the current user (Local Agent feature).
+ *
+ * Polled every 5s so (a) a device paired from the CLI/agent app shows up
+ * without a manual refresh, and (b) each device's `lastSeenAt` stays fresh —
+ * the Local Agent screen derives a live Connected/Offline badge from it. */
 export const useAgentDevices = () =>
-  useQuery({ queryKey: queryKeys.agentDevices, queryFn: api.agentDevices.list });
+  useQuery({
+    queryKey: queryKeys.agentDevices,
+    queryFn: api.agentDevices.list,
+    refetchInterval: 5_000,
+  });
 
 /** Issue a short-lived pairing code for `npx @q-agent/agent pair <code>`. */
 export const usePairCode = () => useMutation({ mutationFn: api.agentDevices.pairCode });
