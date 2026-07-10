@@ -11,6 +11,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as api from "./api";
+import { emit } from "./bus";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
 import { agentNodeModules, nodeBin, playwrightCli, vendorCaptureScript } from "./paths";
@@ -177,20 +178,24 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
       } else if (origin && job.baseUrl) {
         const paths = sessionPathsForOrigin(origin);
         await api.postEvent(cfg, job.executionId, "exec.auth.waiting", { url: job.baseUrl });
+        emit("auth-waiting", { url: job.baseUrl });
         const captured = await captureAuth(job.baseUrl, paths.storageStatePath, paths.sessionStoragePath);
         if (captured) {
           storageState = paths.storageStatePath;
           sessionStoragePath = paths.sessionStoragePath;
           await api.postEvent(cfg, job.executionId, "exec.auth.captured", {});
+          emit("auth-captured", {});
         } else {
           const message = "Manual login was not completed — enable/redo login capture";
           await api.postEvent(cfg, job.executionId, "exec.auth.error", { message });
+          emit("error", { message });
           await failAllResults(cfg, job, message);
           return;
         }
       } else {
         const message = "Set a base URL for the project first.";
         await api.postEvent(cfg, job.executionId, "exec.auth.error", { message });
+        emit("error", { message });
         await failAllResults(cfg, job, message);
         return;
       }
@@ -213,6 +218,7 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     for (let i = 0; i < job.specs.length; i++) {
       const { ticket, caseCode } = identityFor(job.specs[i]);
       await api.postEvent(cfg, job.executionId, "exec.case.running", { ticket, caseCode, index: i + 1, total });
+      emit("case-running", { ticket, caseCode, index: i + 1, total });
     }
 
     // A single-spec job targets just that one file (the "run this test"
@@ -281,6 +287,7 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
         status: entry.status,
         durationMs,
       });
+      emit("case-result", { ticket, caseCode, status: entry.status, durationMs });
       const progress = total ? Math.trunc((100 * matched.size) / total) : 100;
       await api.postEvent(cfg, job.executionId, "exec.progress", {
         progress,
@@ -288,6 +295,7 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
         failed,
         remaining: total - matched.size,
       });
+      emit("progress", { progress, passed, failed, remaining: total - matched.size });
     }
 
     // Any spec Playwright didn't report on (e.g. run_error) is marked failed.
@@ -314,6 +322,7 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     // matching the server's own log persistence.
     const logText = (procOutput || runError || "").slice(-20000);
     await api.postComplete(cfg, job.executionId, { passed, failed, log: logText });
+    emit("job-complete", { executionId: job.executionId, passed, failed });
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }
@@ -341,11 +350,13 @@ export async function runAgentLoop(cfg: AgentConfig, signal: { aborted: boolean 
       continue;
     }
     console.log(`Claimed execution #${job.executionId} (run ${job.runCode}, ${job.specs.length} spec(s))`);
+    emit("job-claimed", { executionId: job.executionId, runCode: job.runCode, total: job.specs.length });
     try {
       await processJob(cfg, job);
       console.log(`Execution #${job.executionId} complete`);
     } catch (err) {
       console.error(`Execution #${job.executionId} crashed:`, err);
+      emit("error", { message: `Execution #${job.executionId} crashed: ${(err as Error).message}` });
       await api
         .postComplete(cfg, job.executionId, {
           passed: 0,

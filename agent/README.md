@@ -17,7 +17,18 @@ Chromium is installed automatically: the first time you run `qagent-agent start`
 the agent downloads Playwright's Chromium if it isn't already present (one-time,
 ~100 MB, with visible progress). No manual `npx playwright install` step is needed.
 
-## Install & run
+## Run with the UI (easiest)
+
+```bash
+npx @q-agent/agent
+```
+
+Running with no command opens a local web UI in your browser. Paste a pairing
+code (from the Q-Agent app's **Local Agent** screen) and the server URL, click
+**Connect**, and watch the pull/run progress live. The device token is stored
+locally, so next time it reconnects and starts pulling automatically.
+
+## Command-line
 
 ```bash
 npx @q-agent/agent pair <code> --server https://your-qagent-server.example.com/api
