@@ -345,3 +345,59 @@ def test_admin_can_manage_shared_credentials(client, db_session):
     assert r.status_code == 200
     status = client.get("/ai/credentials", headers=headers).json()
     assert status["hasShared"] is False
+
+
+# ---- persist_refreshed: capture the CLI's in-place token refresh (see the -----
+# ---- "Not logged in" credential-lifecycle bug) -------------------------------
+
+
+def _oauth_json(token: str, expires_ms: int) -> str:
+    return json.dumps(
+        {
+            "claudeAiOauth": {
+                "accessToken": token,
+                "refreshToken": "refresh-token",
+                "expiresAt": expires_ms,
+                "scopes": ["user:inference"],
+                "subscriptionType": "max",
+            }
+        }
+    )
+
+
+def _stored_token(db_session) -> str:
+    from app import crypto
+
+    row = claude_credentials.get_shared(db_session)
+    return json.loads(crypto.decrypt(row.credentials))["claudeAiOauth"]["accessToken"]
+
+
+def test_persist_refreshed_captures_newer_token(db_session):
+    """A CLI refresh (newer expiresAt, non-empty token) is written back."""
+    claude_credentials.upsert_shared(db_session, _oauth_json("old-token", 1000))
+    cfg = claude_credentials.resolve_effective_config_dir(db_session, None)
+    # Simulate the CLI refreshing the access token in-place.
+    (cfg / ".credentials.json").write_text(_oauth_json("new-token", 5000), encoding="utf-8")
+
+    assert claude_credentials.persist_refreshed(db_session, None) is True
+    assert _stored_token(db_session) == "new-token"
+
+
+def test_persist_refreshed_ignores_logged_out_file(db_session):
+    """A failed refresh leaves empty tokens — it must never clobber the store."""
+    claude_credentials.upsert_shared(db_session, _oauth_json("good-token", 5000))
+    cfg = claude_credentials.resolve_effective_config_dir(db_session, None)
+    (cfg / ".credentials.json").write_text(_oauth_json("", 0), encoding="utf-8")
+
+    assert claude_credentials.persist_refreshed(db_session, None) is False
+    assert _stored_token(db_session) == "good-token"
+
+
+def test_persist_refreshed_ignores_non_newer_token(db_session):
+    """An equal/older expiry is not a genuine refresh — leave the store as-is."""
+    claude_credentials.upsert_shared(db_session, _oauth_json("good-token", 5000))
+    cfg = claude_credentials.resolve_effective_config_dir(db_session, None)
+    (cfg / ".credentials.json").write_text(_oauth_json("older-token", 4000), encoding="utf-8")
+
+    assert claude_credentials.persist_refreshed(db_session, None) is False
+    assert _stored_token(db_session) == "good-token"

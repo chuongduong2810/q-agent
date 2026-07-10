@@ -148,7 +148,15 @@ def test_repos_endpoint_rejects_work_item_only_connection(client):
 def test_repos_endpoint_accepts_ado_connection(client):
     # ADO is dual-capability, so the repository routes accept it too.
     conn = _create(client, "ado")
-    assert client.get(f"/connections/{conn['id']}/repos").status_code == 200
+    resp = client.get(f"/connections/{conn['id']}/repos")
+    assert resp.status_code == 200
+    # The picker consumes the {provider, repos, error} wrapper (matching the
+    # TypeScript AvailableReposOut), not a bare list — a bare list left the UI
+    # reading `.repos` off an array and silently showing nothing.
+    body = resp.json()
+    assert isinstance(body, dict)
+    assert isinstance(body["repos"], list)
+    assert "error" in body and "provider" in body
 
 
 def test_sprints_endpoint_rejects_repository_only_connection(client):

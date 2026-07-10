@@ -142,6 +142,23 @@ def _resolve_claude_env() -> tuple[dict[str, str], int | None]:
     return {**os.environ, "CLAUDE_CONFIG_DIR": str(config_dir)}, owner_id
 
 
+def _persist_refreshed_credential(owner_id: int | None) -> None:
+    """Best-effort: capture any token the CLI just refreshed back into the store
+    (see :func:`app.services.claude_credentials.persist_refreshed`). Never raises
+    — credential bookkeeping must not fail a CLI run."""
+    from app.db import SessionLocal
+    from app.services import claude_credentials
+
+    try:
+        db = SessionLocal()
+        try:
+            claude_credentials.persist_refreshed(db, owner_id)
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not persist refreshed Claude credential: {}", exc)
+
+
 def run_prompt(
     prompt: str,
     *,
@@ -204,9 +221,27 @@ def run_prompt(
         activity.finish(call_id, ok=False, error=str(exc)[:200])
         raise
 
+    # If the CLI refreshed the (short-lived) OAuth access token in-place, capture
+    # it back into the store so the credential doesn't silently expire between
+    # calls. Guarded + best-effort — never let this bookkeeping break the run.
+    _persist_refreshed_credential(owner_id)
+
     if proc.returncode != 0:
+        # `claude -p --output-format json` writes its failure reason (auth /
+        # credit / rate-limit / unknown-model) to STDOUT as JSON and leaves
+        # STDERR empty — so a bare `exited 1:` message hides the real cause.
+        # Surface stdout when stderr is empty, and log both streams in full.
+        err = proc.stderr.strip()
+        out = proc.stdout.strip()
+        logger.error(
+            "Claude CLI exited {}: stderr={!r} stdout={!r}",
+            proc.returncode,
+            err[:800],
+            out[:800],
+        )
         activity.finish(call_id, ok=False, error=f"exit {proc.returncode}")
-        raise ClaudeError(f"Claude CLI exited {proc.returncode}: {proc.stderr.strip()[:500]}")
+        detail = (err or out or "no output on stderr/stdout")[:800]
+        raise ClaudeError(f"Claude CLI exited {proc.returncode}: {detail}")
 
     activity.finish(call_id, ok=True)
     wall_ms = int((time.monotonic() - t0) * 1000)
