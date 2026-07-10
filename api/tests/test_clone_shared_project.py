@@ -244,6 +244,47 @@ def test_admin_can_create_shared_project_shell_and_build_knowledge(client, db_se
     assert knowledge.confidence == 77
 
 
+def test_admin_configures_repo_and_config_round_trips(client, db_session, monkeypatch):
+    """Admin can attach a repo + repository connection; catalog + config GET reflect it."""
+    _auth_on(monkeypatch)
+    admin = _make_user(db_session, "repoadmin@example.com", role="admin")
+    headers = _auth_headers(admin)
+    key = "Repo Project"
+
+    resp = client.post(
+        f"/shared/projects/{key}",
+        json={
+            "name": key,
+            "baseUrl": "https://repo.test",
+            "repositoryConnectionId": 42,
+            "repos": [
+                {"name": "web", "repoUrl": "https://git.test/web.git", "defaultBranch": "main"}
+            ],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201
+
+    # The shared config GET returns the repo + binding (passwords masked shape).
+    cfg = client.get(f"/shared/projects/{key}/config", headers=headers).json()
+    assert cfg["baseUrl"] == "https://repo.test"
+    assert cfg["repositoryConnectionId"] == 42
+    assert [r["name"] for r in cfg["repos"]] == ["web"]
+
+    # The catalog also surfaces the repo so per-repo build buttons can render.
+    entry = next(e for e in client.get("/shared/projects", headers=headers).json() if e["key"] == key)
+    assert [r["name"] for r in entry["repos"]] == ["web"]
+    assert entry["repositoryConnectionId"] == 42
+
+
+def test_shared_auth_routes_are_admin_only(client, db_session, monkeypatch):
+    _auth_on(monkeypatch)
+    member = _make_user(db_session, "authmember@example.com", role="member")
+    headers = _auth_headers(member)
+    assert client.get(f"/shared/projects/{PROJECT_KEY}/config", headers=headers).status_code == 403
+    assert client.get(f"/shared/projects/{PROJECT_KEY}/auth", headers=headers).status_code == 403
+
+
 # ------------------------------------------------------------------------ catalog
 def test_shared_catalog_lists_project_and_reflects_clone_state(client, db_session, monkeypatch):
     _auth_on(monkeypatch)

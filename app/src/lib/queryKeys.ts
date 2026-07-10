@@ -12,6 +12,8 @@ export const queryKeys = {
   settings: ["settings"] as const,
   projects: ["projects"] as const,
   sharedProjects: ["shared", "projects"] as const,
+  sharedProjectConfig: (key: string) => ["shared", "projects", key, "config"] as const,
+  sharedProjectAuth: (key: string) => ["shared", "projects", key, "auth"] as const,
   knowledgeList: ["projects", "knowledge"] as const,
   projectKnowledge: (key: string) => ["projects", key, "knowledge"] as const,
   projectConfig: (key: string) => ["projects", key, "config"] as const,

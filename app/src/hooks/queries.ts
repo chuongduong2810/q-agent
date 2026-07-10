@@ -259,6 +259,41 @@ export const useBuildSharedRepoKnowledge = () => {
   });
 };
 
+// Admin: the shared project's full config for the settings page (owner_id=None).
+export const useSharedProjectConfig = (key: string | null) =>
+  useQuery({
+    queryKey: queryKeys.sharedProjectConfig(key ?? ""),
+    queryFn: () => api.getSharedProjectConfig(key as string),
+    enabled: !!key,
+    retry: false,
+  });
+
+// Admin: the shared project's saved manual-login session (polls while capturing).
+export const useSharedProjectAuth = (key: string | null) =>
+  useQuery({
+    queryKey: queryKeys.sharedProjectAuth(key ?? ""),
+    queryFn: () => api.getSharedProjectAuth(key as string),
+    enabled: !!key,
+    retry: false,
+    refetchInterval: (q) => (q.state.data?.capturing ? 1500 : false),
+  });
+
+export const useClearSharedProjectAuth = (key: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.clearSharedProjectAuth(key),
+    onSuccess: (data) => qc.setQueryData(queryKeys.sharedProjectAuth(key), data),
+  });
+};
+
+export const useCaptureSharedProjectAuth = (key: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.captureSharedProjectAuth(key),
+    onSuccess: (data) => qc.setQueryData(queryKeys.sharedProjectAuth(key), data),
+  });
+};
+
 export const useKnowledgeList = () =>
   useQuery({ queryKey: queryKeys.knowledgeList, queryFn: api.listKnowledge });
 

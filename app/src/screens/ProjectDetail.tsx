@@ -14,7 +14,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -42,7 +42,10 @@ import {
 } from "@/hooks/queries";
 import { type ProjectTab } from "@/store/ui";
 import type {
+  AuthState,
   EnvironmentCfg,
+  ProjectConfigOut,
+  ProjectConfigUpdate,
   ProjectRepo,
   ProviderKind,
   RepoKnowledgeOut,
@@ -655,16 +658,27 @@ const inputCls =
 const labelCls = "mb-1.5 block text-[12px] font-semibold text-[#9494a6]";
 
 /**
- * Project Details → Settings tab. Lets the user configure the project-specific
- * runtime values downstream automation needs (application URL, local repo path,
- * test accounts, environments, extra config) so generated Playwright specs run
- * with little to no manual editing. Passwords are write-only: blank preserves the
- * securely stored secret.
+ * Reusable project settings form. Lets the user configure the project-specific
+ * runtime values downstream automation needs (application URL, connections,
+ * repos, test accounts, environments, extra config) so generated Playwright
+ * specs run with little to no manual editing. Passwords are write-only: blank
+ * preserves the securely stored secret. Scope-agnostic — the caller supplies the
+ * loaded `config`, the `onSave` handler, and (optionally) the manual-login
+ * widget via `renderManualLogin`, so it serves both a user's own project and the
+ * admin shared-workspace settings page.
  */
-function ProjectSettingsTab({ projectKey }: { projectKey: string }) {
-  const { data: config, isLoading } = useProjectConfig(projectKey);
+export function ProjectSettingsForm({
+  config,
+  saving,
+  onSave,
+  renderManualLogin,
+}: {
+  config: ProjectConfigOut;
+  saving: boolean;
+  onSave: (patch: ProjectConfigUpdate) => void;
+  renderManualLogin?: (hasBaseUrl: boolean) => ReactNode;
+}) {
   const { data: providers } = useProviders();
-  const save = useSaveProjectConfig(projectKey);
 
   const [baseUrl, setBaseUrl] = useState("");
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
@@ -708,33 +722,22 @@ function ProjectSettingsTab({ projectKey }: { projectKey: string }) {
     setExtra(Object.entries(config.extra ?? {}).map(([k, v]) => ({ k, v: String(v) })));
   }, [config]);
 
-  const onSave = () => {
-    save.mutate(
-      {
-        baseUrl,
-        repos,
-        testAccounts: accounts.map(({ role, username, password, notes }) => ({
-          role,
-          username,
-          password,
-          notes,
-        })),
-        environments,
-        extra: Object.fromEntries(extra.filter((e) => e.k).map((e) => [e.k, e.v])),
-        manualAuth,
-        workItemConnectionId,
-        repositoryConnectionId,
-      },
-      {
-        onSuccess: () => toast.success("Project settings saved"),
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Save failed"),
-      },
-    );
-  };
-
-  if (isLoading) {
-    return <div className="glass rounded-[18px] p-8 text-center text-[13px] text-ink-dim">Loading…</div>;
-  }
+  const handleSave = () =>
+    onSave({
+      baseUrl,
+      repos,
+      testAccounts: accounts.map(({ role, username, password, notes }) => ({
+        role,
+        username,
+        password,
+        notes,
+      })),
+      environments,
+      extra: Object.fromEntries(extra.filter((e) => e.k).map((e) => [e.k, e.v])),
+      manualAuth,
+      workItemConnectionId,
+      repositoryConnectionId,
+    });
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -796,9 +799,7 @@ function ProjectSettingsTab({ projectKey }: { projectKey: string }) {
           Before a run, a real browser opens on the machine running Q&#8209;Agent so you can log in
           (e.g. Microsoft Entra); the session is reused until cleared.
         </p>
-        {manualAuth && (
-          <ManualLoginStatus projectKey={projectKey} hasBaseUrl={baseUrl.trim().length > 0} />
-        )}
+        {manualAuth && renderManualLogin?.(baseUrl.trim().length > 0)}
       </GlassCard>
 
       <ReposManager
@@ -989,11 +990,39 @@ function ProjectSettingsTab({ projectKey }: { projectKey: string }) {
       </GlassCard>
 
       <div className="flex justify-end">
-        <Button variant="primary" size="lg" onClick={onSave} disabled={save.isPending}>
-          {save.isPending ? "Saving…" : "Save settings"}
+        <Button variant="primary" size="lg" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save settings"}
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Project Details → Settings tab. Thin wrapper: loads the current user's own
+ * project config and renders {@link ProjectSettingsForm}, wiring the manual-login
+ * widget to the owner-scoped auth endpoints.
+ */
+function ProjectSettingsTab({ projectKey }: { projectKey: string }) {
+  const { data: config, isLoading } = useProjectConfig(projectKey);
+  const save = useSaveProjectConfig(projectKey);
+  if (isLoading || !config) {
+    return <div className="glass rounded-[18px] p-8 text-center text-[13px] text-ink-dim">Loading…</div>;
+  }
+  return (
+    <ProjectSettingsForm
+      config={config}
+      saving={save.isPending}
+      onSave={(patch) =>
+        save.mutate(patch, {
+          onSuccess: () => toast.success("Project settings saved"),
+          onError: (err) => toast.error(err instanceof Error ? err.message : "Save failed"),
+        })
+      }
+      renderManualLogin={(hasBaseUrl) => (
+        <ManualLoginStatus projectKey={projectKey} hasBaseUrl={hasBaseUrl} />
+      )}
+    />
   );
 }
 
@@ -1018,11 +1047,50 @@ function ManualLoginStatus({
   const { data: auth } = useProjectAuth(projectKey);
   const clear = useClearProjectAuth(projectKey);
   const capture = useCaptureProjectAuth(projectKey);
+  return (
+    <ManualLoginStatusView
+      auth={auth}
+      capturing={capture.isPending || auth?.capturing === true}
+      hasBaseUrl={hasBaseUrl}
+      clearing={clear.isPending}
+      onCapture={() =>
+        capture.mutate(undefined, {
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : "Failed to capture login"),
+        })
+      }
+      onClear={() =>
+        clear.mutate(undefined, {
+          onSuccess: () => toast.success("Saved login cleared"),
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : "Failed to clear login"),
+        })
+      }
+    />
+  );
+}
 
-  // True while a headed browser is open on the host waiting for the operator to
-  // log in — driven by the mutation being in-flight or the polled `capturing`.
-  const capturing = capture.isPending || auth?.capturing === true;
-
+/**
+ * Presentational manual-login status card — scope-agnostic. Given the current
+ * auth state and capture/clear handlers, renders the "captured / none yet" row
+ * with Capture and Clear actions. Owner and shared containers supply the data
+ * (fires a one-time toast when a capture we started completes).
+ */
+export function ManualLoginStatusView({
+  auth,
+  capturing,
+  hasBaseUrl,
+  clearing,
+  onCapture,
+  onClear,
+}: {
+  auth: AuthState | undefined;
+  capturing: boolean;
+  hasBaseUrl: boolean;
+  clearing: boolean;
+  onCapture: () => void;
+  onClear: () => void;
+}) {
   // Fire a one-time success toast when a capture we started finishes.
   const wasCapturing = useRef(false);
   useEffect(() => {
@@ -1031,17 +1099,6 @@ function ManualLoginStatus({
     }
     wasCapturing.current = capturing;
   }, [capturing, auth?.exists]);
-
-  const onClear = () =>
-    clear.mutate(undefined, {
-      onSuccess: () => toast.success("Saved login cleared"),
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to clear login"),
-    });
-
-  const onCapture = () =>
-    capture.mutate(undefined, {
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to capture login"),
-    });
 
   return (
     <div className="mt-3 rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-[13px_15px]">
@@ -1081,9 +1138,9 @@ function ManualLoginStatus({
             )}
           </Button>
           {auth?.exists && (
-            <Button variant="glass" size="sm" onClick={onClear} disabled={clear.isPending}>
+            <Button variant="glass" size="sm" onClick={onClear} disabled={clearing}>
               <Trash2 size={13} strokeWidth={2.2} />{" "}
-              {clear.isPending ? "Clearing…" : "Clear saved login"}
+              {clearing ? "Clearing…" : "Clear saved login"}
             </Button>
           )}
         </div>

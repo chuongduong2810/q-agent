@@ -315,6 +315,15 @@ export const api = {
       `/shared/projects/${encodeURIComponent(key)}/repos/${encodeURIComponent(repo)}/knowledge/build`,
       body,
     ),
+  // shared project full config + manual-login session (admin settings page).
+  getSharedProjectConfig: (key: string) =>
+    get<ProjectConfigOut>(`/shared/projects/${encodeURIComponent(key)}/config`),
+  getSharedProjectAuth: (key: string) =>
+    get<AuthState>(`/shared/projects/${encodeURIComponent(key)}/auth`),
+  clearSharedProjectAuth: (key: string) =>
+    del<AuthState>(`/shared/projects/${encodeURIComponent(key)}/auth`),
+  captureSharedProjectAuth: (key: string) =>
+    post<AuthState>(`/shared/projects/${encodeURIComponent(key)}/auth/capture`),
 
   // project knowledge
   listKnowledge: () => get<ProjectKnowledgeOut[]>("/projects/knowledge"),
