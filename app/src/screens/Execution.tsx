@@ -15,9 +15,8 @@ import { Pill, execColors, productDefectStyle } from "@/components/ui/badges";
 import { ProgressRing, Spinner } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { ApiError } from "@/lib/api";
-import { cn } from "@/lib/cn";
-import { useNavigate, useParams } from "react-router-dom";
-import { useExecution, useRun, useStartExecution } from "@/hooks/queries";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useExecution, useRun, useSettings, useStartExecution } from "@/hooks/queries";
 import { useRunEvents } from "@/hooks/useRunEvents";
 import type { ExecutionResultOut, ExecutionTarget, ProgressEvent } from "@/types/api";
 
@@ -32,12 +31,8 @@ export function Execution() {
 
   const { data: run } = useRun(runId);
   const { data: execution, isLoading } = useExecution(runId);
+  const { data: settings } = useSettings();
   const startExecution = useStartExecution(runId);
-
-  // Where the next run executes — "server" (legacy) or a paired Local Agent
-  // device on the user's own machine. Once an execution exists, its own
-  // `target` is authoritative for the banner copy below.
-  const [target, setTarget] = useState<ExecutionTarget>("server");
 
   // Manual-login prompt state, driven by the run WebSocket. When the backend
   // (or a Local Agent, whose events the server re-emits unchanged) opens a
@@ -74,8 +69,10 @@ export function Execution() {
     runningResult ?? (isDone ? results[results.length - 1] : undefined);
 
   const handleRun = () => {
+    // No per-run target: the backend resolves the workspace-wide
+    // `executionTarget` setting (configured on the Settings screen).
     startExecution.mutate(
-      { target },
+      {},
       {
         onError: (err) => {
           if (err instanceof ApiError && err.status === 409) {
@@ -91,8 +88,8 @@ export function Execution() {
   };
 
   // Once an execution has been created, its own target is authoritative for
-  // banner copy; before that, the pending selection above drives it.
-  const effectiveTarget: ExecutionTarget = execution?.target ?? target;
+  // banner copy; before that, the workspace default setting drives it.
+  const effectiveTarget: ExecutionTarget = execution?.target ?? settings?.executionTarget ?? "server";
 
   return (
     <div className="px-1 pb-10 pt-0.5">
@@ -105,7 +102,18 @@ export function Execution() {
           <h1 className="m-0 text-[28px] font-black tracking-tight">Execution</h1>
         </div>
         <div className="flex items-center gap-3">
-          <TargetToggle value={target} onChange={setTarget} disabled={isRunning || startExecution.isPending} />
+          <Link
+            to="/settings#execution"
+            title="Change the default execution target in Settings"
+            className="glass flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-ink-dim transition-colors hover:text-white"
+          >
+            {effectiveTarget === "local-agent" ? (
+              <Laptop size={13} strokeWidth={2.2} />
+            ) : (
+              <Server size={13} strokeWidth={2.2} />
+            )}
+            {effectiveTarget === "local-agent" ? "My machine" : "Server"}
+          </Link>
           <Button variant="primary" size="lg" onClick={handleRun} disabled={isRunning || startExecution.isPending}>
           {isRunning || startExecution.isPending ? (
             <>
@@ -230,49 +238,6 @@ export function Execution() {
       </div>
 
       {execution?.log ? <ExecutionLog log={execution.log} /> : null}
-    </div>
-  );
-}
-
-/** "Server" vs "My machine" execution-target picker (Local Agent feature). A
- * two-way segmented toggle rather than a dropdown since there are only two
- * options — no popover/portal needed. */
-function TargetToggle({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: ExecutionTarget;
-  onChange: (target: ExecutionTarget) => void;
-  disabled: boolean;
-}) {
-  const options: { value: ExecutionTarget; label: string; icon: typeof Server }[] = [
-    { value: "server", label: "Server", icon: Server },
-    { value: "local-agent", label: "My machine", icon: Laptop },
-  ];
-  return (
-    <div className="glass flex rounded-xl p-1" role="radiogroup" aria-label="Execution target">
-      {options.map((opt) => {
-        const active = value === opt.value;
-        const Icon = opt.icon;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            disabled={disabled}
-            onClick={() => onChange(opt.value)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-              active ? "bg-white/[0.1] text-white" : "text-ink-dim hover:text-white",
-            )}
-          >
-            <Icon size={13} strokeWidth={2.2} />
-            {opt.label}
-          </button>
-        );
-      })}
     </div>
   );
 }
