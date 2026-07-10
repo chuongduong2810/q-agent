@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `qagent-agent` CLI — `npx @qagent/agent <command>`.
+ * `qagent-agent` CLI — `npx @q-agent/agent <command>`.
  *
  * Commands:
  *   pair <code> [--server <url>] [--name <name>]  Redeem a one-time pairing code for a device token.

@@ -1,4 +1,4 @@
-# @qagent/agent — Q-Agent Local Agent
+# @q-agent/agent — Q-Agent Local Agent
 
 Runs Playwright test executions on **your own machine** instead of the
 Q-Agent server. This means:
@@ -20,8 +20,8 @@ the agent downloads Playwright's Chromium if it isn't already present (one-time,
 ## Install & run
 
 ```bash
-npx @qagent/agent pair <code> --server https://your-qagent-server.example.com/api
-npx @qagent/agent start
+npx @q-agent/agent pair <code> --server https://your-qagent-server.example.com/api
+npx @q-agent/agent start
 ```
 
 `--server` is the origin serving the API's `/agent/...` routes. On the
