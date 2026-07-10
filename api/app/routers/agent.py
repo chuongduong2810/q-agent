@@ -81,6 +81,20 @@ def revoke_device(
     return {"ok": True}
 
 
+@router.post("/disconnect")
+def disconnect_device(user: User = Depends(require_agent), db: Session = Depends(get_db)) -> dict:
+    """Self-revoke the calling device (the Local Agent "Disconnect" button).
+
+    Authenticated by the device's own bearer token (``require_agent``). The agent
+    clears its local token on disconnect, so revoking here keeps the two in sync
+    and removes the device from the owner's list on the SPA's next poll.
+    """
+    device = getattr(user, "_device", None)
+    if device is not None:
+        agent_device_service.revoke_self(db, device)
+    return {"ok": True}
+
+
 @router.post("/devices/redeem")
 def redeem_device(body: dict, db: Session = Depends(get_db)) -> dict:
     """Redeem a pairing code (called by the Local Agent CLI, not the SPA).

@@ -12,7 +12,7 @@ import { spawn } from "node:child_process";
 import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
-import { redeemDevice } from "./api";
+import { disconnectDevice, redeemDevice } from "./api";
 import { bus, emit, recentEvents } from "./bus";
 import { AgentConfig, clearConfig, loadConfig, saveConfig } from "./config";
 import { agentNodeModules } from "./paths";
@@ -123,6 +123,14 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
   }
 
   if (req.method === "POST" && url === "/api/disconnect") {
+    // Tell the server first (token still valid) so the device drops off the
+    // owner's SPA list immediately, then wipe the local token + stop the loop.
+    const cfg = loadConfig();
+    if (cfg) {
+      await disconnectDevice(cfg).catch((err) =>
+        emit("log", { message: `server disconnect failed: ${(err as Error).message}` })
+      );
+    }
     stopLoop();
     clearConfig();
     emit("agent-status", { running: false });
