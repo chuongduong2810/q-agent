@@ -49,7 +49,7 @@
     "productName": "Q-Agent Local Agent",
     "extraMetadata": { "main": "electron/main.cjs" },
     "files": ["dist/**/*", "electron/**/*", "vendor/**/*", "package.json"],
-    "win": { "target": "nsis" },
+    "win": { "target": "nsis", "signAndEditExecutable": false },
     "directories": { "output": "dist-bin/desktop" }
   }
 }
