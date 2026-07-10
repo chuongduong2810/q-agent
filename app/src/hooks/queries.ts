@@ -674,7 +674,7 @@ export const useStartExecution = (runId: number | string) => {
 export const useAgentDevices = () =>
   useQuery({ queryKey: queryKeys.agentDevices, queryFn: api.agentDevices.list });
 
-/** Issue a short-lived pairing code for `npx @qagent/agent pair <code>`. */
+/** Issue a short-lived pairing code for `npx @q-agent/agent pair <code>`. */
 export const usePairCode = () => useMutation({ mutationFn: api.agentDevices.pairCode });
 
 /** Revoke a paired device; refreshes the device list on success. */

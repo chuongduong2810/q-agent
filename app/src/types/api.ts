@@ -657,7 +657,7 @@ export interface AgentDeviceOut {
 }
 
 /** Response from `POST /agent/devices/pair-code` — a short-lived code the
- * user hands to `npx @qagent/agent pair <code>` on their machine. */
+ * user hands to `npx @q-agent/agent pair <code>` on their machine. */
 export interface PairCodeOut {
   code: string;
   expiresIn: number;

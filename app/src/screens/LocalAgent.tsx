@@ -1,11 +1,11 @@
 /**
  * Local Agent screen (global, non run-scoped — routed alongside `settings`).
- * Lets the user pair a device running `npx @qagent/agent`, which executes
+ * Lets the user pair a device running `npx @q-agent/agent`, which executes
  * Playwright suites headed on their own machine (so manual login/MFA happens
  * right where the user is, and session cookies never leave that machine).
  *
  * Flow: "Add device" mints a short-lived pairing code (`POST
- * /agent/devices/pair-code`); the user runs the printed `npx @qagent/agent
+ * /agent/devices/pair-code`); the user runs the printed `npx @q-agent/agent
  * pair <code> --server <origin>` command locally. Once paired, the device
  * shows up in the list below (`GET /agent/devices`) and becomes selectable as
  * an execution target on the Execution screen.
@@ -43,7 +43,7 @@ export function LocalAgent() {
   // deployment those live under `/api`. Local dev with a separate API port
   // should instead point --server straight at the API (see the note below).
   const command = pairing
-    ? `npx @qagent/agent pair ${pairing.code} --server ${window.location.origin}/api`
+    ? `npx @q-agent/agent pair ${pairing.code} --server ${window.location.origin}/api`
     : "";
 
   return (
