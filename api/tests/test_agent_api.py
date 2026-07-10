@@ -193,7 +193,14 @@ def test_claim_next_job_atomic_and_wont_double_claim(client, db_session):
     body = first.json()
     assert body["executionId"] == execution.id
     assert body["runCode"] == run.code
-    assert body["specs"] == [{"filename": "1428-TC-01.spec.ts", "code": "// spec code"}]
+    assert body["specs"] == [
+        {
+            "filename": "1428-TC-01.spec.ts",
+            "code": "// spec code",
+            "ticketExternalId": "SUR-1428",
+            "caseCode": "TC-01",
+        }
+    ]
     assert body["manualAuth"] is False
     # Security requirement: the claim payload must NEVER carry session data.
     assert "storageState" not in first.text

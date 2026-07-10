@@ -626,10 +626,15 @@ export interface ExecutionResultOut {
   evidence: EvidenceOut[];
 }
 
+/** Where an Execution runs — the server (legacy) or a paired Local Agent
+ * device on the user's own machine. */
+export type ExecutionTarget = "server" | "local-agent";
+
 export interface ExecutionOut {
   id: number;
   runId: number;
   status: string;
+  target: ExecutionTarget;
   env: string;
   browser: string;
   workers: number;
@@ -641,6 +646,21 @@ export interface ExecutionOut {
   finishedAt: string | null;
   log: string;
   results: ExecutionResultOut[];
+}
+
+/** A paired Local Agent device (`GET /agent/devices`). */
+export interface AgentDeviceOut {
+  id: number;
+  name: string;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+/** Response from `POST /agent/devices/pair-code` — a short-lived code the
+ * user hands to `npx @qagent/agent pair <code>` on their machine. */
+export interface PairCodeOut {
+  code: string;
+  expiresIn: number;
 }
 
 export interface AnnotationShape {

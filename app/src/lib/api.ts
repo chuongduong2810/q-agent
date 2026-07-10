@@ -7,6 +7,7 @@
 import { useAuth } from "@/store/auth";
 import type {
   AdminUser,
+  AgentDeviceOut,
   AiActivity,
   AnnotationShape,
   AuditEventOut,
@@ -23,12 +24,14 @@ import type {
   BackendLogStats,
   CloneResultOut,
   CreateLinkRequest,
+  ExecutionTarget,
   LinkedTestCaseOut,
   LinkStatusOut,
   EvidenceGrouped,
   EvidenceOut,
   ExecutionOut,
   HealReport,
+  PairCodeOut,
   InviteUserResponse,
   AvailableReposOut,
   ConnectionOut,
@@ -405,9 +408,20 @@ export const api = {
   runSpec: (caseId: number) => post<ExecutionOut>(`/cases/${caseId}/spec/run`),
 
   // execution
-  startExecution: (runId: number | string, body: { workers?: number; env?: string } = {}) =>
-    post<ExecutionOut>(`/runs/${runId}/execution`, body),
+  startExecution: (
+    runId: number | string,
+    body: { workers?: number; env?: string; target?: ExecutionTarget } = {},
+  ) => post<ExecutionOut>(`/runs/${runId}/execution`, body),
   getExecution: (runId: number | string) => get<ExecutionOut>(`/runs/${runId}/execution`),
+
+  // Local Agent device pairing (#? Local Agent feature) — user-authed device
+  // management. The job-claim/push protocol (`/agent/jobs/*`) is device-authed
+  // and consumed only by the Node CLI, not the SPA.
+  agentDevices: {
+    pairCode: () => post<PairCodeOut>("/agent/devices/pair-code"),
+    list: () => get<AgentDeviceOut[]>("/agent/devices"),
+    revoke: (id: number) => del<{ ok: boolean }>(`/agent/devices/${id}`),
+  },
 
   // evidence
   getEvidence: (runId: number | string) => get<EvidenceGrouped>(`/runs/${runId}/evidence`),
