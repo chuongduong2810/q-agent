@@ -13,6 +13,7 @@ import * as path from "path";
 import * as api from "./api";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
+import { agentNodeModules, nodeBin, playwrightCli, vendorCaptureScript } from "./paths";
 import { applyAuthFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
@@ -35,31 +36,6 @@ export function killActiveChild(): void {
   }
 }
 
-function firstExisting(candidates: string[]): string | null {
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return null;
-}
-
-/** Resolve the vendored capture_auth.cjs, whether running from `dist/` or via ts-node from `src/`. */
-function vendorCaptureScript(): string {
-  const found = firstExisting([
-    path.join(__dirname, "..", "..", "vendor", "capture_auth.cjs"),
-    path.join(__dirname, "..", "vendor", "capture_auth.cjs"),
-  ]);
-  if (!found) throw new Error("capture_auth.cjs not found — the agent package is missing vendor/");
-  return found;
-}
-
-/** The agent package's own node_modules, where @playwright/test + playwright are installed. */
-function agentNodeModules(): string {
-  return (
-    firstExisting([path.join(__dirname, "..", "..", "node_modules"), path.join(__dirname, "..", "node_modules")]) ??
-    path.join(__dirname, "..", "..", "node_modules")
-  );
-}
-
 function nodePathEnv(nm: string): NodeJS.ProcessEnv {
   const existing = process.env.NODE_PATH;
   return { ...process.env, NODE_PATH: existing ? `${nm}${path.delimiter}${existing}` : nm };
@@ -74,7 +50,9 @@ interface ProcResult {
 
 function runProcess(cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<ProcResult> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, env, shell: process.platform === "win32" });
+    // No shell: cmd is always an absolute node path (nodeBin()) and args are
+    // absolute script/CLI paths, so this is safe even when paths contain spaces.
+    const child = spawn(cmd, args, { cwd, env });
     activeChild = child;
     let stdout = "";
     let stderr = "";
@@ -114,7 +92,7 @@ async function captureAuth(baseUrl: string, storageStatePath: string, sessionSto
   const script = vendorCaptureScript();
   const nm = agentNodeModules();
   const result = await runProcess(
-    "node",
+    nodeBin(),
     [script, baseUrl, storageStatePath, sessionStoragePath],
     nm,
     nodePathEnv(nm),
@@ -130,20 +108,14 @@ async function captureAuth(baseUrl: string, storageStatePath: string, sessionSto
   }
 }
 
-/** Prefer the agent's own installed `playwright` binary over a fresh `npx` fetch. */
-function playwrightCommand(): { cmd: string; baseArgs: string[] } {
-  const nm = agentNodeModules();
-  const bin = path.join(nm, ".bin", process.platform === "win32" ? "playwright.cmd" : "playwright");
-  if (fs.existsSync(bin)) return { cmd: bin, baseArgs: ["test"] };
-  return { cmd: "npx", baseArgs: ["playwright", "test"] };
-}
-
 async function runPlaywright(workDir: string, workers: number, specFile: string): Promise<ProcResult> {
-  const { cmd, baseArgs } = playwrightCommand();
-  const args = [...baseArgs, `--workers=${workers}`];
+  // Invoke Playwright's CLI through the resolved node runtime (`node cli.js test …`)
+  // so the same path works from source, via npx, and in a packaged bundle where
+  // `node`/`node_modules` live beside the executable rather than on PATH.
+  const args = [playwrightCli(), "test", `--workers=${workers}`];
   if (specFile) args.push(specFile);
   const nm = agentNodeModules();
-  return runProcess(cmd, args, workDir, nodePathEnv(nm), EXEC_TIMEOUT_MS);
+  return runProcess(nodeBin(), args, workDir, nodePathEnv(nm), EXEC_TIMEOUT_MS);
 }
 
 /**

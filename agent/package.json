@@ -25,7 +25,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/test",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "package:win": "node scripts/package-win.mjs"
   },
   "dependencies": {
     "@playwright/test": "^1.61.1",
@@ -34,6 +35,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "esbuild": "^0.24.0",
+    "postject": "^1.0.0-alpha.6",
     "typescript": "^5.5.4"
   }
 }

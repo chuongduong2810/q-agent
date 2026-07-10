@@ -15,6 +15,12 @@ import { AgentConfig, clearConfig, loadConfig, saveConfig } from "./config";
 import { redeemDevice } from "./api";
 import { killActiveChild, runAgentLoop } from "./runner";
 
+/** How the user invoked this agent, for accurate "run X" hints: the bare command
+ * inside a packaged bundle, else the `npx` form of the published package. */
+function invocation(): string {
+  return (process as { pkg?: unknown }).pkg ? "qagent-agent" : "npx @q-agent/agent";
+}
+
 const program = new Command();
 program.name("qagent-agent").description("Q-Agent Local Agent — runs Playwright locally for this machine's owner.");
 
@@ -31,7 +37,7 @@ program
       const cfg: AgentConfig = { serverUrl, deviceToken, deviceId, deviceName: opts.name };
       saveConfig(cfg);
       console.log(`Paired as device #${deviceId} (${opts.name}) against ${serverUrl}`);
-      console.log("Device token stored — run `qagent-agent start` to begin claiming jobs.");
+      console.log(`Device token stored — run \`${invocation()} start\` to begin claiming jobs.`);
     } catch (err) {
       console.error("Pairing failed:", (err as Error).message);
       process.exitCode = 1;
@@ -45,7 +51,7 @@ program
   .action(async (opts: { server?: string }) => {
     const cfg = loadConfig();
     if (!cfg) {
-      console.error("Not paired yet — run `qagent-agent pair <code>` first.");
+      console.error(`Not paired yet — run \`${invocation()} pair <code>\` first.`);
       process.exitCode = 1;
       return;
     }
@@ -69,7 +75,7 @@ program
   .action(() => {
     const cfg = loadConfig();
     if (!cfg) {
-      console.log("Not paired. Run `qagent-agent pair <code>` to pair this machine.");
+      console.log(`Not paired. Run \`${invocation()} pair <code>\` to pair this machine.`);
       return;
     }
     console.log(`Paired as device #${cfg.deviceId} (${cfg.deviceName})`);
@@ -81,7 +87,7 @@ program
   .description("Forget the paired device token")
   .action(() => {
     clearConfig();
-    console.log("Device token cleared. Run `qagent-agent pair <code>` to pair again.");
+    console.log(`Device token cleared. Run \`${invocation()} pair <code>\` to pair again.`);
   });
 
 program.parseAsync(process.argv).catch((err) => {
