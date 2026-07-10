@@ -158,6 +158,67 @@ def upsert_shared(db: Session, raw_credentials: str, label: str = "") -> ClaudeC
     return _upsert(db, None, raw_credentials, label)
 
 
+def persist_refreshed(db: Session, owner_id: int | None) -> bool:
+    """Capture a token the Claude CLI refreshed in-place back into the store.
+
+    OAuth access tokens live only hours; the CLI refreshes them by rewriting
+    ``<config_dir>/.credentials.json`` whenever it runs with an expired-but-
+    refreshable token. Because :func:`materialize` re-writes that file from the
+    DB on every call, an un-captured refresh is lost — and once the rotated
+    refresh token goes stale the credential can no longer be refreshed at all,
+    so it dies (the CLI then reports "Not logged in"). After each CLI run we
+    read the file back and, when it holds a **non-empty** access token with a
+    **strictly newer** ``expiresAt`` than what we stored, re-encrypt and persist
+    it. Those two guards mean a *failed* refresh — which the CLI records as an
+    empty/logged-out file — can never clobber a good stored credential.
+
+    Mirrors :func:`resolve_effective_config_dir`'s own→shared precedence so it
+    writes back to whichever row was actually used. Returns True if it updated
+    the stored credential.
+    """
+    row: ClaudeCredentials | None = None
+    key: str | None = None
+    if owner_id is not None:
+        own = get_own(db, owner_id)
+        if own is not None:
+            row, key = own, str(owner_id)
+    if row is None:
+        shared = get_shared(db)
+        if shared is not None:
+            row, key = shared, "shared"
+    if row is None or key is None:
+        return False
+
+    try:
+        raw = (_config_dir_for(key) / ".credentials.json").read_text(encoding="utf-8")
+        new_oauth = json.loads(raw).get("claudeAiOauth") or {}
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return False
+
+    new_token = str(new_oauth.get("accessToken") or "").strip()
+    new_ms = new_oauth.get("expiresAt")
+    if not new_token or not isinstance(new_ms, (int, float)):
+        return False  # logged-out / failed-refresh / malformed — never persist
+
+    # Compare raw epoch-ms (int) to sidestep tz-aware/naive datetime pitfalls.
+    old_dec = crypto.decrypt(row.credentials) or ""
+    try:
+        old_ms = (json.loads(old_dec).get("claudeAiOauth") or {}).get("expiresAt") if old_dec else None
+    except (json.JSONDecodeError, AttributeError):
+        old_ms = None
+    if isinstance(old_ms, (int, float)) and new_ms <= old_ms:
+        return False  # not a fresher token — nothing to capture
+
+    meta = _extract_metadata(raw)
+    row.credentials = crypto.encrypt(raw) or ""
+    row.status = STATUS_ACTIVE
+    row.expires_at = meta["expires_at"]
+    row.scopes = meta["scopes"]
+    row.subscription_type = meta["subscription_type"]
+    db.commit()
+    return True
+
+
 def delete_own(db: Session, owner_id: int) -> bool:
     """Delete ``owner_id``'s own credential row. Returns True if one existed."""
     row = get_own(db, owner_id)

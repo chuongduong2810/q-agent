@@ -215,6 +215,39 @@ def test_update_case_spec_missing_spec_returns_404(client, db_session):
     assert resp.status_code == 404
 
 
+def test_edit_unblocks_spec_when_placeholders_removed(client, db_session, monkeypatch):
+    """Editing a blocked spec to remove the TODO placeholders re-gates it clean
+    and flips it to a runnable draft; re-introducing a placeholder re-blocks it."""
+    from app.services import claude_cli
+
+    # Generate a spec the placeholder gate BLOCKS (it carries TODO placeholders).
+    blocked = (
+        "import { test } from '@playwright/test';\n\n"
+        "test('login', async ({ page }) => {\n"
+        "  // TODO: real login URL is unknown\n"
+        "  await page.goto('TODO');\n});\n"
+    )
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: blocked)
+    run, case = _seed_run_and_case(db_session)
+    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    got = client.get(f"/cases/{case.id}/spec").json()
+    assert got["status"] == "blocked"
+    assert got["blockReason"]
+
+    # Edit away the placeholders -> unblocked (draft, reason cleared).
+    clean = "import { test } from '@playwright/test';\n\ntest('login', async () => {});\n"
+    body = client.patch(f"/cases/{case.id}/spec", json={"code": clean}).json()
+    assert body["status"] == "draft"
+    assert not body["blockReason"]
+
+    # Re-introducing a placeholder re-blocks it.
+    reblocked = client.patch(
+        f"/cases/{case.id}/spec", json={"code": clean + "// TODO leftover\n"}
+    ).json()
+    assert reblocked["status"] == "blocked"
+    assert reblocked["blockReason"]
+
+
 def test_generate_missing_run_returns_404(client, db_session):
     resp = client.post("/runs/9999/automation/generate")
     assert resp.status_code == 404

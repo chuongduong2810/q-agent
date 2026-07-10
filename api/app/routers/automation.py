@@ -355,10 +355,14 @@ def update_case_spec(
     db: Session = Depends(get_db),
     user: User | None = Depends(current_user),
 ) -> dict:
-    """Persist manual edits to a case's spec and rewrite the on-disk .spec.ts file.
+    """Persist manual edits to a case's spec, re-gate it, and sync the .spec.ts file.
 
-    Updates AutomationSpec.code, rewrites the file so execution picks up the
-    edits, and refreshes AutomationSpec.path. 404 if the case has no spec.
+    Re-runs the placeholder / invented-reference gate on the edited code (the
+    same gate generation uses), so a manual edit that removes the TODO
+    placeholders **unblocks** the spec (``status="draft"``, file written, runnable)
+    — and, conversely, re-introducing a placeholder re-blocks it. A still-blocked
+    edit is persisted (``code``/``block_reason``) but not written to the runnable
+    file set, matching :func:`_generate_one`. 404 if the case has no spec.
     """
     case, run = _get_case_and_run_or_404(db, case_id, user)
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case_id).first()
@@ -366,10 +370,38 @@ def update_case_spec(
         raise HTTPException(status_code=404, detail="Spec not found")
 
     spec.code = payload.code
-    path = spec_service.write_spec_file(
-        run.code, case.ticket_external_id, case.code, payload.code, run.owner_id
-    )
-    spec.path = str(path)
+    context = spec_service.build_case_context(db, case, env=run.env)
+    known = {
+        "routes": context.get("routes", []),
+        "selectors": context.get("selectors", []),
+        "base_url": context.get("baseUrl", ""),
+    }
+    gate = placeholder_gate.gate_spec(payload.code, known)
+    outcome = gate["outcome"]
+    # Mirror generation: a spec Playwright cannot parse/collect is not runnable.
+    if outcome == "passed" and not spec_service.playwright_list_ok(payload.code, run.owner_id):
+        outcome = "rejected"
+        gate = {
+            "outcome": "rejected",
+            "findings": ["playwright --list parse failure"],
+            "reason": "Playwright could not parse/collect the edited spec.",
+            "unblock_action": "Fix the spec so it parses cleanly under Playwright.",
+        }
+    spec.gate_report = json.dumps(gate)
+
+    if outcome == "passed":
+        path = spec_service.write_spec_file(
+            run.code, case.ticket_external_id, case.code, payload.code, run.owner_id
+        )
+        spec.path = str(path)
+        spec.status = "draft"
+        spec.block_reason = ""
+    else:
+        # Still not clean — keep it out of the runnable file set (don't write it).
+        prefix = "Rejected: " if outcome == "rejected" else ""
+        spec.status = "blocked"
+        spec.block_reason = f'{prefix}{gate["reason"]} {gate["unblock_action"]}'.strip()
+
     db.commit()
     db.refresh(spec)
     return _spec_out(spec)

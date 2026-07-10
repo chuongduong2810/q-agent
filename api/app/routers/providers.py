@@ -11,7 +11,7 @@ Provider connections (ADR 0006 revision 2) — a provider *kind* holds many name
   POST   /connections/{id}/test                -> TestConnectionResult    (live probe)
   GET    /connections/{id}/sprints             -> list[SprintOut]         (work-item)
   GET    /connections/{id}/work-item-metadata  -> WorkItemMetadataOut     (work-item)
-  GET    /connections/{id}/repos               -> list[AvailableRepoOut]  (repository)
+  GET    /connections/{id}/repos               -> AvailableReposOut  (repository)
   GET    /settings                             -> SettingsOut
   PUT    /settings                             -> SettingsOut
 
@@ -41,7 +41,7 @@ from app.models.provider_connection import (
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas import (
-    AvailableRepoOut,
+    AvailableReposOut,
     ConnectionCreate,
     ConnectionOut,
     ConnectionUpdate,
@@ -290,15 +290,19 @@ def connection_work_item_metadata(
     return WorkItemMetadataOut.model_validate(meta)
 
 
-@router.get("/connections/{connection_id}/repos", response_model=list[AvailableRepoOut])
+@router.get("/connections/{connection_id}/repos", response_model=AvailableReposOut)
 def list_connection_repos(
     connection_id: int,
     db: Session = Depends(get_db),
     user: User | None = Depends(current_user),
-) -> list[AvailableRepoOut]:
+) -> dict:
     """Discover the repositories a repository connection exposes (for the picker).
 
-    Resilient: unconfigured/unsupported connections yield an empty list.
+    Returns the ``{provider, repos, error}`` wrapper (matching
+    ``/projects/{key}/repos/available`` and the TypeScript ``AvailableReposOut``
+    client type) so the picker renders discovered repos — and surfaces a
+    message on an upstream hiccup — instead of receiving a bare list it can't
+    read and silently showing nothing.
     """
     conn = _get_connection_or_404(db, connection_id, user)
     _require_capability(conn, REPOSITORY)
@@ -306,10 +310,12 @@ def list_connection_repos(
     try:
         adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
         repos = adapter.list_repos()
+    except ProviderError as exc:
+        return {"provider": conn.kind, "repos": [], "error": str(exc)}
     except Exception as exc:  # noqa: BLE001 - never 500 the picker on an upstream hiccup
         logger.warning("Repo list for connection {} unavailable: {}", connection_id, exc)
-        return []
-    return [AvailableRepoOut.model_validate(r) for r in repos]
+        return {"provider": conn.kind, "repos": [], "error": f"Could not list repos: {exc}"}
+    return {"provider": conn.kind, "repos": repos, "error": ""}
 
 
 @router.get("/settings", response_model=SettingsOut, tags=["settings"])
