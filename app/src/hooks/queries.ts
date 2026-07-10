@@ -70,6 +70,14 @@ export const useUploadOwnClaudeCredentials = () => {
   });
 };
 
+export const useSetClaudeCredentialMode = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mode: "own" | "shared") => api.claudeCredentials.setMode(mode),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.claudeCredentialsStatus }),
+  });
+};
+
 export const useDeleteOwnClaudeCredentials = () => {
   const qc = useQueryClient();
   return useMutation({

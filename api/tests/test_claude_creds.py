@@ -138,6 +138,56 @@ def test_resolve_effective_none_when_nothing_configured(db_session):
     assert claude_credentials.resolve_effective_config_dir(db_session, 7) is None
 
 
+def test_prefer_shared_switches_effective_to_shared_without_deleting_own(db_session):
+    """prefer_shared on the own row makes shared effective, but keeps own on file."""
+    claude_credentials.upsert_own(db_session, 1, OWN_JSON)
+    claude_credentials.upsert_shared(db_session, SHARED_JSON)
+
+    claude_credentials.set_preferred_mode(db_session, 1, "shared")
+
+    config_dir = claude_credentials.resolve_effective_config_dir(db_session, 1)
+    assert config_dir is not None and config_dir.name == "shared"
+    assert (config_dir / ".credentials.json").read_text(encoding="utf-8") == SHARED_JSON
+    # own credential is untouched — the user can flip back without re-uploading.
+    assert claude_credentials.get_own(db_session, 1) is not None
+    assert claude_credentials.status_for(db_session, 1)["mode"] == "shared"
+
+    # Flip back to own.
+    claude_credentials.set_preferred_mode(db_session, 1, "own")
+    back = claude_credentials.resolve_effective_config_dir(db_session, 1)
+    assert back is not None and back.name == "1"
+    assert claude_credentials.status_for(db_session, 1)["mode"] == "own"
+
+
+def test_prefer_shared_ignored_when_no_shared_configured(db_session):
+    """A prefer-shared flag with no shared credential must not strand the user."""
+    row = claude_credentials.upsert_own(db_session, 1, OWN_JSON)
+    row.prefer_shared = True
+    db_session.commit()
+
+    config_dir = claude_credentials.resolve_effective_config_dir(db_session, 1)
+    assert config_dir is not None and config_dir.name == "1"
+    assert claude_credentials.status_for(db_session, 1)["mode"] == "own"
+
+
+def test_set_preferred_mode_requires_own_credential(db_session):
+    claude_credentials.upsert_shared(db_session, SHARED_JSON)
+    with pytest.raises(claude_credentials.ClaudeCredentialsError):
+        claude_credentials.set_preferred_mode(db_session, 1, "shared")
+
+
+def test_set_preferred_mode_shared_requires_shared_credential(db_session):
+    claude_credentials.upsert_own(db_session, 1, OWN_JSON)
+    with pytest.raises(claude_credentials.ClaudeCredentialsError):
+        claude_credentials.set_preferred_mode(db_session, 1, "shared")
+
+
+def test_set_preferred_mode_rejects_unknown_mode(db_session):
+    claude_credentials.upsert_own(db_session, 1, OWN_JSON)
+    with pytest.raises(claude_credentials.ClaudeCredentialsError):
+        claude_credentials.set_preferred_mode(db_session, 1, "bogus")
+
+
 # ------------------------------------------------------------- claude_cli wiring
 def test_missing_credentials_raises_clean_error(monkeypatch, workspace_dir):
     """No own/shared credential at all -> ClaudeError, subprocess never invoked."""
@@ -275,6 +325,37 @@ def test_upload_and_delete_own_credentials(client, db_session):
 
     status = client.get("/ai/credentials", headers=headers).json()
     assert status["hasOwn"] is False
+
+
+def test_switch_credential_mode_endpoint(client, db_session):
+    """PUT /ai/credentials/mode flips the effective mode without deleting own."""
+    user = _make_user(db_session, "switch@example.com", "password123")
+    token = _login(client, "switch@example.com", "password123").json()["accessToken"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    client.put("/ai/credentials", json={"credentials": OWN_JSON}, headers=headers)
+    claude_credentials.upsert_shared(db_session, SHARED_JSON)
+    assert client.get("/ai/credentials", headers=headers).json()["mode"] == "own"
+
+    r = client.put("/ai/credentials/mode", json={"mode": "shared"}, headers=headers)
+    assert r.status_code == 200
+    status = client.get("/ai/credentials", headers=headers).json()
+    assert status["mode"] == "shared"
+    assert status["hasOwn"] is True  # kept on file
+
+    r = client.put("/ai/credentials/mode", json={"mode": "own"}, headers=headers)
+    assert r.status_code == 200
+    assert client.get("/ai/credentials", headers=headers).json()["mode"] == "own"
+
+
+def test_switch_credential_mode_to_shared_without_shared_400(client, db_session):
+    _make_user(db_session, "noshared@example.com", "password123")
+    token = _login(client, "noshared@example.com", "password123").json()["accessToken"]
+    headers = {"Authorization": f"Bearer {token}"}
+    client.put("/ai/credentials", json={"credentials": OWN_JSON}, headers=headers)
+
+    r = client.put("/ai/credentials/mode", json={"mode": "shared"}, headers=headers)
+    assert r.status_code == 400
 
 
 def test_upload_own_rejects_malformed_json(client, db_session):

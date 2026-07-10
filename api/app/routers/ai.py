@@ -9,12 +9,14 @@ from app.db import get_db
 from app.deps_auth import current_user, require_admin
 from app.models.user import User
 from app.schemas import (
+    ClaudeCredentialModeUpdate,
     ClaudeCredentialsStatusOut,
     ClaudeCredentialsUpload,
     OkResponse,
 )
 from app.services import activity, ai_usage_service, claude_usage_reader
 from app.services.claude_credentials import ClaudeCredentialsError, delete_own, delete_shared
+from app.services.claude_credentials import set_preferred_mode
 from app.services.claude_credentials import status_for as credentials_status_for
 from app.services.claude_credentials import upsert_own, upsert_shared
 
@@ -79,6 +81,28 @@ def upload_own_credentials(
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         upsert_own(db, user.id, body.credentials, body.label or "")
+    except ClaudeCredentialsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return OkResponse()
+
+
+@router.put("/ai/credentials/mode", response_model=OkResponse)
+def set_credential_mode(
+    body: ClaudeCredentialModeUpdate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> OkResponse:
+    """Switch the signed-in user between their own and the shared credential.
+
+    Unlike delete-own, this is non-destructive: the user's uploaded credential
+    stays on file (as ``prefer_shared`` on their own row) so they can flip back
+    without re-uploading. Requires an own credential on file; ``mode="shared"``
+    also requires a shared account to fall back to (both 400 otherwise).
+    """
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        set_preferred_mode(db, user.id, body.mode)
     except ClaudeCredentialsError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return OkResponse()

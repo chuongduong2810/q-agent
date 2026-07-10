@@ -227,6 +227,8 @@ export const api = {
   claudeCredentials: {
     status: () => get<ClaudeCredentialsStatus>("/ai/credentials"),
     uploadOwn: (body: ClaudeCredentialsUpload) => put<void>("/ai/credentials", body),
+    // Non-destructive switch between own/shared (keeps the uploaded token on file).
+    setMode: (mode: "own" | "shared") => put<void>("/ai/credentials/mode", { mode }),
     deleteOwn: () => del<void>("/ai/credentials"),
     uploadShared: (body: ClaudeCredentialsUpload) => put<void>("/ai/credentials/shared", body),
     deleteShared: () => del<void>("/ai/credentials/shared"),

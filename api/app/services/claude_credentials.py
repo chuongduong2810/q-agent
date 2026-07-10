@@ -38,6 +38,7 @@ __all__ = [
     "materialize",
     "resolve_ambient_owner_id",
     "resolve_effective_config_dir",
+    "set_preferred_mode",
     "status_for",
     "upsert_own",
     "upsert_shared",
@@ -126,6 +127,42 @@ def get_shared(db: Session) -> ClaudeCredentials | None:
     return db.query(ClaudeCredentials).filter(ClaudeCredentials.owner_id.is_(None)).first()
 
 
+def _own_yields_to_shared(db: Session, own: ClaudeCredentials | None) -> bool:
+    """True when an own credential exists but the user prefers the shared account
+    (``prefer_shared``) *and* a shared credential exists to fall back to — so
+    every resolution site should skip the own credential and use shared instead.
+    A ``prefer_shared`` flag with no shared credential configured is ignored
+    (own still wins), so a user is never left with nothing.
+    """
+    return own is not None and own.prefer_shared and get_shared(db) is not None
+
+
+def set_preferred_mode(db: Session, owner_id: int, mode: str) -> ClaudeCredentials:
+    """Set which credential ``owner_id`` prefers, persisted on their own row.
+
+    ``mode`` is ``"own"`` or ``"shared"``. This lets a user who has uploaded
+    their own credential *prefer* the shared account without deleting the upload
+    (and flip back later). Requires an own credential row to exist — with no own
+    credential the effective mode is already shared and there is nothing to store
+    the preference on. Selecting ``"shared"`` additionally requires a shared
+    credential to actually fall back to. Returns the updated own row.
+
+    Raises :class:`ClaudeCredentialsError` (a 400 to the caller) on an unknown
+    mode, a missing own credential, or ``"shared"`` with no shared credential.
+    """
+    if mode not in ("own", "shared"):
+        raise ClaudeCredentialsError('mode must be "own" or "shared"')
+    own = get_own(db, owner_id)
+    if own is None:
+        raise ClaudeCredentialsError("no personal credentials on file to switch")
+    if mode == "shared" and get_shared(db) is None:
+        raise ClaudeCredentialsError("no shared Claude account is configured")
+    own.prefer_shared = mode == "shared"
+    db.commit()
+    db.refresh(own)
+    return own
+
+
 def _upsert(db: Session, owner_id: int | None, raw_credentials: str, label: str) -> ClaudeCredentials:
     validated = _validate(raw_credentials)
     row = (
@@ -180,7 +217,7 @@ def persist_refreshed(db: Session, owner_id: int | None) -> bool:
     key: str | None = None
     if owner_id is not None:
         own = get_own(db, owner_id)
-        if own is not None:
+        if own is not None and not _own_yields_to_shared(db, own):
             row, key = own, str(owner_id)
     if row is None:
         shared = get_shared(db)
@@ -282,7 +319,10 @@ def status_for(db: Session, owner_id: int | None) -> dict:
     shared_row = get_shared(db)
     has_own = own_row is not None
     has_shared = shared_row is not None
-    mode = "own" if has_own else "shared" if has_shared else "none"
+    # Precedence: own > shared > none, unless the user prefers shared and one
+    # exists (prefer_shared honoured only when there's a shared to fall back to).
+    prefers_shared = has_own and own_row.prefer_shared and has_shared
+    mode = "shared" if prefers_shared else "own" if has_own else "shared" if has_shared else "none"
     return {
         "hasOwn": has_own,
         "hasShared": has_shared,
@@ -361,10 +401,12 @@ def resolve_effective_config_dir(db: Session, owner_id: int | None) -> Path | No
     Precedence: the user's own credential, else the shared/admin credential,
     else ``None`` (no credential configured at all — the caller must raise a
     clean error; there is no interactive ``claude login`` fallback per ADR 0001).
+    A user who set ``prefer_shared`` on their own row skips it and uses the
+    shared credential (see :func:`_own_yields_to_shared`).
     """
     if owner_id is not None:
         own = get_own(db, owner_id)
-        if own is not None:
+        if own is not None and not _own_yields_to_shared(db, own):
             return materialize(own, str(owner_id))
     shared = get_shared(db)
     if shared is not None:

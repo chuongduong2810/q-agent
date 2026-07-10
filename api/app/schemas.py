@@ -850,6 +850,16 @@ class ClaudeCredentialsUpload(ApiModel):
     label: str = ""
 
 
+class ClaudeCredentialModeUpdate(ApiModel):
+    """Body for switching the signed-in user's preferred credential mode.
+
+    ``mode`` is ``"own"`` (use my uploaded personal credential) or ``"shared"``
+    (prefer the workspace shared account without deleting my upload).
+    """
+
+    mode: str
+
+
 class ClaudeCredentialsMetaOut(ApiModel):
     """Public metadata for one credential row — never the token itself."""
 
