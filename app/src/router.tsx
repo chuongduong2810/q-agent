@@ -28,6 +28,7 @@ import { CommentPublish } from "@/screens/CommentPublish";
 import { Reports } from "@/screens/Reports";
 import { AuditLog } from "@/screens/AuditLog";
 import { Settings } from "@/screens/Settings";
+import { LocalAgent } from "@/screens/LocalAgent";
 
 /**
  * The route tree from ADR 0003 + auth (ADR 0007). PUBLIC auth screens
@@ -74,6 +75,7 @@ export const router = createBrowserRouter([
           { path: "reports", element: <Reports /> },
           { path: "audit", element: <AuditLog /> },
           { path: "settings", element: <Settings /> },
+          { path: "local-agent", element: <LocalAgent /> },
           { path: "settings/users", element: <UserManagement /> },
           { path: "settings/claude-credentials", element: <ClaudeCredentials /> },
           { path: "settings/shared-workspace", element: <SharedWorkspace /> },

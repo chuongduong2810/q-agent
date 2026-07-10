@@ -45,4 +45,5 @@ export const queryKeys = {
   backendLogs: (filters?: Record<string, string | undefined>) =>
     ["audit", "logs", filters ?? {}] as const,
   backendLogStats: ["audit", "logs", "stats"] as const,
+  agentDevices: ["agentDevices"] as const,
 };

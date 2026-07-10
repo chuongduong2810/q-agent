@@ -1,14 +1,25 @@
 import { useCallback, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, KeyRound, Play, RotateCw } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  KeyRound,
+  Laptop,
+  Play,
+  RotateCw,
+  Server,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Pill, execColors, productDefectStyle } from "@/components/ui/badges";
 import { ProgressRing, Spinner } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";
+import { ApiError } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { useNavigate, useParams } from "react-router-dom";
 import { useExecution, useRun, useStartExecution } from "@/hooks/queries";
 import { useRunEvents } from "@/hooks/useRunEvents";
-import type { ExecutionResultOut, ProgressEvent } from "@/types/api";
+import type { ExecutionResultOut, ExecutionTarget, ProgressEvent } from "@/types/api";
 
 /** Truncates long ticket ids for the fixed-width queue column (design's r.tidShort). */
 function shortTicket(id: string): string {
@@ -23,9 +34,15 @@ export function Execution() {
   const { data: execution, isLoading } = useExecution(runId);
   const startExecution = useStartExecution(runId);
 
+  // Where the next run executes — "server" (legacy) or a paired Local Agent
+  // device on the user's own machine. Once an execution exists, its own
+  // `target` is authoritative for the banner copy below.
+  const [target, setTarget] = useState<ExecutionTarget>("server");
+
   // Manual-login prompt state, driven by the run WebSocket. When the backend
-  // opens a browser on the host for the operator to log in, it emits
-  // `exec.auth.waiting`; `exec.auth.captured`/`exec.auth.error` clear it.
+  // (or a Local Agent, whose events the server re-emits unchanged) opens a
+  // browser for the operator to log in, it emits `exec.auth.waiting`;
+  // `exec.auth.captured`/`exec.auth.error` clear it.
   const [authWaiting, setAuthWaiting] = useState<{ url: string } | null>(null);
   const onRunEvent = useCallback((evt: ProgressEvent) => {
     if (evt.event === "exec.auth.waiting") {
@@ -58,10 +75,24 @@ export function Execution() {
 
   const handleRun = () => {
     startExecution.mutate(
-      {},
-      { onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to start execution") },
+      { target },
+      {
+        onError: (err) => {
+          if (err instanceof ApiError && err.status === 409) {
+            toast.error(err.message || "No local agent paired — start your local agent", {
+              action: { label: "Local Agent", onClick: () => navigate("/local-agent") },
+            });
+            return;
+          }
+          toast.error(err instanceof Error ? err.message : "Failed to start execution");
+        },
+      },
     );
   };
+
+  // Once an execution has been created, its own target is authoritative for
+  // banner copy; before that, the pending selection above drives it.
+  const effectiveTarget: ExecutionTarget = execution?.target ?? target;
 
   return (
     <div className="px-1 pb-10 pt-0.5">
@@ -73,7 +104,9 @@ export function Execution() {
           </div>
           <h1 className="m-0 text-[28px] font-black tracking-tight">Execution</h1>
         </div>
-        <Button variant="primary" size="lg" onClick={handleRun} disabled={isRunning || startExecution.isPending}>
+        <div className="flex items-center gap-3">
+          <TargetToggle value={target} onChange={setTarget} disabled={isRunning || startExecution.isPending} />
+          <Button variant="primary" size="lg" onClick={handleRun} disabled={isRunning || startExecution.isPending}>
           {isRunning || startExecution.isPending ? (
             <>
               <Spinner size={15} />
@@ -90,7 +123,8 @@ export function Execution() {
               Run suite
             </>
           )}
-        </Button>
+          </Button>
+        </div>
       </div>
 
       {authWaiting && (
@@ -109,7 +143,9 @@ export function Execution() {
               <Spinner size={13} /> Waiting for manual login
             </div>
             <p className="m-0 text-[12.5px] leading-relaxed text-[#c3c3d4]">
-              A browser has opened on the host machine. Log in
+              {effectiveTarget === "local-agent"
+                ? "A browser opened on your machine. Log in"
+                : "A browser has opened on the host machine. Log in"}
               {authWaiting.url ? (
                 <>
                   {" "}at{" "}
@@ -194,6 +230,49 @@ export function Execution() {
       </div>
 
       {execution?.log ? <ExecutionLog log={execution.log} /> : null}
+    </div>
+  );
+}
+
+/** "Server" vs "My machine" execution-target picker (Local Agent feature). A
+ * two-way segmented toggle rather than a dropdown since there are only two
+ * options — no popover/portal needed. */
+function TargetToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: ExecutionTarget;
+  onChange: (target: ExecutionTarget) => void;
+  disabled: boolean;
+}) {
+  const options: { value: ExecutionTarget; label: string; icon: typeof Server }[] = [
+    { value: "server", label: "Server", icon: Server },
+    { value: "local-agent", label: "My machine", icon: Laptop },
+  ];
+  return (
+    <div className="glass flex rounded-xl p-1" role="radiogroup" aria-label="Execution target">
+      {options.map((opt) => {
+        const active = value === opt.value;
+        const Icon = opt.icon;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              active ? "bg-white/[0.1] text-white" : "text-ink-dim hover:text-white",
+            )}
+          >
+            <Icon size={13} strokeWidth={2.2} />
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

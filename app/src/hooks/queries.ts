@@ -17,6 +17,7 @@ import type {
   AutomationSpecOut,
   ClaudeCredentialsUpload,
   ConnectionUpdate,
+  ExecutionTarget,
   KnowledgeBuildRequest,
   ProjectConfigUpdate,
   ProviderKind,
@@ -659,11 +660,29 @@ export const useExecution = (runId: number | string | null) =>
 export const useStartExecution = (runId: number | string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { workers?: number; env?: string } = {}) => api.startExecution(runId, body),
+    mutationFn: (body: { workers?: number; env?: string; target?: ExecutionTarget } = {}) =>
+      api.startExecution(runId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.execution(runId) });
       qc.invalidateQueries({ queryKey: queryKeys.run(runId) });
     },
+  });
+};
+
+// -------------------------------------------------------------- local agent devices
+/** Paired Local Agent devices for the current user (Local Agent feature). */
+export const useAgentDevices = () =>
+  useQuery({ queryKey: queryKeys.agentDevices, queryFn: api.agentDevices.list });
+
+/** Issue a short-lived pairing code for `npx @qagent/agent pair <code>`. */
+export const usePairCode = () => useMutation({ mutationFn: api.agentDevices.pairCode });
+
+/** Revoke a paired device; refreshes the device list on success. */
+export const useRevokeDevice = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.agentDevices.revoke(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.agentDevices }),
   });
 };
 

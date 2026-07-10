@@ -3,6 +3,7 @@ import {
   Boxes,
   FolderKanban,
   GraduationCap,
+  Laptop,
   LayoutDashboard,
   LogOut,
   Settings,
@@ -40,6 +41,7 @@ const PRIMARY_NAV: NavItem[] = [
 const SECONDARY_NAV: NavItem[] = [
   { path: "/reports", label: "Reports", icon: BarChart3 },
   { path: "/getting-started", label: "Getting Started", icon: GraduationCap },
+  { path: "/local-agent", label: "Local Agent", icon: Laptop },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
