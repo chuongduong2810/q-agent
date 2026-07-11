@@ -78,6 +78,7 @@ def record(
     action: str,
     run_id: int | None = None,
     owner_id: int | None = None,
+    ticket_external_id: str | None = None,
 ) -> None:
     """Append one usage row for a completed Claude CLI call (best-effort).
 
@@ -100,17 +101,24 @@ def record(
         owner_id: The user this call's cost is attributed to (#95) — the same
             user whose credentials the call ran under. ``None`` when the call
             ran under the shared credential or has no attributable owner.
+        ticket_external_id: The ticket this call's cost is attributed to, for the
+            grouped-by-ticket cost card. When ``None`` it is resolved from the
+            ambient ticket context (set per-ticket by the pipeline); a call with
+            no ticket context stays ``None`` (a run-level call).
     """
-    if run_id is None:
-        from app.services import run_context
+    from app.services import run_context
 
+    if run_id is None:
         run_id = run_context.get_run()
+    if ticket_external_id is None:
+        ticket_external_id = run_context.get_ticket()
     try:
         session = db.SessionLocal()
         try:
             session.add(
                 ClaudeUsage(
                     run_id=run_id,
+                    ticket_external_id=(ticket_external_id or None),
                     model=model or "",
                     input_tokens=int(input_tokens or 0),
                     output_tokens=int(output_tokens or 0),
@@ -222,11 +230,19 @@ def stats(user: User | None = None) -> dict[str, Any]:
 def run_breakdown(session: Session, run_id: int) -> dict[str, Any]:
     """Aggregate one run's recorded Claude usage into the per-run cost contract.
 
-    Sums every :class:`ClaudeUsage` row stamped with ``run_id``, grouped into
-    coarse process buckets (see :data:`_PROCESS_MAP`). Per-process ``tokens`` is
-    the all-kinds total (input+output+cacheRead+cacheWrite); totals sum across the
-    processes. ``modelLabel`` is the most-used model's human label. Returns the
-    empty-usage shape (``processes: []``) when the run has no recorded calls.
+    Sums every :class:`ClaudeUsage` row stamped with ``run_id`` into two parallel
+    groupings from the same rows:
+
+    * ``processes`` — coarse process buckets (see :data:`_PROCESS_MAP`), flat
+      across the run (kept for back-compat).
+    * ``tickets`` — one entry per attributed ticket, each with its own per-process
+      sub-rows; calls with no ticket attribution collapse into a single
+      run-level entry (``ticketExternalId: ""``), sorted last.
+
+    Per-process ``tokens`` is the all-kinds total (input+output+cacheRead+
+    cacheWrite); totals sum across the processes. ``modelLabel`` is the most-used
+    model's human label. Returns the empty-usage shape when the run has no
+    recorded calls.
 
     Args:
         session: An open SQLAlchemy session bound to the app database.
@@ -243,55 +259,82 @@ def run_breakdown(session: Session, run_id: int) -> dict[str, Any]:
             "totalCostUsd": 0.0,
             "totalTokens": 0,
             "processes": [],
+            "tickets": [],
         }
 
-    model_counts: dict[str, int] = {}
-    groups: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        model_counts[row.model or ""] = model_counts.get(row.model or "", 0) + 1
-        key, name = _process_for_action(row.action)
-        group = groups.get(key)
-        if group is None:
-            group = groups[key] = {
-                "key": key,
-                "name": name,
-                "action": (row.action or "").strip() or key,
-                "input": 0,
-                "output": 0,
-                "tokens": 0,
-                "costUsd": 0.0,
-                "calls": 0,
-            }
-        row_tokens = (
-            int(row.input_tokens or 0)
-            + int(row.output_tokens or 0)
-            + int(row.cache_read_tokens or 0)
-            + int(row.cache_write_tokens or 0)
-        )
+    def _new_group(key: str, name: str, action: str) -> dict[str, Any]:
+        return {
+            "key": key, "name": name, "action": action,
+            "input": 0, "output": 0, "tokens": 0, "costUsd": 0.0, "calls": 0,
+        }
+
+    def _accumulate(group: dict[str, Any], row: ClaudeUsage, row_tokens: int) -> None:
         group["input"] += int(row.input_tokens or 0)
         group["output"] += int(row.output_tokens or 0)
         group["tokens"] += row_tokens
         group["costUsd"] += float(row.cost_usd or 0.0)
         group["calls"] += 1
 
+    def _finalize_process(group: dict[str, Any]) -> dict[str, Any]:
+        calls = group["calls"]
+        return {
+            "key": group["key"],
+            "name": group["name"],
+            "meta": f"{group['action']} · {calls} call{'s' if calls != 1 else ''}",
+            "input": group["input"],
+            "output": group["output"],
+            "tokens": group["tokens"],
+            "costUsd": round(group["costUsd"], 2),
+        }
+
+    model_counts: dict[str, int] = {}
+    groups: dict[str, dict[str, Any]] = {}  # process key -> aggregate (flat)
+    # ticket external id ("" == run-level) -> {"processes": {key -> aggregate}}
+    ticket_groups: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in rows:
+        model_counts[row.model or ""] = model_counts.get(row.model or "", 0) + 1
+        key, name = _process_for_action(row.action)
+        action = (row.action or "").strip() or key
+        row_tokens = (
+            int(row.input_tokens or 0)
+            + int(row.output_tokens or 0)
+            + int(row.cache_read_tokens or 0)
+            + int(row.cache_write_tokens or 0)
+        )
+        group = groups.get(key)
+        if group is None:
+            group = groups[key] = _new_group(key, name, action)
+        _accumulate(group, row, row_tokens)
+
+        tid = (row.ticket_external_id or "").strip()
+        procs = ticket_groups.setdefault(tid, {})
+        tproc = procs.get(key)
+        if tproc is None:
+            tproc = procs[key] = _new_group(key, name, action)
+        _accumulate(tproc, row, row_tokens)
+
     top_model = max(model_counts, key=lambda m: model_counts[m])
     model_label = MODEL_LABELS.get(top_model, (top_model, ""))[0] if top_model else ""
 
-    processes = []
-    for group in groups.values():
-        calls = group["calls"]
-        processes.append(
+    processes = [_finalize_process(g) for g in groups.values()]
+    processes.sort(key=lambda p: p["costUsd"], reverse=True)
+
+    tickets = []
+    for tid, procs in ticket_groups.items():
+        finalized = [_finalize_process(g) for g in procs.values()]
+        finalized.sort(key=lambda p: p["costUsd"], reverse=True)
+        tickets.append(
             {
-                "key": group["key"],
-                "name": group["name"],
-                "meta": f"{group['action']} · {calls} call{'s' if calls != 1 else ''}",
-                "input": group["input"],
-                "output": group["output"],
-                "tokens": group["tokens"],
-                "costUsd": round(group["costUsd"], 2),
+                "ticketExternalId": tid,
+                "input": sum(p["input"] for p in finalized),
+                "output": sum(p["output"] for p in finalized),
+                "tokens": sum(p["tokens"] for p in finalized),
+                "costUsd": round(sum(p["costUsd"] for p in finalized), 2),
+                "processes": finalized,
             }
         )
-    processes.sort(key=lambda p: p["costUsd"], reverse=True)
+    # Real tickets first (by cost desc); the run-level "" bucket sorts last.
+    tickets.sort(key=lambda t: (t["ticketExternalId"] == "", -t["costUsd"]))
 
     return {
         "runId": run_id,
@@ -299,4 +342,5 @@ def run_breakdown(session: Session, run_id: int) -> dict[str, Any]:
         "totalCostUsd": round(sum(p["costUsd"] for p in processes), 2),
         "totalTokens": sum(p["tokens"] for p in processes),
         "processes": processes,
+        "tickets": tickets,
     }

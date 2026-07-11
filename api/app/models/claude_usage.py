@@ -22,6 +22,9 @@ class ClaudeUsage(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     ts: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     run_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # The ticket this call's spend is attributed to, for the grouped-by-ticket
+    # per-run cost card. Nullable: run-level calls (no ticket context) stay NULL.
+    ticket_external_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     model: Mapped[str] = mapped_column(String(64), default="")
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)

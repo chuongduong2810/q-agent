@@ -211,33 +211,56 @@ def run_prompt(
     env, owner_id = _resolve_claude_env()
 
     # Register the call so operators can observe it live (logs + /ai/activity + WS).
-    from app.services import activity
+    from app.services import activity, run_context, run_control
 
     call_id = activity.start(label or skill or "Claude CLI", skill)
     logger.info("Claude CLI: {} chars prompt, model={}", len(prompt), model)
+    # Attribute this call to the ambient run so cancelling the run can terminate
+    # the in-flight subprocess (below); None for non-run callers (bootstrap/test).
+    run_id = run_context.get_run()
     t0 = time.monotonic()
+    proc: subprocess.Popen[str] | None = None
     try:
-        proc = subprocess.run(  # noqa: S603
+        # Popen (not subprocess.run) so we hold a handle to register with
+        # run_control — a run cancel then kills the live CLI process immediately
+        # (run_control.kill_processes) instead of waiting for the next ticket
+        # checkpoint while a long analysis blocks the worker thread.
+        proc = subprocess.Popen(  # noqa: S603
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout or settings.claude_timeout_s,
             encoding="utf-8",
             cwd=resolved_cwd,
             env=env,
         )
+        if run_id is not None:
+            run_control.register_process(run_id, proc)
+        try:
+            stdout_text, stderr_text = proc.communicate(
+                timeout=timeout or settings.claude_timeout_s
+            )
+        except subprocess.TimeoutExpired as exc:  # noqa: TRY003
+            proc.kill()
+            proc.communicate()
+            activity.finish(call_id, ok=False, error="timed out")
+            raise ClaudeError(
+                f"Claude CLI timed out after {timeout or settings.claude_timeout_s}s"
+            ) from exc
     except FileNotFoundError as exc:  # noqa: TRY003
         activity.finish(call_id, ok=False, error="Claude CLI not found")
         raise ClaudeError(
             f"Claude CLI not found (looked for '{settings.claude_bin}'). Install it and "
             "authenticate with `claude login`."
         ) from exc
-    except subprocess.TimeoutExpired as exc:  # noqa: TRY003
-        activity.finish(call_id, ok=False, error="timed out")
-        raise ClaudeError(f"Claude CLI timed out after {timeout or settings.claude_timeout_s}s") from exc
+    except ClaudeError:
+        raise
     except Exception as exc:  # noqa: BLE001
         activity.finish(call_id, ok=False, error=str(exc)[:200])
         raise
+    finally:
+        if proc is not None and run_id is not None:
+            run_control.unregister_process(run_id, proc)
 
     # If the CLI refreshed the (short-lived) OAuth access token in-place, capture
     # it back into the store so the credential doesn't silently expire between
@@ -249,8 +272,8 @@ def run_prompt(
         # credit / rate-limit / unknown-model) to STDOUT as JSON and leaves
         # STDERR empty — so a bare `exited 1:` message hides the real cause.
         # Surface stdout when stderr is empty, and log both streams in full.
-        err = proc.stderr.strip()
-        out = proc.stdout.strip()
+        err = stderr_text.strip()
+        out = stdout_text.strip()
         logger.error(
             "Claude CLI exited {}: stderr={!r} stdout={!r}",
             proc.returncode,
@@ -268,7 +291,7 @@ def run_prompt(
 
     activity.finish(call_id, ok=True)
     wall_ms = int((time.monotonic() - t0) * 1000)
-    raw = proc.stdout.strip()
+    raw = stdout_text.strip()
     # JSON envelope: {"type":"result","result":"...","usage":{...},"total_cost_usd":...}
     envelope: dict | None = None
     try:

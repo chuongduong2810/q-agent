@@ -18,6 +18,31 @@ from collections.abc import Iterator
 import pytest
 
 
+class FakePopen:
+    """Minimal ``subprocess.Popen`` stand-in for ``claude_cli.run_prompt`` tests.
+
+    ``run_prompt`` spawns the CLI via ``subprocess.Popen(...)`` and reads it with
+    ``communicate(timeout=...)`` so a run cancel can kill the live process. Tests
+    patch ``claude_cli.subprocess.Popen`` with a factory returning this; it
+    exposes only the surface ``run_prompt`` touches: ``communicate()`` returning
+    ``(stdout, stderr)``, ``returncode``, and no-op ``kill``/``terminate``.
+    """
+
+    def __init__(self, *, returncode: int = 0, stdout: str = "", stderr: str = ""):
+        self.returncode = returncode
+        self._stdout = stdout
+        self._stderr = stderr
+
+    def communicate(self, timeout=None):  # noqa: ANN001 - matches Popen signature
+        return self._stdout, self._stderr
+
+    def kill(self):
+        pass
+
+    def terminate(self):
+        pass
+
+
 @pytest.fixture
 def workspace_dir(tmp_path, monkeypatch) -> Iterator:
     """Point the app's workspace (DB + specs + evidence) at a temp directory and
@@ -106,7 +131,7 @@ def shared_claude_credential(db_session):
     """Seed a shared Claude credential row (#95) so ``claude_cli.run_prompt``
     resolves an effective ``CLAUDE_CONFIG_DIR`` instead of raising "no
     credentials configured" — for tests that exercise the real ``run_prompt``
-    body with only ``subprocess.run`` mocked out."""
+    body with only ``subprocess.Popen`` mocked out."""
     from app.services import claude_credentials
 
     claude_credentials.upsert_shared(db_session, '{"token": "test-token"}')

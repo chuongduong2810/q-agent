@@ -22,6 +22,7 @@ import type {
   ProjectConfigUpdate,
   ProviderKind,
   RunCreate,
+  RunOut,
   SettingsUpdate,
   SharedProjectCreate,
   SyncRequest,
@@ -453,11 +454,26 @@ export const useSyncTickets = () => {
 // -------------------------------------------------------------- runs
 export const useRuns = () => useQuery({ queryKey: queryKeys.runs, queryFn: api.listRuns });
 
+// Statuses where the backend is actively advancing the run (not waiting on the
+// user and not terminal). The run WebSocket drives refreshes, but its events are
+// fire-and-forget — a dropped/late terminal event leaves the detail screen frozen
+// on a stale snapshot (e.g. "0/N" with tickets stuck "Generating…"). Polling
+// while progressing self-heals that; it stops once the run is idle/terminal.
+const PROGRESSING_RUN_STATUSES = new Set([
+  "processing",
+  "sync",
+  "automation",
+  "executing",
+  "comment",
+]);
+
 export const useRun = (runId: number | string | null, opts?: Partial<UseQueryOptions>) =>
   useQuery({
     queryKey: queryKeys.run(runId ?? 0),
     queryFn: () => api.getRun(runId as number),
     enabled: runId != null,
+    refetchInterval: (q) =>
+      PROGRESSING_RUN_STATUSES.has((q.state.data as RunOut | undefined)?.status ?? "") ? 2500 : false,
     ...(opts as object),
   });
 

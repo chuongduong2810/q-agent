@@ -829,13 +829,24 @@ export interface RunAiProcess {
   costUsd: number; // spend in USD
 }
 
+/** One ticket's AI usage within a run, with its per-process sub-rows. */
+export interface RunAiTicket {
+  ticketExternalId: string; // "" == run-level (calls with no ticket attribution)
+  input: number;
+  output: number;
+  tokens: number;
+  costUsd: number;
+  processes: RunAiProcess[]; // this ticket's processes, sorted by costUsd desc
+}
+
 /** Per-process AI usage + cost for a run (GET /runs/{id}/ai-usage). */
 export interface RunAiUsage {
   runId: number;
   modelLabel: string; // "Claude Sonnet 4.6"
   totalCostUsd: number;
   totalTokens: number;
-  processes: RunAiProcess[]; // sorted by costUsd desc; [] if none
+  processes: RunAiProcess[]; // flat, sorted by costUsd desc; [] if none
+  tickets: RunAiTicket[]; // grouped by ticket, cost desc; run-level ("") last
 }
 
 /** Evidence grouped-by-ticket response for GET /runs/{id}/evidence. */
