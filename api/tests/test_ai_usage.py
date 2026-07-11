@@ -182,6 +182,54 @@ def test_run_breakdown_groups_by_process_and_isolates_runs(workspace_dir):
 
     # A run with no usage returns the empty contract shape.
     assert empty["processes"] == []
+    assert empty["tickets"] == []
     assert empty["modelLabel"] == ""
     assert empty["totalCostUsd"] == 0.0
     assert empty["totalTokens"] == 0
+
+
+def test_run_breakdown_groups_by_ticket_with_process_subrows(workspace_dir):
+    """run_breakdown also groups a run's rows by ticket, each ticket carrying its
+    own per-process sub-rows; calls with no ticket collapse into a run-level ("")
+    group sorted last."""
+    from app import db
+
+    # Ticket 754: one analyze + one generate. Ticket 976: one analyze (cheaper).
+    ai_usage_service.record(
+        model="claude-sonnet-5", input_tokens=1000, output_tokens=500,
+        cache_read=0, cache_write=0, cost_usd=0.20, duration_ms=1000,
+        action="requirement-analyst", run_id=55, ticket_external_id="754",
+    )
+    ai_usage_service.record(
+        model="claude-sonnet-5", input_tokens=2000, output_tokens=1000,
+        cache_read=0, cache_write=0, cost_usd=0.50, duration_ms=1000,
+        action="test-case-generator", run_id=55, ticket_external_id="754",
+    )
+    ai_usage_service.record(
+        model="claude-sonnet-5", input_tokens=500, output_tokens=300,
+        cache_read=0, cache_write=0, cost_usd=0.10, duration_ms=1000,
+        action="requirement-analyst", run_id=55, ticket_external_id="976",
+    )
+    # A run-level call (no ticket) must land in the "" bucket, sorted last.
+    ai_usage_service.record(
+        model="claude-sonnet-5", input_tokens=100, output_tokens=100,
+        cache_read=0, cache_write=0, cost_usd=0.05, duration_ms=1000,
+        action="automation-generator", run_id=55,
+    )
+
+    session = db.SessionLocal()
+    try:
+        out = ai_usage_service.run_breakdown(session, 55)
+    finally:
+        session.close()
+
+    # Tickets sorted by cost desc, run-level ("") last: 754 (0.70), 976 (0.10), "" (0.05).
+    assert [t["ticketExternalId"] for t in out["tickets"]] == ["754", "976", ""]
+    t754 = out["tickets"][0]
+    assert t754["costUsd"] == 0.70
+    assert t754["tokens"] == 4500  # (1000+500) + (2000+1000)
+    # 754's processes are its own sub-rows, cost desc: generate (0.50) before analyze (0.20).
+    assert [p["key"] for p in t754["processes"]] == ["generate", "analyze"]
+    assert out["tickets"][2]["processes"][0]["key"] == "automation"
+    # Flat process view still totals across tickets (back-compat).
+    assert out["totalCostUsd"] == 0.85

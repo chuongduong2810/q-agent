@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
+
+from conftest import FakePopen
 
 from app.services import activity, claude_cli
 
@@ -11,8 +12,8 @@ from app.services import activity, claude_cli
 def test_run_prompt_records_activity(monkeypatch, shared_claude_credential):
     monkeypatch.setattr(
         claude_cli.subprocess,
-        "run",
-        lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps({"result": "ok"}), stderr=""),
+        "Popen",
+        lambda *a, **k: FakePopen(returncode=0, stdout=json.dumps({"result": "ok"}), stderr=""),
     )
     out = claude_cli.run_prompt("hi", label="Analyze SUR-1", skill="requirement-analyst")
     assert out == "ok"
@@ -27,7 +28,7 @@ def test_run_prompt_records_failure(monkeypatch, shared_claude_credential):
     def boom(*a, **k):
         raise FileNotFoundError("no claude")
 
-    monkeypatch.setattr(claude_cli.subprocess, "run", boom)
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", boom)
     try:
         claude_cli.run_prompt("hi", label="Failing call")
     except claude_cli.ClaudeError:

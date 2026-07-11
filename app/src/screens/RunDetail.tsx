@@ -15,13 +15,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/misc";
 import { providerGlyph } from "@/components/ui/badges";
 import { PipelineRail, runStatusToStage } from "@/components/ui/PipelineRail";
 import { useNavigate, useParams } from "react-router-dom";
 import { ALL_TICKETS_PAGE_SIZE, useRun, useRunAiUsage, useTickets } from "@/hooks/queries";
 import { useRunEvents } from "@/hooks/useRunEvents";
-import type { ProgressEvent, RunAiUsage, RunTicketOut } from "@/types/api";
+import type { ProgressEvent, RunAiProcess, RunAiTicket, RunAiUsage, RunTicketOut } from "@/types/api";
 
 const RUN_STATUS_LABEL: Record<string, string> = {
   processing: "AI processing",
@@ -252,7 +251,14 @@ export function RunDetail() {
       </div>
 
       {aiUsage && aiUsage.processes.length > 0 && (
-        <AiUsageCard usage={aiUsage} runCode={run.code} />
+        <AiUsageCard
+          usage={aiUsage}
+          runCode={run.code}
+          resolveTicket={(externalId) => {
+            const t = tickets?.find((x) => x.externalId === externalId);
+            return { title: t?.title ?? externalId, providerKind: t?.providerKind ?? "ado" };
+          }}
+        />
       )}
     </div>
   );
@@ -290,23 +296,41 @@ function RunTicketRow({
       transition={{ duration: 0.4, delay: Math.min(index * 0.04, 0.3), ease: "easeOut" }}
       className="glass flex items-center gap-[14px] rounded-2xl p-[16px_18px]"
     >
-      {/* Provider avatar; a violet ring spins around it while this ticket is being processed. */}
+      {/* Provider avatar; while this ticket is being processed it pulses with the
+          same treatment as the main "analyzing" logo — a soft halo and staggered
+          expanding rings around a gently scaling glyph. */}
       <div className="relative h-[34px] w-[34px] shrink-0">
         {current && (
-          <span
-            className="absolute rounded-[13px]"
-            style={{
-              inset: "-3px",
-              border: "2px solid transparent",
-              borderTopColor: "#c4b5fd",
-              borderRightColor: "#c4b5fd",
-              animation: "spin 1s linear infinite",
-            }}
-          />
+          <>
+            <span
+              className="pointer-events-none absolute"
+              style={{
+                inset: "-7px",
+                borderRadius: "50%",
+                background: "radial-gradient(circle,rgba(139,92,246,.55),transparent 68%)",
+                filter: "blur(7px)",
+                animation: "logoHalo 2.6s ease-in-out infinite",
+              }}
+            />
+            {[0, 0.8, 1.6].map((delay) => (
+              <span
+                key={delay}
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  borderRadius: "10px",
+                  border: "1.5px solid rgba(167,139,250,.45)",
+                  animation: `ring 2.4s ease-out infinite ${delay}s`,
+                }}
+              />
+            ))}
+          </>
         )}
         <div
-          className="flex h-full w-full items-center justify-center rounded-[10px] text-[14px] font-black text-white"
-          style={{ background: color }}
+          className="relative z-[1] flex h-full w-full items-center justify-center rounded-[10px] text-[14px] font-black text-white"
+          style={{
+            background: color,
+            animation: current ? "logoPulse 2.2s ease-in-out infinite" : undefined,
+          }}
         >
           {glyph}
         </div>
@@ -320,7 +344,6 @@ function RunTicketRow({
 
       {current && (
         <div className="flex items-center gap-[9px] text-[12.5px] font-semibold text-[#c4b5fd]">
-          <Spinner size={15} />
           {statusText}
         </div>
       )}
@@ -363,12 +386,123 @@ const PROCESS_ICON: Record<string, LucideIcon> = {
   evidence: ImageIcon,
 };
 
+const AI_COST_GRID = "1.5fr .8fr .8fr .8fr .7fr";
+
+/** One process sub-row (INPUT/OUTPUT/TOKENS/COST) under a ticket group. */
+function AiProcessRow({ process }: { process: RunAiProcess }) {
+  const Icon = PROCESS_ICON[process.key] ?? Cpu;
+  return (
+    <div
+      className="grid items-center gap-[10px] p-[10px_18px_10px_40px]"
+      style={{ gridTemplateColumns: AI_COST_GRID, borderTop: "1px solid rgba(255,255,255,.045)" }}
+    >
+      <div className="flex min-w-0 items-center gap-[10px]">
+        <span
+          className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[7px]"
+          style={{ background: "rgba(139,92,246,.14)" }}
+        >
+          <Icon size={13} strokeWidth={2} color="#a78bfa" />
+        </span>
+        <div className="min-w-0">
+          <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-semibold">
+            {process.name}
+          </div>
+          <div className="text-[10.5px] text-[#7a7a8c]">{process.meta}</div>
+        </div>
+      </div>
+      <span className="text-right font-mono text-[12px] text-[#9a9aae]">{fmtCompact(process.input)}</span>
+      <span className="text-right font-mono text-[12px] text-[#9a9aae]">{fmtCompact(process.output)}</span>
+      <span className="text-right font-mono text-[12px] font-semibold text-[#c7c7d4]">
+        {fmtCompact(process.tokens)}
+      </span>
+      <span className="text-right font-mono text-[12.5px] font-bold text-[#6ee7b7]">
+        {fmtCost(process.costUsd)}
+      </span>
+    </div>
+  );
+}
+
 /**
- * AI usage & cost card — per-process token spend for a run, read from
- * `GET /runs/{id}/ai-usage`. Rendered at the bottom of the run overview only when
- * there is at least one process with usage.
+ * A ticket group header (provider glyph + code + title + the ticket's total
+ * spend) followed by its per-process sub-rows. The synthetic run-level group
+ * (empty ticket id) collects calls with no ticket attribution.
  */
-function AiUsageCard({ usage, runCode }: { usage: RunAiUsage; runCode: string }) {
+function AiTicketGroup({
+  ticket,
+  resolveTicket,
+}: {
+  ticket: RunAiTicket;
+  resolveTicket: (externalId: string) => { title: string; providerKind: string };
+}) {
+  const runLevel = ticket.ticketExternalId === "";
+  const { title, providerKind } = resolveTicket(ticket.ticketExternalId);
+  const [glyph, color] = providerGlyph[providerKind] ?? ["?", "#8b8b9e"];
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-[11px] p-[12px_18px]"
+        style={{ borderTop: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.025)" }}
+      >
+        {runLevel ? (
+          <span
+            className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-[8px]"
+            style={{ background: "rgba(139,92,246,.14)" }}
+          >
+            <Cpu size={15} strokeWidth={2} color="#a78bfa" />
+          </span>
+        ) : (
+          <span
+            className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-[8px] text-[12px] font-black text-white"
+            style={{ background: color }}
+          >
+            {glyph}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          {runLevel ? (
+            <div className="text-[13px] font-bold">Run&#8209;level</div>
+          ) : (
+            <>
+              <div className="font-mono text-[11px] font-semibold text-violet">
+                {ticket.ticketExternalId}
+              </div>
+              <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] font-semibold">
+                {title}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="font-mono text-[13.5px] font-black tracking-[-.02em] text-[#6ee7b7]">
+            {fmtCost(ticket.costUsd)}
+          </div>
+          <div className="text-[10px] text-[#8b8b9e]">{fmtCompact(ticket.tokens)} tokens</div>
+        </div>
+      </div>
+      {ticket.processes.map((p) => (
+        <AiProcessRow key={p.key} process={p} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * AI usage & cost card — per-run Claude spend read from `GET /runs/{id}/ai-usage`,
+ * grouped by ticket with each ticket's processes (Analyze / Generate) as
+ * sub-rows. Falls back to the flat per-process list if the API returns no ticket
+ * grouping. Rendered at the bottom of the run overview only when there is usage.
+ */
+function AiUsageCard({
+  usage,
+  runCode,
+  resolveTicket,
+}: {
+  usage: RunAiUsage;
+  runCode: string;
+  resolveTicket: (externalId: string) => { title: string; providerKind: string };
+}) {
+  const grouped = usage.tickets && usage.tickets.length > 0;
   return (
     <div className="glass mt-[18px] overflow-hidden rounded-[18px]">
       {/* Header */}
@@ -387,7 +521,7 @@ function AiUsageCard({ usage, runCode }: { usage: RunAiUsage; runCode: string })
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-bold">AI usage &amp; cost</div>
           <div className="text-[11.5px] text-[#8b8b9e]">
-            Per-process spend for {runCode} &middot; {usage.modelLabel}
+            Per-ticket spend for {runCode} &middot; {usage.modelLabel}
           </div>
         </div>
         <div className="text-right">
@@ -401,52 +535,25 @@ function AiUsageCard({ usage, runCode }: { usage: RunAiUsage; runCode: string })
       {/* Column headers */}
       <div
         className="grid items-center gap-[10px] p-[9px_18px] text-[10px] font-bold tracking-[.05em] text-[#6c6c7e]"
-        style={{ gridTemplateColumns: "1.5fr .8fr .8fr .8fr .7fr", background: "rgba(255,255,255,.02)" }}
+        style={{ gridTemplateColumns: AI_COST_GRID, background: "rgba(255,255,255,.02)" }}
       >
-        <span>AI PROCESS</span>
+        <span>{grouped ? "TICKET / PROCESS" : "AI PROCESS"}</span>
         <span className="text-right">INPUT</span>
         <span className="text-right">OUTPUT</span>
         <span className="text-right">TOKENS</span>
         <span className="text-right">COST</span>
       </div>
 
-      {/* Rows */}
-      {usage.processes.map((p) => {
-        const Icon = PROCESS_ICON[p.key] ?? Cpu;
-        return (
-          <div
-            key={p.key}
-            className="grid items-center gap-[10px] p-[12px_18px]"
-            style={{
-              gridTemplateColumns: "1.5fr .8fr .8fr .8fr .7fr",
-              borderTop: "1px solid rgba(255,255,255,.045)",
-            }}
-          >
-            <div className="flex min-w-0 items-center gap-[10px]">
-              <span
-                className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px]"
-                style={{ background: "rgba(139,92,246,.14)" }}
-              >
-                <Icon size={14} strokeWidth={2} color="#a78bfa" />
-              </span>
-              <div className="min-w-0">
-                <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12.5px] font-semibold">
-                  {p.name}
-                </div>
-                <div className="text-[10.5px] text-[#7a7a8c]">{p.meta}</div>
-              </div>
-            </div>
-            <span className="text-right font-mono text-[12px] text-[#9a9aae]">{fmtCompact(p.input)}</span>
-            <span className="text-right font-mono text-[12px] text-[#9a9aae]">{fmtCompact(p.output)}</span>
-            <span className="text-right font-mono text-[12px] font-semibold text-[#c7c7d4]">
-              {fmtCompact(p.tokens)}
-            </span>
-            <span className="text-right font-mono text-[12.5px] font-bold text-[#6ee7b7]">
-              {fmtCost(p.costUsd)}
-            </span>
-          </div>
-        );
-      })}
+      {/* Rows: grouped by ticket, or the flat process list as a fallback. */}
+      {grouped
+        ? usage.tickets.map((t) => (
+            <AiTicketGroup
+              key={t.ticketExternalId || "__run-level"}
+              ticket={t}
+              resolveTicket={resolveTicket}
+            />
+          ))
+        : usage.processes.map((p) => <AiProcessRow key={p.key} process={p} />)}
     </div>
   );
 }

@@ -11,9 +11,9 @@ admin-only shared). Never asserts on plaintext tokens in responses.
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 import pytest
+from conftest import FakePopen
 
 from app.services import claude_cli, claude_credentials
 
@@ -43,12 +43,12 @@ def _login(client, email, password):
     return client.post("/auth/login", json={"email": email, "password": password})
 
 
-def _fake_subprocess_run(returncode=0, result="ok", usage=None):
+def _fake_popen(returncode=0, result="ok", usage=None):
     envelope = {"result": result}
     if usage is not None:
         envelope["usage"] = usage
         envelope["total_cost_usd"] = 0.01
-    return lambda *a, **k: SimpleNamespace(
+    return lambda *a, **k: FakePopen(
         returncode=returncode, stdout=json.dumps(envelope), stderr=""
     )
 
@@ -192,7 +192,7 @@ def test_set_preferred_mode_rejects_unknown_mode(db_session):
 def test_missing_credentials_raises_clean_error(monkeypatch, workspace_dir):
     """No own/shared credential at all -> ClaudeError, subprocess never invoked."""
     called = []
-    monkeypatch.setattr(claude_cli.subprocess, "run", lambda *a, **k: called.append(1))
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", lambda *a, **k: called.append(1))
 
     with pytest.raises(claude_cli.ClaudeError, match="No Claude credentials configured"):
         claude_cli.run_prompt("hi", label="Test call")
@@ -213,11 +213,11 @@ def test_run_prompt_sets_claude_config_dir_for_own_credential(monkeypatch, db_se
 
     captured = {}
 
-    def fake_run(cmd, **kwargs):
+    def fake_popen(cmd, **kwargs):
         captured["env"] = kwargs.get("env")
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"result": "ok"}), stderr="")
+        return FakePopen(returncode=0, stdout=json.dumps({"result": "ok"}), stderr="")
 
-    monkeypatch.setattr(claude_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", fake_popen)
 
     run_context.set_run(run.id)
     try:
@@ -234,11 +234,11 @@ def test_run_prompt_falls_back_to_shared_config_dir(monkeypatch, shared_claude_c
     """No ambient run (no owner resolvable) -> falls back to the shared credential dir."""
     captured = {}
 
-    def fake_run(cmd, **kwargs):
+    def fake_popen(cmd, **kwargs):
         captured["env"] = kwargs.get("env")
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"result": "ok"}), stderr="")
+        return FakePopen(returncode=0, stdout=json.dumps({"result": "ok"}), stderr="")
 
-    monkeypatch.setattr(claude_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", fake_popen)
 
     claude_cli.run_prompt("hi", label="Unowned call")
 
@@ -259,7 +259,7 @@ def test_usage_records_under_the_right_owner(monkeypatch, db_session):
     db_session.refresh(run)
 
     usage = {"input_tokens": 10, "output_tokens": 20}
-    monkeypatch.setattr(claude_cli.subprocess, "run", _fake_subprocess_run(usage=usage))
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", _fake_popen(usage=usage))
 
     run_context.set_run(run.id)
     try:
@@ -277,7 +277,7 @@ def test_usage_records_under_the_right_owner(monkeypatch, db_session):
 def test_usage_records_with_no_owner_when_using_shared(monkeypatch, shared_claude_credential):
     from app.models.claude_usage import ClaudeUsage
 
-    monkeypatch.setattr(claude_cli.subprocess, "run", _fake_subprocess_run(usage={"input_tokens": 1}))
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", _fake_popen(usage={"input_tokens": 1}))
 
     claude_cli.run_prompt("hi", label="Shared usage call")
 

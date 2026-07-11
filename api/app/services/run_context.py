@@ -18,6 +18,10 @@ from contextvars import ContextVar
 from typing import Iterator
 
 _current_run: ContextVar[int | None] = ContextVar("current_run_id", default=None)
+# The ambient ticket within the current run — set per-ticket by the pipeline so
+# AI spend can be attributed to a ticket (grouped-by-ticket cost card), the same
+# way _current_run attributes it to a run. None for run-level (non-ticket) calls.
+_current_ticket: ContextVar[str | None] = ContextVar("current_ticket_external_id", default=None)
 
 
 def set_run(run_id: int | None) -> None:
@@ -30,9 +34,29 @@ def get_run() -> int | None:
     return _current_run.get()
 
 
+def get_ticket() -> str | None:
+    """Return the ambient ticket external id for the current context, or None."""
+    return _current_ticket.get()
+
+
 def clear() -> None:
-    """Clear the ambient run id for the current context."""
+    """Clear the ambient run id + ticket for the current context."""
     _current_run.set(None)
+    _current_ticket.set(None)
+
+
+@contextmanager
+def ticket_scope(ticket_external_id: str | None) -> Iterator[None]:
+    """Bind ``ticket_external_id`` as the ambient ticket for the ``with`` block.
+
+    Restores the previous value on exit (nested/reentrant use is safe). Used by
+    the analyze+generate pipeline to attribute each ticket's Claude spend.
+    """
+    token = _current_ticket.set(ticket_external_id)
+    try:
+        yield
+    finally:
+        _current_ticket.reset(token)
 
 
 @contextmanager

@@ -215,6 +215,16 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             {"ticket": ticket.external_id, "caseCount": case_count},
         )
     except ClaudeError as exc:
+        # A run cancel kills the in-flight Claude CLI (run_control.kill_processes),
+        # which surfaces here as a ClaudeError. Don't mark the ticket "failed" for a
+        # deliberate cancel — leave its status for the cancel flow to finalize.
+        if run_control.is_cancelled(run.id, db):
+            logger.info(
+                "Run {} cancelled mid-ticket {} — skipping error mark",
+                run.id,
+                ticket.external_id,
+            )
+            return
         logger.error("AI pipeline error for run={} ticket={}: {}", run.id, ticket.external_id, exc)
         run_ticket.gen_status = "error"
         run_ticket.analysis_error = str(exc)
@@ -249,7 +259,10 @@ def _run_pipeline(run_id: int) -> None:
                 if run_control.is_cancelled(run.id, db):
                     logger.info("Run {} cancelled — stopping AI pipeline", run.code)
                     return
-                _process_run_ticket(db, run, run_ticket)
+                # Attribute this ticket's analyze+generate Claude spend to it, so
+                # the per-run cost card can group by ticket (see ai_usage_service).
+                with run_context.ticket_scope(run_ticket.ticket_external_id):
+                    _process_run_ticket(db, run, run_ticket)
 
             if not set_run_status(db, run, "review"):
                 return  # already terminal (e.g. cancelled) — don't overwrite it
