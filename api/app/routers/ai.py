@@ -8,15 +8,18 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps_auth import current_user, require_admin
 from app.models.user import User
+from app.models.claude_credentials import STATUS_ACTIVE, STATUS_EXPIRED
 from app.schemas import (
     ClaudeCredentialModeUpdate,
     ClaudeCredentialsStatusOut,
+    ClaudeCredentialsTestOut,
     ClaudeCredentialsUpload,
     OkResponse,
 )
-from app.services import activity, ai_usage_service, claude_usage_reader
+from app.services import activity, ai_usage_service, claude_cli, claude_usage_reader
 from app.services.claude_credentials import ClaudeCredentialsError, delete_own, delete_shared
-from app.services.claude_credentials import set_preferred_mode
+from app.services.claude_credentials import persist_refreshed, resolve_scoped_config_dir
+from app.services.claude_credentials import set_preferred_mode, set_scoped_status
 from app.services.claude_credentials import status_for as credentials_status_for
 from app.services.claude_credentials import upsert_own, upsert_shared
 
@@ -62,6 +65,42 @@ def get_credentials_status(
     """
     owner_id = user.id if user is not None else None
     return ClaudeCredentialsStatusOut.model_validate(credentials_status_for(db, owner_id))
+
+
+@router.post("/ai/credentials/test", response_model=ClaudeCredentialsTestOut)
+def test_credentials(
+    scope: str = "effective",
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> ClaudeCredentialsTestOut:
+    """Run a real minimal Claude call under a credential and report whether it
+    authenticates.
+
+    ``scope`` selects which credential to test: ``"effective"`` (default — the
+    caller's own→shared precedence, used by the header + personal card),
+    ``"shared"`` (the workspace shared account, used by the admin Claude-
+    credentials page even when the admin has their own on file), or ``"own"``.
+
+    The only authoritative check (OAuth tokens can be expired-but-refreshable),
+    and it feeds the outcome back into the stored status so the passive
+    header/AI-stats indicator stays accurate afterwards.
+    """
+    if scope not in ("effective", "shared", "own"):
+        scope = "effective"
+    owner_id = user.id if user is not None else None
+    config_dir = resolve_scoped_config_dir(db, owner_id, scope)
+    if config_dir is None:
+        return ClaudeCredentialsTestOut(
+            ok=False, result="no_credential", message="No Claude credential is configured."
+        )
+    result, message = claude_cli.verify_credentials(config_dir)
+    if result == "ok":
+        set_scoped_status(db, owner_id, scope, STATUS_ACTIVE)
+        # A successful call may have refreshed the token on disk — capture it.
+        persist_refreshed(db, owner_id)
+    elif result == "invalid":
+        set_scoped_status(db, owner_id, scope, STATUS_EXPIRED)
+    return ClaudeCredentialsTestOut(ok=result == "ok", result=result, message=message)
 
 
 @router.put("/ai/credentials", response_model=OkResponse)

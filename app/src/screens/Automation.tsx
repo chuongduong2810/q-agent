@@ -1,7 +1,7 @@
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Download, FileCode, GitBranch, Pencil, Play, RotateCcw, Save, Sparkles, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/badges";
 import { Select } from "@/components/ui/Dropdown";

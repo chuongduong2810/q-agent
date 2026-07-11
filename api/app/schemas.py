@@ -870,6 +870,13 @@ class ClaudeCredentialModeUpdate(ApiModel):
 class ClaudeCredentialsMetaOut(ApiModel):
     """Public metadata for one credential row — never the token itself."""
 
+    # "active" | "expired" — "expired" is set when a real CLI call (or the test
+    # endpoint) reported the token is no longer usable, so the UI can flag it.
+    status: str = "active"
+    # Account identity the CLI wrote to <config_dir>/.claude.json after auth —
+    # populated once a call has run under the credential.
+    account_email: str | None = None
+    account_org: str | None = None
     subscription_type: str | None = None
     expires_at: datetime | None = None
     scopes: list[str] = Field(default_factory=list)
@@ -887,3 +894,12 @@ class ClaudeCredentialsStatusOut(ApiModel):
     mode: str = "none"  # "own" | "shared" | "none"
     own: ClaudeCredentialsMetaOut | None = None
     shared: ClaudeCredentialsMetaOut | None = None
+
+
+class ClaudeCredentialsTestOut(ApiModel):
+    """Result of an on-demand credential test (a real minimal Claude call)."""
+
+    ok: bool = False
+    # "ok" | "invalid" | "no_credential" | "error"
+    result: str = "error"
+    message: str = ""

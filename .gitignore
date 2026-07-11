@@ -40,3 +40,7 @@ api/workspace/
 
 # designs
 designs/
+# Local Agent installers staged for the /downloads route (built out-of-band, large)
+/downloads/*
+!/downloads/.gitkeep
+!/downloads/README.txt

@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ConnectionRow } from "@/components/settings/ConnectionRow";
 import { PROVIDER_META } from "@/components/settings/providerMeta";

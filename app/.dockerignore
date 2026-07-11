@@ -1,0 +1,11 @@
+# Keep the frontend build context lean. nginx.conf and package-lock.json are
+# NOT ignored — the Dockerfile needs them.
+node_modules
+dist
+*.tsbuildinfo
+.env
+.env.local
+e2e
+playwright-report
+test-results
+Dockerfile

@@ -1,6 +1,6 @@
 {
   "name": "@q-agent/agent",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "description": "Q-Agent Local Agent — claims execution jobs from the Q-Agent server and runs Playwright locally, so manual login/MFA happens on the user's own machine and session credentials never leave it.",
   "license": "UNLICENSED",
   "bin": {
@@ -34,6 +34,7 @@
   "dependencies": {
     "@playwright/test": "^1.61.1",
     "commander": "^12.1.0",
+    "electron-updater": "^6.3.9",
     "playwright": "^1.61.1"
   },
   "devDependencies": {
@@ -47,9 +48,30 @@
   "build": {
     "appId": "click.chuongnd.qagent-agent",
     "productName": "Q-Agent Local Agent",
-    "extraMetadata": { "main": "electron/main.cjs" },
-    "files": ["dist/**/*", "electron/**/*", "vendor/**/*", "package.json"],
-    "win": { "target": "nsis", "signAndEditExecutable": false },
-    "directories": { "output": "dist-bin/desktop" }
+    "extraMetadata": {
+      "main": "electron/main.cjs",
+      "qagentServer": "https://qagent.chuongnd.click/api"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "vendor/**/*",
+      "package.json"
+    ],
+    "artifactName": "qagent-agent-setup.${ext}",
+    "asar": false,
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://qagent.chuongnd.click/downloads/"
+      }
+    ],
+    "directories": {
+      "output": "dist-bin/desktop"
+    }
   }
 }

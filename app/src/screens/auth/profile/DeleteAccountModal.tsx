@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { AuthLabel, TextInput } from "@/components/auth/fields";
 import { api } from "@/lib/api";
 import { Modal, Spinner } from "./Modal";

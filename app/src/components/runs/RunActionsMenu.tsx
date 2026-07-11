@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Copy, MoreVertical, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { isTerminalRun } from "@/components/dashboard/runStatus";
 import { ApiError } from "@/lib/api";

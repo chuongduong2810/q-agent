@@ -27,11 +27,14 @@ from app.schemas import (
     ProjectOut,
     RepoKnowledgeOut,
 )
+from app.models.agent_device import AgentDevice
 from app.services import (
+    agent_capture_service,
     connection_service,
     knowledge_service,
     playwright_runner,
     project_config_service,
+    settings_store,
 )
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
@@ -225,10 +228,22 @@ def get_project_auth(
     config = project_config_service.get_config(db, key)
     check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
     owner_id = config.owner_id if config else None
-    return {
-        **project_config_service.auth_state(key, owner_id),
-        "capturing": playwright_runner.is_capturing(key),
-    }
+    return _auth_response(key, owner_id, config)
+
+
+def _auth_response(key: str, owner_id: int | None, config) -> dict:  # noqa: ANN001
+    """Merged manual-login state: the server-captured session file, else the
+    Local-Agent "captured" marker, plus whether a capture is in flight on either
+    the server or a paired agent."""
+    state = project_config_service.auth_state(key, owner_id)
+    if not state["exists"]:
+        marker = project_config_service.agent_auth_state(config)
+        if marker is not None:
+            state = marker
+    capturing = playwright_runner.is_capturing(key) or agent_capture_service.is_capturing(
+        owner_id, key
+    )
+    return {**state, "capturing": capturing}
 
 
 @router.post("/{key}/auth/capture", response_model=AuthStateOut)
@@ -246,15 +261,29 @@ def capture_project_auth(
     config = project_config_service.get_config(db, key)
     check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
     owner_id = config.owner_id if config else None
-    if not playwright_runner.is_capturing(key):
-        base_url = (config.base_url if config else "") or ""
-        if not base_url:
-            raise HTTPException(status_code=400, detail="Set a base URL for the project first.")
+    base_url = (config.base_url if config else "") or ""
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Set a base URL for the project first.")
+
+    # In Local Agent mode the browser must open on the operator's OWN machine, so
+    # queue the capture for the paired agent to run (it saves the session locally
+    # and reports back). Otherwise fall back to the server-side headed capture.
+    if settings_store.load_settings().get("executionTarget") == "local-agent":
+        has_device = (
+            db.query(AgentDevice)
+            .filter(AgentDevice.owner_id == owner_id, AgentDevice.revoked_at.is_(None))
+            .first()
+            is not None
+        )
+        if not has_device:
+            raise HTTPException(
+                status_code=409,
+                detail="No Local Agent paired — start your Local Agent, then Capture login.",
+            )
+        agent_capture_service.request_capture(owner_id, key, base_url)
+    elif not playwright_runner.is_capturing(key):
         playwright_runner.start_capture(key, base_url, owner_id=owner_id)
-    return {
-        **project_config_service.auth_state(key, owner_id),
-        "capturing": playwright_runner.is_capturing(key),
-    }
+    return _auth_response(key, owner_id, config)
 
 
 @router.delete("/{key}/auth", response_model=AuthStateOut)
@@ -267,7 +296,18 @@ def clear_project_auth(
     """
     config = project_config_service.get_config(db, key)
     check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
-    return project_config_service.clear_auth(key, config.owner_id if config else None)
+    owner_id = config.owner_id if config else None
+    result = project_config_service.clear_auth(key, owner_id)
+    # Also drop the Local-Agent "captured" marker so the UI reflects the clear.
+    # (The session itself lives on the agent's machine and is overwritten on the
+    # next capture; there's nothing server-side to delete there.)
+    if config is not None and (config.extra or {}).get("agentAuthCapturedAt"):
+        extra = dict(config.extra or {})
+        extra.pop("agentAuthCapturedAt", None)
+        extra.pop("agentAuthOrigin", None)
+        config.extra = extra
+        db.commit()
+    return {**result, "capturing": agent_capture_service.is_capturing(owner_id, key)}
 
 
 # --------------------------------------------------------------- Project repos

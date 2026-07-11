@@ -12,7 +12,7 @@ import {
   Sparkles,
   AlertTriangle,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";

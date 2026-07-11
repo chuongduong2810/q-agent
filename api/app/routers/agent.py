@@ -39,7 +39,7 @@ from app.models.execution import Execution, ExecutionResult
 from app.models.run import Run
 from app.models.testcase import AutomationSpec
 from app.models.user import User
-from app.services import agent_device_service, evidence_service, execution_service, settings_store, spec_service
+from app.services import agent_capture_service, agent_device_service, evidence_service, execution_service, project_config_service, settings_store, spec_service
 from app.services.auth_service import AuthError
 from app.services.ownership import get_owned_or_404
 from app.services.playwright_runner import _resolve_project_for_run
@@ -285,6 +285,53 @@ async def push_job_evidence(
         raise HTTPException(status_code=400, detail="Failed to store evidence")
     db.commit()
     return {"id": evidence.id, "kind": evidence.kind, "filename": evidence.filename}
+
+
+@router.post("/auth/next")
+def claim_next_auth_capture(
+    response: Response, user: User = Depends(require_agent), db: Session = Depends(get_db)
+) -> dict | None:
+    """Claim the oldest queued manual-login capture for this device's owner.
+
+    The agent opens a headed browser at ``baseUrl`` on the operator's machine,
+    lets them log in, saves the session locally (keyed by ``origin``, never
+    uploaded), then reports back via ``/agent/auth/{id}/complete``. 204 when
+    nothing is queued.
+    """
+    capture = agent_capture_service.claim_next(user.id)
+    if capture is None:
+        response.status_code = 204
+        return None
+    return {
+        "captureId": capture["id"],
+        "projectKey": capture["project_key"],
+        "baseUrl": capture["base_url"],
+        "origin": capture["origin"],
+    }
+
+
+@router.post("/auth/{capture_id}/complete")
+def complete_auth_capture(
+    capture_id: int, body: dict, user: User = Depends(require_agent), db: Session = Depends(get_db)
+) -> dict:
+    """Finalize a capture. Body: ``{"ok": bool, "error"?: str}``.
+
+    On success, stamp a persistent marker on the project config's ``extra`` so
+    the SPA shows "captured on your Local Agent" across restarts (the session
+    itself stays on the agent's machine).
+    """
+    capture = agent_capture_service.finish(capture_id, user.id)
+    if capture is None:
+        raise HTTPException(status_code=404, detail="Capture not found")
+    if body.get("ok"):
+        row = project_config_service.get_config_for_owner(db, capture["project_key"], user.id)
+        if row is not None:
+            extra = dict(row.extra or {})
+            extra["agentAuthCapturedAt"] = datetime.now(timezone.utc).isoformat()
+            extra["agentAuthOrigin"] = capture["origin"]
+            row.extra = extra
+            db.commit()
+    return {"ok": True}
 
 
 @router.post("/jobs/{execution_id}/complete")

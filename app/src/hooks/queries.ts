@@ -9,7 +9,7 @@ import {
   useQueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { ApiError, api } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 import type {
@@ -61,6 +61,16 @@ export const useRefreshAiStats = () => {
 // Claude CLI credentials (#95) — own (per-user) + shared (admin-only) status.
 export const useClaudeCredentialsStatus = () =>
   useQuery({ queryKey: queryKeys.claudeCredentialsStatus, queryFn: api.claudeCredentials.status });
+
+// On-demand credential test (real minimal Claude call). Refresh the status
+// afterwards so the passive expired/active indicator reflects the outcome.
+export const useTestClaudeCredentials = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (scope?: "effective" | "shared" | "own") => api.claudeCredentials.test(scope),
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.claudeCredentialsStatus }),
+  });
+};
 
 export const useUploadOwnClaudeCredentials = () => {
   const qc = useQueryClient();
@@ -194,7 +204,15 @@ export const useRefreshProjects = () => {
 // Catalog of the admin-curated shared namespace, so any member can browse
 // before cloning (GET /shared/projects — any authed caller).
 export const useSharedProjects = () =>
-  useQuery({ queryKey: queryKeys.sharedProjects, queryFn: api.listSharedProjects });
+  useQuery({
+    queryKey: queryKeys.sharedProjects,
+    queryFn: api.listSharedProjects,
+    // Poll while any repo's knowledge is building so the "Building…" pill and
+    // the Build-knowledge button clear once the background build finishes
+    // (mirrors useProjectRepos).
+    refetchInterval: (q) =>
+      q.state.data?.some((p) => p.knowledge.some((k) => k.status === "indexing")) ? 2000 : false,
+  });
 
 // Clone a shared project into the caller's own scope. On success, the
 // project + its knowledge now exist under the caller's owner scope, so

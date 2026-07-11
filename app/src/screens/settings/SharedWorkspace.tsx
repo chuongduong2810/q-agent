@@ -9,7 +9,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Boxes, Lock, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { AuthLabel, TextInput } from "@/components/auth/fields";
@@ -196,7 +196,11 @@ function SharedProjectRow({
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.06] pt-3">
           {project.repos.map((repo) => {
             const kn = statusFor(repo.name);
-            const building = buildingRepo === repo.name;
+            // Reflect the real server-side build too: the kickoff mutation
+            // (buildingRepo) resolves the moment the POST returns, but the
+            // background build keeps the repo's knowledge status at "indexing"
+            // (the same state the "Building…" pill shows) until it finishes.
+            const building = buildingRepo === repo.name || kn?.status === "indexing";
             return (
               <div key={repo.name} className="flex items-center gap-2.5">
                 <span className="truncate font-mono text-[12px] text-ink-soft">{repo.name}</span>

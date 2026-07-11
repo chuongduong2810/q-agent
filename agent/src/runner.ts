@@ -329,6 +329,50 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
 }
 
 /**
+ * Process a standalone manual-login capture: open a headed browser at the
+ * project's base URL ON THIS MACHINE, let the operator log in, and save the
+ * session locally (keyed by origin) so subsequent runs reuse it. The session
+ * never leaves this machine — only the pass/fail outcome is reported back.
+ */
+async function processCapture(cfg: AgentConfig, capture: api.CaptureJob): Promise<void> {
+  let origin = capture.origin;
+  if (!origin && capture.baseUrl) {
+    try {
+      origin = new URL(capture.baseUrl).origin;
+    } catch {
+      origin = "";
+    }
+  }
+  if (!origin || !capture.baseUrl) {
+    await api.postCaptureComplete(cfg, capture.captureId, false, "Missing base URL / origin").catch(() => {});
+    return;
+  }
+  const paths = sessionPathsForOrigin(origin);
+  // Force a fresh login: remove any prior session so captureAuth's
+  // "storageState is non-empty" success check can't pass off a stale file
+  // (which would falsely report success without opening a browser).
+  try {
+    fs.rmSync(paths.storageStatePath, { force: true });
+    fs.rmSync(paths.sessionStoragePath, { force: true });
+  } catch {
+    // best-effort
+  }
+  emit("auth-waiting", { url: capture.baseUrl });
+  console.log(`Capturing login for ${capture.projectKey} at ${capture.baseUrl}`);
+  let ok = false;
+  try {
+    ok = await captureAuth(capture.baseUrl, paths.storageStatePath, paths.sessionStoragePath);
+  } catch (err) {
+    console.error("Capture crashed:", (err as Error).message);
+  }
+  if (ok) emit("auth-captured", {});
+  else emit("error", { message: "Login was not captured — the window closed before a session was saved." });
+  await api
+    .postCaptureComplete(cfg, capture.captureId, ok, ok ? undefined : "Login was not captured")
+    .catch((err) => console.error("postCaptureComplete failed:", err));
+}
+
+/**
  * Long-poll loop: claim → process → repeat, backing off `IDLE_POLL_MS`
  * between empty claims. Runs until `signal.aborted`.
  */
@@ -346,6 +390,17 @@ export async function runAgentLoop(cfg: AgentConfig, signal: { aborted: boolean 
       console.error("Claim failed:", (err as Error).message);
     }
     if (!job) {
+      // No execution queued — check for a standalone login-capture request.
+      let capture: api.CaptureJob | null = null;
+      try {
+        capture = await api.claimNextCapture(cfg);
+      } catch (err) {
+        console.error("Capture claim failed:", (err as Error).message);
+      }
+      if (capture) {
+        await processCapture(cfg, capture);
+        continue;
+      }
       await new Promise((r) => setTimeout(r, IDLE_POLL_MS));
       continue;
     }

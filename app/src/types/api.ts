@@ -883,12 +883,24 @@ export interface ClaudeCredentialsStatus {
 /** Per-credential metadata parsed from an uploaded `.credentials.json`. Never
  * carries the token itself. */
 export interface ClaudeCredentialsMeta {
+  /** "active" | "expired" — "expired" once a real call reported the token dead. */
+  status: string;
+  /** Account identity from the CLI's .claude.json — null until a call has run. */
+  accountEmail: string | null;
+  accountOrg: string | null;
   subscriptionType: string | null;
   expiresAt: string | null; // ISO
   scopes: string[];
   lastRefreshed: string | null; // ISO — the row's updated_at
   /** Active users with no own credential — only populated for the shared row. */
   assignedUsers: number | null;
+}
+
+/** Result of POST /ai/credentials/test — a real minimal Claude call. */
+export interface ClaudeCredentialsTestResult {
+  ok: boolean;
+  result: "ok" | "invalid" | "no_credential" | "error";
+  message: string;
 }
 
 /** Body for PUT /ai/credentials and PUT /ai/credentials/shared — the raw

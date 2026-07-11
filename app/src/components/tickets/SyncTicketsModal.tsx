@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect, Select } from "@/components/ui/Dropdown";
 import { PROVIDER_META } from "@/components/settings/providerMeta";

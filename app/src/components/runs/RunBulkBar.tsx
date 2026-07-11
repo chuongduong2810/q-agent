@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { RotateCcw, Square, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { isTerminalRun } from "@/components/dashboard/runStatus";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useCancelRun, useDeleteRun, useRetryRun } from "@/hooks/queries";

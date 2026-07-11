@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Dropdown";
@@ -38,6 +38,7 @@ import {
   useRepoKnowledge,
   useRuns,
   useSaveProjectConfig,
+  useSettings,
   useTickets,
 } from "@/hooks/queries";
 import { type ProjectTab } from "@/store/ui";
@@ -1045,11 +1046,13 @@ function ManualLoginStatus({
   hasBaseUrl: boolean;
 }) {
   const { data: auth } = useProjectAuth(projectKey);
+  const { data: settings } = useSettings();
   const clear = useClearProjectAuth(projectKey);
   const capture = useCaptureProjectAuth(projectKey);
   return (
     <ManualLoginStatusView
       auth={auth}
+      localAgentMode={settings?.executionTarget === "local-agent"}
       capturing={capture.isPending || auth?.capturing === true}
       hasBaseUrl={hasBaseUrl}
       clearing={clear.isPending}
@@ -1083,6 +1086,7 @@ export function ManualLoginStatusView({
   clearing,
   onCapture,
   onClear,
+  localAgentMode = false,
 }: {
   auth: AuthState | undefined;
   capturing: boolean;
@@ -1090,6 +1094,10 @@ export function ManualLoginStatusView({
   clearing: boolean;
   onCapture: () => void;
   onClear: () => void;
+  /** When execution runs on the Local Agent, login is captured on the operator's
+   * OWN machine during the first run — there's no server-side capture, so show
+   * guidance instead of the (impossible-here) "Capture login now" button. */
+  localAgentMode?: boolean;
 }) {
   // Fire a one-time success toast when a capture we started finishes.
   const wasCapturing = useRef(false);
@@ -1115,7 +1123,9 @@ export function ManualLoginStatusView({
           <>
             <span className="h-2 w-2 shrink-0 rounded-full bg-[#8b8b9e]" />
             <span className="flex-1 text-[12.5px] text-ink-dim">
-              No saved login yet — capture one now, or a browser will open on the first run.
+              {localAgentMode
+                ? "No saved login yet — capture now and a browser opens on your Local Agent, or it opens automatically on the first run."
+                : "No saved login yet — capture one now, or a browser will open on the first run."}
             </span>
           </>
         )}
@@ -1147,7 +1157,9 @@ export function ManualLoginStatusView({
       </div>
       {capturing && (
         <p className="mt-2.5 text-[12px] leading-relaxed text-ink-dim">
-          A browser opened on this machine — log in, then close the window to finish.
+          {localAgentMode
+            ? "A browser is opening on your Local Agent — log in there, then close the window to finish."
+            : "A browser opened on this machine — log in, then close the window to finish."}
         </p>
       )}
     </div>

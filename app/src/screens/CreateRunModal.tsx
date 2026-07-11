@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ALL_TICKETS_PAGE_SIZE, useCreateRun, useTickets } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
