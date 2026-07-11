@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
+
+from conftest import FakePopen
 
 from app.services import claude_cli, skills
 
@@ -21,11 +22,11 @@ def test_load_skill_missing_returns_none():
 def test_run_prompt_injects_skill_as_system(monkeypatch, shared_claude_credential):
     captured = {}
 
-    def fake_run(cmd, **kwargs):
+    def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"result": "ok"}), stderr="")
+        return FakePopen(returncode=0, stdout=json.dumps({"result": "ok"}), stderr="")
 
-    monkeypatch.setattr(claude_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", fake_popen)
 
     out = claude_cli.run_prompt("hello", skill=skills.TEST_CASE_GENERATOR)
     assert out == "ok"
@@ -38,11 +39,11 @@ def test_run_prompt_injects_skill_as_system(monkeypatch, shared_claude_credentia
 def test_run_prompt_merges_skill_and_explicit_system(monkeypatch, shared_claude_credential):
     captured = {}
 
-    def fake_run(cmd, **kwargs):
+    def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"result": "x"}), stderr="")
+        return FakePopen(returncode=0, stdout=json.dumps({"result": "x"}), stderr="")
 
-    monkeypatch.setattr(claude_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(claude_cli.subprocess, "Popen", fake_popen)
 
     claude_cli.run_prompt("p", system="EXTRA_SYS", skill=skills.AUTOMATION_GENERATOR)
     injected = captured["cmd"][captured["cmd"].index("--append-system-prompt") + 1]
