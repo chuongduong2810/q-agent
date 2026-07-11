@@ -18,7 +18,7 @@ weakens the existing owner scoping on the normal ``/projects`` routes.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -28,6 +28,7 @@ from app.models.project import Project
 from app.models.project_config import ProjectConfig
 from app.models.user import User
 from app.schemas import (
+    AuthStateOut,
     CloneResultOut,
     KnowledgeBuildRequest,
     ProjectConfigOut,
@@ -35,7 +36,7 @@ from app.schemas import (
     SharedProjectCreate,
     SharedProjectOut,
 )
-from app.services import clone_service, knowledge_service, project_config_service
+from app.services import clone_service, knowledge_service, playwright_runner, project_config_service
 
 router = APIRouter(prefix="/shared/projects", tags=["shared-projects"])
 
@@ -112,6 +113,59 @@ def clone_project(
 
 
 # --------------------------------------------------------------- admin management
+@router.get("/{key}/config", response_model=ProjectConfigOut)
+def get_shared_project_config(
+    key: str, db: Session = Depends(get_db), _admin: User = Depends(require_admin)
+) -> dict:
+    """Admin: the shared project's full runtime config (test-account passwords masked).
+
+    Mirrors ``GET /projects/{key}/config`` but always reads the shared row
+    (``owner_id IS NULL``) so the admin settings page shows the shared project's
+    own settings, never a member's clone. Returns empty defaults if not created yet.
+    """
+    row = project_config_service.get_config_for_owner(db, key, None)
+    return project_config_service.public_config(row, key)
+
+
+@router.get("/{key}/auth", response_model=AuthStateOut)
+def get_shared_project_auth(
+    key: str, _admin: User = Depends(require_admin)
+) -> dict:
+    """Admin: whether the shared project has a saved manual-login session."""
+    return {
+        **project_config_service.auth_state(key, None),
+        "capturing": playwright_runner.is_capturing(key),
+    }
+
+
+@router.post("/{key}/auth/capture", response_model=AuthStateOut)
+def capture_shared_project_auth(
+    key: str, db: Session = Depends(get_db), _admin: User = Depends(require_admin)
+) -> dict:
+    """Admin: open a headed browser to capture the shared project's login session.
+
+    Saved under the shared scope so a member inherits it on clone (ADR 0009 §4).
+    """
+    if not playwright_runner.is_capturing(key):
+        config = project_config_service.get_config_for_owner(db, key, None)
+        base_url = (config.base_url if config else "") or ""
+        if not base_url:
+            raise HTTPException(status_code=400, detail="Set a base URL for the project first.")
+        playwright_runner.start_capture(key, base_url, owner_id=None)
+    return {
+        **project_config_service.auth_state(key, None),
+        "capturing": playwright_runner.is_capturing(key),
+    }
+
+
+@router.delete("/{key}/auth", response_model=AuthStateOut)
+def clear_shared_project_auth(
+    key: str, _admin: User = Depends(require_admin)
+) -> dict:
+    """Admin: delete the shared project's saved manual-login session."""
+    return project_config_service.clear_auth(key, None)
+
+
 @router.post("/{key}", response_model=ProjectConfigOut, status_code=201)
 def create_shared_project(
     key: str,

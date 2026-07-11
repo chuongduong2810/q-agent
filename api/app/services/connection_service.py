@@ -147,7 +147,14 @@ def resolve_repository_for_project(
     restricts both steps to that user's own connections.
     """
     if project_key:
-        cfg = db.query(ProjectConfig).filter(ProjectConfig.key == project_key).first()
+        # Prefer the config owned by the resolving scope (shared builds pass
+        # ``owner_id=None`` → the shared config; per-user builds → their own),
+        # so a same-keyed row another owner holds can't leak the wrong binding.
+        cfg = (
+            db.query(ProjectConfig)
+            .filter(ProjectConfig.key == project_key, ProjectConfig.owner_id == owner_id)
+            .first()
+        ) or db.query(ProjectConfig).filter(ProjectConfig.key == project_key).first()
         if cfg is not None:
             conn = get_connection(db, cfg.repository_connection_id, owner_id=owner_id)
             if conn is not None:
