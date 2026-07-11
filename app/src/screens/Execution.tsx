@@ -9,7 +9,7 @@ import {
   RotateCw,
   Server,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { Pill, execColors, productDefectStyle } from "@/components/ui/badges";
 import { ProgressRing, Spinner } from "@/components/ui/misc";

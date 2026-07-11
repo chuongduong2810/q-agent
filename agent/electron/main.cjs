@@ -16,6 +16,38 @@ const { startUi } = require(path.join(__dirname, "..", "dist", "src", "ui.js"));
 
 let win = null;
 
+/** Wire the update feed (build.publish → latest.yml on the server's /downloads/
+ * route) to an EXPLICIT, user-driven flow: we notify the renderer that a version
+ * is available and only download / install when the user asks (see preload's
+ * `qagentUpdate` + the UI's update banner). Guarded to packaged builds and fully
+ * best-effort — offline / no-feed / any error can never block the agent. */
+function initAutoUpdate() {
+  if (!app.isPackaged) return; // dev (`npm run desktop`) has no update feed
+  let updater;
+  try {
+    updater = require("electron-updater").autoUpdater;
+  } catch {
+    return; // electron-updater unavailable — skip silently
+  }
+  updater.autoDownload = false; // ask the user before downloading
+  updater.autoInstallOnAppQuit = true; // if they defer, apply on the next quit
+
+  const send = (channel, data) => {
+    if (win && !win.isDestroyed()) win.webContents.send(channel, data);
+  };
+  updater.on("update-available", (info) => send("update:available", { version: info.version }));
+  updater.on("update-not-available", () => send("update:none", {}));
+  updater.on("download-progress", (p) => send("update:progress", { percent: Math.round(p.percent || 0) }));
+  updater.on("update-downloaded", (info) => send("update:downloaded", { version: info.version }));
+  updater.on("error", (err) => send("update:error", { message: String((err && err.message) || err) }));
+
+  // Renderer-driven (the UI checks on load + periodically, so it never misses
+  // the event by subscribing too late). Errors resolve, never reject.
+  ipcMain.handle("update:check", () => updater.checkForUpdates().catch((e) => ({ error: String(e) })));
+  ipcMain.handle("update:download", () => updater.downloadUpdate().catch((e) => ({ error: String(e) })));
+  ipcMain.handle("update:install", () => updater.quitAndInstall());
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 420,
@@ -57,6 +89,7 @@ app.whenReady().then(() => {
       if (win) win.loadURL(url);
     },
   });
+  initAutoUpdate();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

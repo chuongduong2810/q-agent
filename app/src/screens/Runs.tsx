@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
-import { ArrowRight, ListChecks, Loader2, Play, Plus } from "lucide-react";
+import { ArrowRight, ListChecks, Loader2, Pause, Play, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
+  isPausedRun,
+  isTerminalRun,
   isWorkingRun,
   runBadge,
   runGroup,
@@ -195,10 +197,11 @@ function RunRow({
 }) {
   const badge = runBadge(run.status);
   const working = isWorkingRun(run.status);
+  const paused = isPausedRun(run.status);
   const isReview = run.status === "review";
   // Play (start/watch execution) is offered once a run is past analysis and not
   // terminal — i.e. review and every later in-flight stage.
-  const canRun = !working ? isReview : run.status !== "processing";
+  const canRun = !isTerminalRun(run.status) && run.status !== "processing";
   const showProgress = run.total > 0;
   const pct = showProgress ? Math.round((run.passed / run.total) * 100) : 0;
   const barColor = run.status === "done" ? "#10b981" : "#a78bfa";
@@ -243,6 +246,8 @@ function RunRow({
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-white/[0.05]">
         {working ? (
           <Loader2 size={17} strokeWidth={2.2} className="animate-spin" style={{ color: badge.color }} />
+        ) : paused ? (
+          <Pause size={15} strokeWidth={2.4} fill={badge.color} style={{ color: badge.color }} />
         ) : (
           <span
             className="h-2.5 w-2.5 rounded-full"

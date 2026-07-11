@@ -18,12 +18,14 @@ table (see ``_PRICES``).
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from app.config import settings as app_settings
@@ -71,12 +73,44 @@ _limits_refreshing = False
 _limits_lock = threading.Lock()
 
 
+def _transcript_roots() -> list[Path]:
+    """Every dir that may hold Claude session transcripts under ``projects/``.
+
+    Since each user's (and the shared) credential is materialized into its own
+    ``CLAUDE_CONFIG_DIR`` (``workspace/claude-config/<key>``), the CLI writes its
+    session logs THERE, not in ``~/.claude``. We scan the legacy machine-wide
+    ``claude_home`` plus every per-credential config dir so usage is captured
+    regardless of which credential a call ran under."""
+    roots = [app_settings.claude_home]
+    config_root = app_settings.workspace_dir / "claude-config"
+    if config_root.is_dir():
+        roots.extend(child for child in config_root.iterdir() if child.is_dir())
+    return roots
+
+
+def _usage_config_dir() -> Path | None:
+    """A materialized credential config dir to run the CLI's ``/usage`` under, so
+    that authenticated plan-limit read works (prefers the shared account, else
+    the first credential on disk). None when nothing is configured."""
+    config_root = app_settings.workspace_dir / "claude-config"
+    shared = config_root / "shared"
+    if (shared / ".credentials.json").is_file():
+        return shared
+    if config_root.is_dir():
+        for child in sorted(config_root.iterdir()):
+            if (child / ".credentials.json").is_file():
+                return child
+    return None
+
+
 def _run_cli_usage() -> dict[str, Any] | None:
     """Drive `claude` to emit its `/usage` view and parse the session/week %.
 
     Pipes `/usage` to the CLI's stdin (the interactive command), strips ANSI, and
     regex-parses the two limit lines. Returns None on any failure/parse miss.
     """
+    cfg = _usage_config_dir()
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": str(cfg)} if cfg is not None else None
     try:
         proc = subprocess.run(  # noqa: S603
             [app_settings.claude_bin],
@@ -85,6 +119,7 @@ def _run_cli_usage() -> dict[str, Any] | None:
             text=True,
             encoding="utf-8",
             timeout=_LIMITS_USAGE_TIMEOUT_S,
+            env=env,
         )
     except Exception as exc:  # noqa: BLE001 - never break stats on a CLI hiccup
         logger.warning("Claude /usage read failed: {}", exc)
@@ -225,8 +260,10 @@ def _compute() -> dict[str, Any]:
     session_earliest: datetime | None = None
     seen: set[str] = set()
 
-    projects_dir = app_settings.claude_home / "projects"
-    if projects_dir.is_dir():
+    for root in _transcript_roots():
+        projects_dir = root / "projects"
+        if not projects_dir.is_dir():
+            continue
         for path in projects_dir.rglob("*.jsonl"):
             try:
                 mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)

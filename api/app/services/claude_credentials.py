@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app import crypto
 from app.config import settings
-from app.models.claude_credentials import STATUS_ACTIVE, ClaudeCredentials
+from app.models.claude_credentials import STATUS_ACTIVE, STATUS_EXPIRED, ClaudeCredentials
 
 __all__ = [
     "ClaudeCredentialsError",
@@ -38,6 +38,9 @@ __all__ = [
     "materialize",
     "resolve_ambient_owner_id",
     "resolve_effective_config_dir",
+    "resolve_scoped_config_dir",
+    "set_effective_status",
+    "set_scoped_status",
     "set_preferred_mode",
     "status_for",
     "upsert_own",
@@ -125,6 +128,68 @@ def get_own(db: Session, owner_id: int) -> ClaudeCredentials | None:
 def get_shared(db: Session) -> ClaudeCredentials | None:
     """Return the single shared/admin credential row, or None."""
     return db.query(ClaudeCredentials).filter(ClaudeCredentials.owner_id.is_(None)).first()
+
+
+def _effective_row(db: Session, owner_id: int | None) -> ClaudeCredentials | None:
+    """Return the credential row that :func:`resolve_effective_config_dir` would
+    actually use for ``owner_id`` — own (unless it yields to shared), else shared,
+    else None. Shared with the status-writeback helpers so a failed/tested call
+    updates the same row it ran under."""
+    if owner_id is not None:
+        own = get_own(db, owner_id)
+        if own is not None and not _own_yields_to_shared(db, own):
+            return own
+    return get_shared(db)
+
+
+def set_effective_status(db: Session, owner_id: int | None, status: str) -> bool:
+    """Set the status of the credential that ``owner_id`` effectively uses.
+
+    Used to reflect real CLI outcomes back into the stored row without a separate
+    probe: a call that fails with "Not logged in" marks it ``expired``; a
+    successful call / test marks it ``active`` again. No-op (returns False) when
+    no credential is configured. Idempotent — only writes on an actual change.
+    """
+    row = _effective_row(db, owner_id)
+    if row is None:
+        return False
+    if row.status != status:
+        row.status = status
+        db.commit()
+    return True
+
+
+def _scoped_row(db: Session, owner_id: int | None, scope: str) -> ClaudeCredentials | None:
+    """Resolve the credential row for an explicit ``scope`` — "shared", "own", or
+    "effective" (the default own→shared precedence). Used by the test endpoint so
+    the admin Claude-credentials page can test the *shared* account even when the
+    caller has their own on file."""
+    if scope == "shared":
+        return get_shared(db)
+    if scope == "own":
+        return get_own(db, owner_id) if owner_id is not None else None
+    return _effective_row(db, owner_id)
+
+
+def resolve_scoped_config_dir(db: Session, owner_id: int | None, scope: str) -> Path | None:
+    """Materialize + return the config dir for an explicit ``scope`` (see
+    :func:`_scoped_row`), or None when that scope has no credential."""
+    row = _scoped_row(db, owner_id, scope)
+    if row is None:
+        return None
+    key = "shared" if row.owner_id is None else str(row.owner_id)
+    return materialize(row, key)
+
+
+def set_scoped_status(db: Session, owner_id: int | None, scope: str, status: str) -> bool:
+    """Write ``status`` back to the credential resolved for ``scope`` (idempotent)."""
+    row = _scoped_row(db, owner_id, scope)
+    if row is None:
+        return False
+    if row.status != status:
+        row.status = status
+        db.commit()
+    return True
 
 
 def _own_yields_to_shared(db: Session, own: ClaudeCredentials | None) -> bool:
@@ -276,6 +341,24 @@ def delete_shared(db: Session) -> bool:
     return True
 
 
+def _account_for(key: str) -> dict:
+    """Best-effort account identity (email/org) the Claude CLI writes to
+    ``<config_dir>/.claude.json`` under ``oauthAccount`` after it first
+    authenticates. Empty dict when that file/field isn't present yet (e.g. the
+    credential was just uploaded and no call has run under it). Never raises."""
+    try:
+        raw = (_config_dir_for(key) / ".claude.json").read_text(encoding="utf-8")
+        account = json.loads(raw).get("oauthAccount") or {}
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return {}
+    if not isinstance(account, dict):
+        return {}
+    return {
+        "account_email": account.get("emailAddress") or None,
+        "account_org": account.get("organizationName") or None,
+    }
+
+
 def _meta_for(row: ClaudeCredentials | None, *, with_assigned_users: bool = False, db: Session | None = None) -> dict | None:
     """Public metadata for one credential row (never the token). ``None`` if
     ``row`` doesn't exist. ``assigned_users`` (shared credential only) counts
@@ -297,12 +380,16 @@ def _meta_for(row: ClaudeCredentials | None, *, with_assigned_users: bool = Fals
             if owned_ids
             else db.query(User).filter(User.is_active.is_(True)).count()
         )
+    account = _account_for("shared" if row.owner_id is None else str(row.owner_id))
     return {
+        "status": row.status,
         "subscription_type": row.subscription_type,
         "expires_at": row.expires_at,
         "scopes": row.scopes or [],
         "last_refreshed": row.updated_at,
         "assigned_users": assigned_users,
+        "account_email": account.get("account_email"),
+        "account_org": account.get("account_org"),
     }
 
 

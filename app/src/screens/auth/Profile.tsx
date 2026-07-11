@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { LogOut, Sparkles } from "lucide-react";
 import { useAuth } from "@/store/auth";
 import { api } from "@/lib/api";

@@ -11,7 +11,7 @@
 
 import { Command } from "commander";
 import * as os from "os";
-import { AgentConfig, clearConfig, loadConfig, saveConfig } from "./config";
+import { AgentConfig, clearConfig, defaultServerUrl, loadConfig, saveConfig } from "./config";
 import { redeemDevice } from "./api";
 import { killActiveChild, runAgentLoop } from "./runner";
 import { startUi } from "./ui";
@@ -29,10 +29,10 @@ program
   .command("pair")
   .description("Redeem a one-time pairing code (from the Q-Agent SPA) for a device token")
   .argument("<code>", "pairing code shown in the SPA")
-  .option("--server <url>", "Q-Agent server base URL", "http://127.0.0.1:8787")
+  .option("--server <url>", "Q-Agent server base URL (defaults to the server baked into this build)")
   .option("--name <name>", "device name shown in the paired-devices list", os.hostname())
-  .action(async (code: string, opts: { server: string; name: string }) => {
-    const serverUrl = opts.server.replace(/\/+$/, "");
+  .action(async (code: string, opts: { server?: string; name: string }) => {
+    const serverUrl = (opts.server || defaultServerUrl() || "http://127.0.0.1:8787").replace(/\/+$/, "");
     try {
       const { deviceToken, deviceId } = await redeemDevice(serverUrl, code, opts.name);
       const cfg: AgentConfig = { serverUrl, deviceToken, deviceId, deviceName: opts.name };

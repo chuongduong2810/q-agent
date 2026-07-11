@@ -147,19 +147,33 @@ export function RunDetail() {
               style={{
                 background: "linear-gradient(135deg,#8b5cf6,#6366f1)",
                 boxShadow: "0 8px 24px -6px rgba(139,92,246,.7)",
+                animation: "logoPulse 2.2s ease-in-out infinite",
               }}
             >
+              {/* Splash-logo treatment: pulsing halo + staggered expanding rings. */}
               <span
-                className="absolute rounded-[16px]"
+                className="pointer-events-none absolute"
                 style={{
-                  inset: "-5px",
-                  border: "2px solid transparent",
-                  borderTopColor: "#c4b5fd",
-                  borderRightColor: "#c4b5fd",
-                  animation: "spin 1s linear infinite",
+                  inset: "-8px",
+                  borderRadius: "50%",
+                  background: "radial-gradient(circle,rgba(139,92,246,.55),transparent 68%)",
+                  filter: "blur(9px)",
+                  animation: "logoHalo 2.6s ease-in-out infinite",
                 }}
               />
+              {[0, 0.8, 1.6].map((delay) => (
+                <span
+                  key={delay}
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    borderRadius: "13px",
+                    border: "1.5px solid rgba(167,139,250,.45)",
+                    animation: `ring 2.4s ease-out infinite ${delay}s`,
+                  }}
+                />
+              ))}
               <svg
+                className="relative z-[1]"
                 width="22"
                 height="22"
                 viewBox="0 0 24 24"

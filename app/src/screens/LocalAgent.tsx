@@ -12,8 +12,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Cpu, Laptop, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { Check, Copy, Cpu, Download, Laptop, Trash2 } from "lucide-react";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -115,9 +115,26 @@ export function LocalAgent() {
             PREREQUISITES
           </div>
           <ul className="m-0 list-none space-y-1 p-0 text-[12.5px] text-[#c3c3d0]">
-            <li>&middot; Node.js 18 or newer</li>
+            <li>&middot; Nothing to install for the Windows app — Node.js 18+ only if you use the npx option</li>
             <li>&middot; Chromium is installed automatically the first time you run the agent</li>
           </ul>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <a
+            href="/downloads/qagent-agent-setup.exe"
+            download
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}
+          >
+            <Download size={15} strokeWidth={2.2} /> Download for Windows
+          </a>
+          <span className="text-[12px] text-[#8b8b9e]">
+            Native app — no Node required, and it self-updates. With Node 18+ you can instead run{" "}
+            <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11.5px] text-[#c4b5fd]">
+              npx @q-agent/agent
+            </code>
+          </span>
         </div>
       </GlassCard>
 
@@ -132,7 +149,6 @@ export function LocalAgent() {
       {pairing && (
         <PairingCommand
           code={pairing.code}
-          serverUrl={`${window.location.origin}/api`}
           command={command}
           expiresAt={pairing.expiresAt}
           onExpire={() => setPairing(null)}
@@ -193,13 +209,11 @@ export function LocalAgent() {
  * Calls `onExpire` once the code's TTL elapses so the caller can clear it. */
 function PairingCommand({
   code,
-  serverUrl,
   command,
   expiresAt,
   onExpire,
 }: {
   code: string;
-  serverUrl: string;
   command: string;
   expiresAt: number;
   onExpire: () => void;
@@ -256,24 +270,10 @@ function PairingCommand({
         </button>
       </div>
 
-      <div className="mt-3 text-[11px] font-semibold tracking-[0.06em] text-[#6c6c7e]">SERVER URL</div>
-      <div className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-2.5 pl-3.5">
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[12.5px] text-ink">
-          {serverUrl}
-        </code>
-        <button
-          type="button"
-          onClick={() => copyText(serverUrl, "server")}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#8b8b9e] transition-colors hover:bg-white/[0.08] hover:text-white"
-          aria-label="Copy server URL"
-        >
-          {copied === "server" ? <Check size={15} className="text-[#6ee7b7]" /> : <Copy size={15} />}
-        </button>
-      </div>
-
       <p className="mt-3 mb-0 text-[11.5px] leading-[1.55] text-[#8b8b9e]">
-        In the Local Agent app, enter this code and server URL, then <b className="text-[#c3c3d0]">Connect</b>.
-        Or, from a terminal:
+        Open the <b className="text-[#c3c3d0]">Local Agent</b> app, type this code and click{" "}
+        <b className="text-[#c3c3d0]">Connect</b> — the downloaded app already knows this server. Or,
+        from a terminal:
       </p>
       <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-2.5 pl-3.5">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[12px] text-[#c3c3d0]">

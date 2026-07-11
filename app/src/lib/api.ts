@@ -17,6 +17,7 @@ import type {
   AuthTokens,
   ClaudeStats,
   ClaudeCredentialsStatus,
+  ClaudeCredentialsTestResult,
   ClaudeCredentialsUpload,
   AutomationSpecOut,
   AutomationStatus,
@@ -226,6 +227,10 @@ export const api = {
   // Claude CLI credentials management (#95): own (per-user) + shared (admin-only).
   claudeCredentials: {
     status: () => get<ClaudeCredentialsStatus>("/ai/credentials"),
+    // Real minimal Claude call under a credential — authoritative. `scope`
+    // selects which: effective (default), the shared account, or own.
+    test: (scope?: "effective" | "shared" | "own") =>
+      post<ClaudeCredentialsTestResult>(`/ai/credentials/test${scope ? `?scope=${scope}` : ""}`),
     uploadOwn: (body: ClaudeCredentialsUpload) => put<void>("/ai/credentials", body),
     // Non-destructive switch between own/shared (keeps the uploaded token on file).
     setMode: (mode: "own" | "shared") => put<void>("/ai/credentials/mode", { mode }),
@@ -466,8 +471,10 @@ export const api = {
     get<BackendLogOut[]>("/audit/logs" + qs(params)),
   backendLogStats: () => get<BackendLogStats>("/audit/logs/stats"),
 
-  // artifacts
-  artifactUrl: (path: string) => `${API_BASE}/artifacts/${path}`,
+  // artifacts — a browser <img>/<video> can't send the Authorization header,
+  // and the backend /artifacts guard reads the access token from ?token= only
+  // (same as WebSocket URLs), so append it here or images 401.
+  artifactUrl: (path: string) => `${API_BASE}/artifacts/${path}${wsToken()}`,
   wsUrl: (runId: number | string) => `${wsBase()}/ws/runs/${runId}${wsToken()}`,
 };
 

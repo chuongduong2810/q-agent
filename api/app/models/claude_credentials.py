@@ -23,6 +23,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base, UTCDateTime, timestamp_column, utcnow
 
 STATUS_ACTIVE = "active"
+# Set when a real CLI call (a run, or the explicit credential test) reports the
+# token is no longer usable ("Not logged in") so the UI can flag it without a
+# separate probe. A successful call / re-upload flips it back to active.
+STATUS_EXPIRED = "expired"
 
 
 class ClaudeCredentials(Base):

@@ -19,6 +19,28 @@ export interface AgentConfig {
   deviceName: string;
 }
 
+/** The server URL baked into this build, so the packaged desktop app can
+ * pre-fill it and the user only types the 6-digit code (no URL to enter).
+ *
+ * Resolution: a runtime ``QAGENT_SERVER`` env override wins (dev/testing), then
+ * the ``qagentServer`` field electron-builder merges into the packaged
+ * ``package.json`` (see build.extraMetadata). Empty for the generic npm/npx
+ * build — those callers still pass ``--server`` (or type the URL) as before. */
+export function defaultServerUrl(): string {
+  const fromEnv = (process.env.QAGENT_SERVER || "").trim();
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  try {
+    // dist/src/config.js → ../../package.json (the app's own manifest, which in
+    // a packaged build carries the baked-in qagentServer).
+    const pkgPath = path.join(__dirname, "..", "..", "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { qagentServer?: unknown };
+    if (typeof pkg.qagentServer === "string") return pkg.qagentServer.trim().replace(/\/+$/, "");
+  } catch {
+    // Generic build / manifest unreadable — no baked server.
+  }
+  return "";
+}
+
 /** Directory holding the agent's persisted config + local session store. */
 export function configDir(): string {
   return path.join(os.homedir(), ".qagent-agent");

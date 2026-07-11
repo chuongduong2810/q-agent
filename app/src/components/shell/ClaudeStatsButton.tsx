@@ -1,19 +1,32 @@
-import { ChevronDown, Info, RefreshCw, Star } from "lucide-react";
+import { ChevronDown, Info, RefreshCw, ShieldCheck, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { toast } from "sonner";
-import { readFileText } from "@/components/settings/ClaudeCredentialsCard";
+import { toast } from "@/lib/toast";
+import { isCredentialExpired, readFileText } from "@/components/settings/ClaudeCredentialsCard";
 import { Pill } from "@/components/ui/badges";
-import { ClaudeLogo } from "@/components/ui/misc";
+import { ClaudeLogo, Spinner } from "@/components/ui/misc";
 import {
   useAiStats,
   useClaudeCredentialsStatus,
   useRefreshAiStats,
   useSetClaudeCredentialMode,
+  useTestClaudeCredentials,
   useUploadOwnClaudeCredentials,
 } from "@/hooks/queries";
 import { cn } from "@/lib/cn";
-import type { ByModelUsage, ClaudeStats, UsageWindow } from "@/types/api";
+import type {
+  ByModelUsage,
+  ClaudeCredentialsMeta,
+  ClaudeCredentialsStatus,
+  ClaudeStats,
+  UsageWindow,
+} from "@/types/api";
+
+/** The credential actually in effect (matches the backend own→shared precedence). */
+function effectiveCredMeta(s: ClaudeCredentialsStatus | undefined): ClaudeCredentialsMeta | null {
+  if (!s) return null;
+  return s.mode === "own" ? s.own : s.mode === "shared" ? s.shared : null;
+}
 
 const PANEL_WIDTH = 300;
 
@@ -74,6 +87,7 @@ const EMPTY_WINDOW: UsageWindow = {
  */
 export function ClaudeStatsButton() {
   const { data: stats, isPending } = useAiStats();
+  const { data: credStatus } = useClaudeCredentialsStatus();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -81,6 +95,17 @@ export function ClaudeStatsButton() {
   const loading = isPending && !stats;
   const label = stats ? shortModel(stats.modelLabel) : "Claude";
   const operational = stats?.operational ?? false;
+  // Three-state health: down (no CLI) → red, warn (CLI up but the credential is
+  // expired/invalid) → amber, ok → green. The old dot only reflected the binary.
+  const expired = isCredentialExpired(effectiveCredMeta(credStatus));
+  const health = !operational ? "down" : expired ? "warn" : "ok";
+  const dotColor = health === "down" ? "#f43f5e" : health === "warn" ? "#f59e0b" : "#34d399";
+  const healthTitle =
+    health === "down"
+      ? "Claude CLI unavailable"
+      : health === "warn"
+        ? "Claude credential expired — open to test or re-upload"
+        : undefined;
 
   return (
     <>
@@ -88,6 +113,7 @@ export function ClaudeStatsButton() {
         ref={btnRef}
         onClick={() => !loading && setOpen((o) => !o)}
         disabled={loading}
+        title={healthTitle}
         className="flex h-[38px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 text-[12.5px] font-semibold text-ink-soft hover:bg-white/[0.09] disabled:hover:bg-white/[0.04]"
       >
         {loading ? (
@@ -99,7 +125,7 @@ export function ClaudeStatsButton() {
         ) : (
           <>
             <span className="relative flex h-1.5 w-1.5">
-              {operational && (
+              {health === "ok" && (
                 <span
                   className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70"
                   style={{ background: "#34d399" }}
@@ -107,7 +133,7 @@ export function ClaudeStatsButton() {
               )}
               <span
                 className="relative inline-flex h-1.5 w-1.5 rounded-full"
-                style={{ background: operational ? "#34d399" : "#f43f5e" }}
+                style={{ background: dotColor }}
               />
             </span>
             <Star size={12} strokeWidth={2} style={{ color: "#fbbf24" }} fill="#fbbf24" />
@@ -207,9 +233,25 @@ function StatsPanel({
   const { data: credStatus } = useClaudeCredentialsStatus();
   const setMode = useSetClaudeCredentialMode();
   const uploadOwn = useUploadOwnClaudeCredentials();
+  const test = useTestClaudeCredentials();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const switching = setMode.isPending || uploadOwn.isPending;
+  const effMeta = effectiveCredMeta(credStatus);
+  const expired = isCredentialExpired(effMeta);
+  const accountName = effMeta?.accountEmail ?? null;
+  const accountOrg = effMeta?.accountOrg ?? null;
+  // Three-state health line (mirrors the chip dot): down / warn / ok.
+  const health = !stats.operational ? "down" : expired ? "warn" : "ok";
+  const healthColor = health === "down" ? "#f43f5e" : health === "warn" ? "#f59e0b" : "#34d399";
+  const healthLabel =
+    health === "down" ? "Unavailable" : health === "warn" ? "Credential expired" : "Operational";
+
+  const runTest = () =>
+    test.mutate(undefined, {
+      onSuccess: (r) => (r.ok ? toast.success(r.message) : toast.error(r.message)),
+      onError: (e) => toast.error((e as Error).message || "Test failed"),
+    });
 
   useEffect(() => {
     if (!open) return;
@@ -337,13 +379,10 @@ function StatsPanel({
           <div className="truncate text-[13px] font-bold text-ink">{stats.modelLabel}</div>
           <div
             className="flex items-center gap-1.5 text-[11px] font-semibold"
-            style={{ color: stats.operational ? "#34d399" : "#f43f5e" }}
+            style={{ color: healthColor }}
           >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: stats.operational ? "#34d399" : "#f43f5e" }}
-            />
-            {stats.operational ? "Operational" : "Unavailable"}
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: healthColor }} />
+            {healthLabel}
           </div>
         </div>
         <Pill color="#c4b5fd" bg="rgba(139,92,246,.16)">
@@ -378,8 +417,12 @@ function StatsPanel({
             <ClaudeLogo size={15} />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-bold text-ink">{credName}</div>
-            <div className="truncate text-[10.5px] text-ink-dim">{credSourceLabel}</div>
+            <div className="truncate text-[12.5px] font-bold text-ink">
+              {accountName ?? credName}
+            </div>
+            <div className="truncate text-[10.5px] text-ink-dim">
+              {accountName ? accountOrg ?? credName : credSourceLabel}
+            </div>
           </div>
         </div>
         <div className="mt-[11px] flex gap-1.5">
@@ -417,6 +460,20 @@ function StatsPanel({
             onChange={(e) => onFile(e.target.files?.[0])}
           />
         </div>
+        <button
+          type="button"
+          onClick={runTest}
+          disabled={test.isPending || credMode === "none"}
+          className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/[0.1] bg-white/[0.04] py-[7px] text-[11.5px] font-semibold text-ink-soft transition-colors hover:bg-white/[0.08] disabled:opacity-60"
+        >
+          {test.isPending ? <Spinner size={12} /> : <ShieldCheck size={12} strokeWidth={2.2} />}
+          {test.isPending ? "Testing…" : "Test credential"}
+        </button>
+        {expired && (
+          <div className="mt-1.5 text-[10.5px] font-semibold text-[#fbbf24]">
+            This credential looks expired — re-upload it or switch account.
+          </div>
+        )}
       </div>
 
       {/* Rolling windows */}

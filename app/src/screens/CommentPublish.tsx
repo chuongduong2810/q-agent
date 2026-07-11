@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { FileText, Send, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";

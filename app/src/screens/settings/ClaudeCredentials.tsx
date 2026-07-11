@@ -17,10 +17,10 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Lock, MoreVertical, Trash2, UploadCloud } from "lucide-react";
+import { Lock, MoreVertical, ShieldCheck, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Pill } from "@/components/ui/badges";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ClaudeLogo, Spinner } from "@/components/ui/misc";
@@ -29,12 +29,14 @@ import {
   Field,
   FileDropLabel,
   formatExpiry,
+  isCredentialExpired,
   readFileText,
   ScopeChips,
 } from "@/components/settings/ClaudeCredentialsCard";
 import {
   useClaudeCredentialsStatus,
   useDeleteSharedClaudeCredentials,
+  useTestClaudeCredentials,
   useUploadSharedClaudeCredentials,
 } from "@/hooks/queries";
 import { relativeTime } from "@/screens/auth/profile/sessions";
@@ -47,6 +49,13 @@ export function ClaudeCredentials() {
   const { data: status } = useClaudeCredentialsStatus();
   const uploadShared = useUploadSharedClaudeCredentials();
   const deleteShared = useDeleteSharedClaudeCredentials();
+  const test = useTestClaudeCredentials();
+
+  const runTest = () =>
+    test.mutate("shared", {
+      onSuccess: (r) => (r.ok ? toast.success(r.message) : toast.error(r.message)),
+      onError: (e) => toast.error((e as Error).message || "Test failed"),
+    });
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -173,9 +182,15 @@ export function ClaudeCredentials() {
                 Maintained by workspace admins
               </div>
             </div>
-            <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)" dot>
-              Configured
-            </Pill>
+            {isCredentialExpired(status?.shared) ? (
+              <Pill color="#fbbf24" bg="rgba(251,191,36,.14)" dot>
+                Expired
+              </Pill>
+            ) : (
+              <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)" dot>
+                Configured
+              </Pill>
+            )}
             <div className="relative shrink-0">
               <button
                 ref={btnRef}
@@ -224,6 +239,7 @@ export function ClaudeCredentials() {
           </div>
 
           <div className="mt-[18px] grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Field label="ACCOUNT" value={status?.shared?.accountEmail ?? "—"} />
             <Field label="SUBSCRIPTION" value={status?.shared?.subscriptionType ?? "—"} />
             <Field label="EXPIRES" value={formatExpiry(status?.shared?.expiresAt)} />
             <Field label="SCOPES" value={<ScopeChips scopes={status?.shared?.scopes} />} />
@@ -239,7 +255,7 @@ export function ClaudeCredentials() {
 
           <AccessTokenRow accent="#c4b5fd" />
 
-          <div className="mt-[14px] flex gap-[10px]">
+          <div className="mt-[14px] flex flex-wrap gap-[10px]">
             <FileDropLabel
               onFile={handleFile}
               className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.14)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.22)]"
@@ -248,6 +264,15 @@ export function ClaudeCredentials() {
               <UploadCloud size={14} strokeWidth={2} />
               {uploadShared.isPending ? "Uploading…" : "Rotate / replace token"}
             </FileDropLabel>
+            <button
+              type="button"
+              onClick={runTest}
+              disabled={test.isPending}
+              className="flex items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50"
+            >
+              {test.isPending ? <Spinner size={14} /> : <ShieldCheck size={14} strokeWidth={2} />}
+              {test.isPending ? "Testing…" : "Test credential"}
+            </button>
           </div>
         </div>
       ) : (

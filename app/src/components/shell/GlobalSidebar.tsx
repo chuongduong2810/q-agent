@@ -92,8 +92,27 @@ export function GlobalSidebar() {
   const hasIdentity = displayName.length > 0;
   const isAdmin = user?.role === "admin";
 
-  const isActive = (path: string): boolean =>
-    path === "/" ? pathname === "/" : pathname.startsWith(path);
+  // Single-active navigation: the admin pages live UNDER /settings/* (e.g.
+  // /settings/claude-credentials), so a naive `startsWith("/settings")` lit up
+  // both "Settings" AND the admin item at once. Instead we pick the ONE item
+  // whose path is the *longest* boundary-aware match for the current URL, so a
+  // nested route highlights only its own item — never its ancestor.
+  const allNav = [...PRIMARY_NAV, ...SECONDARY_NAV, ...(isAdmin ? ADMIN_NAV : [])];
+
+  const matchLength = (path: string): number => {
+    if (path === "/") return pathname === "/" ? 0 : -1;
+    return pathname === path || pathname.startsWith(`${path}/`) ? path.length : -1;
+  };
+
+  const activePath = allNav.reduce<{ path: string | null; len: number }>(
+    (best, n) => {
+      const len = matchLength(n.path);
+      return len > best.len ? { path: n.path, len } : best;
+    },
+    { path: null, len: -1 },
+  ).path;
+
+  const isActive = (path: string): boolean => path === activePath;
 
   const renderItem = (n: NavItem) => {
     const active = isActive(n.path);

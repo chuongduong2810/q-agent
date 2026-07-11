@@ -217,3 +217,14 @@ select:-webkit-autofill {
 @utility accent-gradient {
   background: linear-gradient(135deg, #8b5cf6, #6366f1);
 }
+
+/* Toast (design/Toast (standalone).html): entrance overshoot, auto-dismiss bar,
+   and the success draw-on check (circle then tick). Consumed by @/lib/toast. */
+@keyframes qtoastIn {
+  0% { opacity: 0; transform: translateY(26px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(-3px) scale(1.005); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes qtoastBar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes qtoastCircle { from { stroke-dashoffset: 145; } to { stroke-dashoffset: 0; } }
+@keyframes qtoastCheck { from { stroke-dashoffset: 40; } to { stroke-dashoffset: 0; } }

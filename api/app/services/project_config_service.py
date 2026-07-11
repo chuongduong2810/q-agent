@@ -279,6 +279,18 @@ def auth_state(project_key: str, owner_id: int | None = None) -> dict[str, Any]:
     return {"exists": True, "capturedAt": captured_at}
 
 
+def agent_auth_state(row) -> dict[str, Any] | None:  # noqa: ANN001 - ProjectConfig | None
+    """Agent-captured login marker from a config row's ``extra`` (set by the
+    Local Agent capture-complete route), or None when the agent hasn't captured.
+
+    The session itself lives on the operator's machine (the agent), never the
+    server — this is only a "captured at" marker so the SPA can show it.
+    """
+    extra = (row.extra or {}) if row is not None else {}
+    captured_at = extra.get("agentAuthCapturedAt")
+    return {"exists": True, "capturedAt": captured_at} if captured_at else None
+
+
 def clear_auth(project_key: str, owner_id: int | None = None) -> dict[str, Any]:
     """Delete a project's saved session file (if any) and return the empty state."""
     path = auth_path(project_key, owner_id)

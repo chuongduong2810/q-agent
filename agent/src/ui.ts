@@ -14,7 +14,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { disconnectDevice, redeemDevice } from "./api";
 import { bus, emit, recentEvents } from "./bus";
-import { AgentConfig, clearConfig, loadConfig, saveConfig } from "./config";
+import { AgentConfig, clearConfig, defaultServerUrl, loadConfig, saveConfig } from "./config";
 import { agentNodeModules } from "./paths";
 import { killActiveChild, runAgentLoop } from "./runner";
 
@@ -25,6 +25,15 @@ let running = false;
 function playwrightVersion(): string {
   try {
     return (require(path.join(agentNodeModules(), "playwright", "package.json")) as { version: string }).version;
+  } catch {
+    return "";
+  }
+}
+
+/** This agent build's version (from its own package.json), shown bottom-right. */
+function appVersion(): string {
+  try {
+    return (require(path.join(__dirname, "..", "..", "package.json")) as { version: string }).version || "";
   } catch {
     return "";
   }
@@ -57,10 +66,13 @@ function state() {
     running,
     deviceId: cfg?.deviceId ?? null,
     deviceName: cfg?.deviceName ?? os.hostname(),
-    serverUrl: cfg?.serverUrl ?? "",
+    // Pre-fill the server from the paired config, else the value baked into this
+    // build — so a downloaded desktop app needs only the 6-digit code.
+    serverUrl: cfg?.serverUrl ?? defaultServerUrl(),
     machine: os.hostname(),
     nodeVersion: process.versions.node,
     playwrightVersion: playwrightVersion(),
+    appVersion: appVersion(),
     events: recentEvents(),
   };
 }
@@ -242,6 +254,17 @@ const PAGE = `<!doctype html>
     </div>
   </div>
 
+  <!-- version tag (bottom-right) + update banner (desktop only; shown on demand) -->
+  <div id="versionTag" style="position:fixed;bottom:7px;right:11px;z-index:6;font-size:10px;font-weight:600;letter-spacing:.02em;color:#4e4e5e;font-family:'JetBrains Mono',ui-monospace,monospace;pointer-events:none">v&#8212;</div>
+  <div id="updateBar" style="display:none;position:fixed;left:14px;right:14px;bottom:16px;z-index:60;align-items:center;gap:11px;padding:11px 13px;border-radius:13px;background:rgba(24,24,32,.97);backdrop-filter:blur(22px);border:1px solid rgba(139,92,246,.4);box-shadow:0 20px 55px -18px rgba(0,0,0,.95);animation:fadeUp .4s ease both">
+    <span style="flex-shrink:0;width:30px;height:30px;border-radius:9px;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.32);display:flex;align-items:center;justify-content:center;color:#c4b5fd"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span>
+    <div style="flex:1;min-width:0">
+      <div id="updTitle" style="font-size:12.5px;font-weight:700;color:#ECECF1;line-height:1.25">Update available</div>
+      <div id="updSub" style="font-size:11px;color:#9494a6;line-height:1.3;margin-top:1px"></div>
+    </div>
+    <button id="updBtn" style="flex-shrink:0;height:32px;padding:0 14px;border:none;border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:700;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);cursor:pointer;box-shadow:0 8px 22px -8px rgba(139,92,246,.8)">Install</button>
+  </div>
+
   <!-- body -->
   <div style="position:relative;z-index:2;flex:1;overflow-y:auto;padding:22px 22px 18px">
    <div style="max-width:420px;margin:0 auto">
@@ -274,7 +297,17 @@ const PAGE = `<!doctype html>
         </div>
         <p style="margin:0 0 20px;font-size:12.5px;color:#9494a6;line-height:1.5">Generate a pairing code on the Q‑Agent app's <span style="color:#c3c3d0;font-weight:600">Local Agent</span> screen, then enter it here.</p>
 
-        <div style="margin-bottom:16px">
+        <!-- Compact "known server" line, shown when the server is baked in/paired
+             so the user only enters the 6-digit code. A "Change" link reveals the
+             full input (#serverBlock) for a different server. -->
+        <div id="serverKnown" style="display:none;align-items:center;gap:8px;margin-bottom:16px;padding:9px 12px;border-radius:11px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);font-size:12px;color:#9494a6">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7a7a8c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+          <span style="color:#7a7a8c">Server</span>
+          <span id="serverHost" style="color:#c3c3d0;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          <a id="serverChange" href="#" style="margin-left:auto;flex-shrink:0;color:#a78bfa;text-decoration:none;font-weight:600">Change</a>
+        </div>
+
+        <div id="serverBlock" style="margin-bottom:16px">
           <label style="display:block;font-size:12px;font-weight:600;color:#9494a6;margin-bottom:8px">Server URL</label>
           <div id="urlBox" style="display:flex;align-items:center;gap:10px;height:46px;padding:0 14px;border-radius:12px;background:#16161f;border:1px solid rgba(255,255,255,.1);transition:border-color .18s">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7a7a8c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
@@ -365,6 +398,42 @@ if (window.qagentDesktop) {
   qa.win = function(){};
 }
 
+// Explicit, user-driven update flow (desktop only). We ANNOUNCE a new version
+// and only download/install when the user clicks — nothing happens silently.
+(function(){
+  if (!window.qagentUpdate) return;
+  var bar = el("updateBar"), title = el("updTitle"), sub = el("updSub"), btn = el("updBtn");
+  var stage = null; // "download" (offer to download) | "install" (offer to restart)
+  function show(){ bar.style.display = "flex"; }
+  btn.addEventListener("click", function(){
+    if (stage === "install"){ window.qagentUpdate.install(); return; }
+    if (stage === "download"){
+      title.textContent = "Downloading update\\u2026"; sub.textContent = "0%";
+      btn.style.display = "none"; window.qagentUpdate.download();
+    }
+  });
+  window.qagentUpdate.on(function(ch, d){
+    d = d || {};
+    if (ch === "update:available"){
+      stage = "download";
+      title.textContent = "Version " + d.version + " available";
+      sub.textContent = "A newer Local Agent is ready to install.";
+      btn.style.display = ""; btn.textContent = "Install"; show();
+    } else if (ch === "update:progress"){
+      sub.textContent = (d.percent || 0) + "% downloaded";
+    } else if (ch === "update:downloaded"){
+      stage = "install";
+      title.textContent = "Update ready";
+      sub.textContent = "Restart to finish installing v" + d.version + ".";
+      btn.style.display = ""; btn.textContent = "Restart & install"; show();
+    }
+    // update:none / update:error → leave the bar as-is (hidden or mid-flow).
+  });
+  // Check now (the renderer is already subscribed) and every 30 minutes after.
+  try { window.qagentUpdate.check(); } catch(e){}
+  setInterval(function(){ try { window.qagentUpdate.check(); } catch(e){} }, 1800000);
+})();
+
 var PILL = {
   idle:       { label:"Not connected",   dot:"#7a7a8c", color:"#a0a0b2", bg:"rgba(255,255,255,.05)", border:"rgba(255,255,255,.1)",  anim:"none" },
   connecting: { label:"Connecting\\u2026", dot:"#a78bfa", color:"#c4b5fd", bg:"rgba(139,92,246,.16)", border:"rgba(139,92,246,.35)", anim:"livePulse 1.4s ease-in-out infinite" },
@@ -450,11 +519,27 @@ function renderChips(s){
   el("envChips").innerHTML = html;
 }
 
+function hostOf(u){ try { return new URL(u).host; } catch(e) { return u; } }
+function applyServerView(){
+  // A known server (baked into the build, or from a prior pairing) collapses to
+  // a compact line so the user only deals with the 6-digit code; empty shows the
+  // full URL input.
+  var known = el("server").value.trim();
+  if (known){
+    el("serverKnown").style.display = "flex";
+    el("serverBlock").style.display = "none";
+    el("serverHost").textContent = hostOf(known);
+  } else {
+    el("serverKnown").style.display = "none";
+    el("serverBlock").style.display = "block";
+  }
+}
 function showForm(s){
   el("formView").style.display = "block"; el("connView").style.display = "none";
   el("hdrDisconnect").style.display = "none";
   closeStream(); setPill("idle"); renderChips(s);
   if (s.serverUrl) el("server").value = s.serverUrl;
+  applyServerView();
   renderCells(); paintConnectBtn();
 }
 function showConnected(s){
@@ -469,6 +554,7 @@ function showConnected(s){
 }
 function refresh(){
   fetch("/api/state").then(function(r){ return r.json(); }).then(function(s){
+    if (s.appVersion) el("versionTag").textContent = "v" + s.appVersion;
     if (s.paired) showConnected(s); else showForm(s);
   });
 }
@@ -476,6 +562,12 @@ function refresh(){
 el("server").addEventListener("input", paintConnectBtn);
 el("server").addEventListener("focus", function(){ el("urlBox").style.borderColor = "rgba(139,92,246,.55)"; });
 el("server").addEventListener("blur", function(){ el("urlBox").style.borderColor = "rgba(255,255,255,.1)"; });
+el("serverChange").addEventListener("click", function(e){
+  e.preventDefault();
+  el("serverKnown").style.display = "none";
+  el("serverBlock").style.display = "block";
+  el("server").focus();
+});
 el("code").addEventListener("input", function(){
   el("code").value = el("code").value.replace(/[^0-9]/g,"").slice(0,6);
   renderCells(); paintConnectBtn();

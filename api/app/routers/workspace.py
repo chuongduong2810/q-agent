@@ -36,7 +36,7 @@ from app.schemas import (
     SharedProjectCreate,
     SharedProjectOut,
 )
-from app.services import clone_service, knowledge_service, playwright_runner, project_config_service
+from app.services import clone_service, knowledge_service, playwright_runner, project_config_service, settings_store
 
 router = APIRouter(prefix="/shared/projects", tags=["shared-projects"])
 
@@ -146,6 +146,16 @@ def capture_shared_project_auth(
 
     Saved under the shared scope so a member inherits it on clone (ADR 0009 §4).
     """
+    # See capture_project_auth: server-side capture is unavailable / wrong in
+    # Local Agent mode (the agent captures on the operator's machine).
+    if settings_store.load_settings().get("executionTarget") == "local-agent":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Manual login runs on your Local Agent — a browser opens on your machine "
+                "the first time a run needs it. There's no server-side capture in Local Agent mode."
+            ),
+        )
     if not playwright_runner.is_capturing(key):
         config = project_config_service.get_config_for_owner(db, key, None)
         base_url = (config.base_url if config else "") or ""

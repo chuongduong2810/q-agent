@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useBuildKnowledge } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
 

@@ -27,10 +27,25 @@ Navigation is **URL-driven** via `react-router-dom` (`app/src/router.tsx`, `crea
 - There is **no unit-test harness**. The gate is `npm run typecheck` (`tsc -b --noEmit`) + `npm run build`. Do not run `npm test` — the script doesn't exist.
 - Verify UI/behavior at runtime: `npm run dev` (Vite; auto-falls off 5173 if busy) + Playwright (`playwright` is installed; `npx playwright install chromium` once) to drive real routes and screenshot. The API defaults to `127.0.0.1:8787`; filter benign backend fetch/WebSocket errors when asserting on console output.
 
+## Issue-driven delivery workflow (default for every request)
+
+For any **feature, enhancement, or bug** the user raises, follow this end-to-end by
+default — this is a standing directive, so don't ask permission for the process
+itself each time:
+
+1. **Clarify first.** If the request is ambiguous, ask before opening issues or writing code.
+2. **Open a GitHub issue** capturing it (`gh issue create` — no `--json` here; capture the number from the returned URL; multi-line bodies via `--body-file`).
+3. **Slice vertically.** Break it into independently-shippable vertical slices, one issue each (parent + sub-issues as needed). **Maximize parallelism**: file-disjoint slices run concurrently via `general-purpose` sub-agents (see *Parallel multi-slice work*); slices sharing a core file (store, router, shell) are sequenced.
+4. **Branch per issue** off the default branch: `feature/<issue-number>` for features/enhancements, `bug/<issue-number>` for fixes (e.g. `feature/152`, `bug/160`).
+5. **Implement + verify** against the relevant `CLAUDE.md` gates (typecheck/build; verify UI at runtime where it applies).
+6. **PR → self-merge.** Open a PR to the default branch, then squash-merge it yourself: `gh pr merge <n> --squash --admin --delete-branch`. **Auto-merging self-authored PRs is pre-authorized for this project** — don't wait for per-PR confirmation.
+
+Branch target: the repo's default branch is **`master`** — the user's "merge to main" means merge to the default branch.
+
 ## Git / PR workflow
 
 - Default branch is **master** (not `main`). Base PRs on `master`.
-- Work on `feature/…` / `docs/…` branches → PR → `gh pr merge <n> --squash --admin --delete-branch`. Auto-merging self-authored PRs with `--admin` is gated by the harness — get the user's authorization once per session before relying on it.
+- Branch names are issue-scoped: `feature/<issue-number>` / `bug/<issue-number>` (`docs/…` for docs-only). PR → `gh pr merge <n> --squash --admin --delete-branch`. Auto-merging self-authored PRs is pre-authorized for this project (see the issue-driven workflow above).
 - Worktree caveat: local `--delete-branch` fails with "branch … used by worktree" — harmless; the server-side squash-merge still succeeded (confirm `gh pr view <n> --json state` = `MERGED`). Clean up agent worktrees afterward: `git worktree remove --force <path>` + `git worktree prune`.
 - `gh issue create` has no `--json` here (capture the number from the returned URL); pass multi-line issue bodies via `--body-file`, not nested heredocs (they break on apostrophes).
 - Secrets stay out of git: `api/.env` and `api/workspace/` are gitignored; only `.env.example` files are tracked.

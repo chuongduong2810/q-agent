@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Lock, Mail } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthLabel, PasswordInput, TextInput } from "@/components/auth/fields";
 import { api, ApiError } from "@/lib/api";

@@ -1,6 +1,6 @@
 import { ArrowRight, Check, Link2, RefreshCw, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { providerGlyph } from "@/components/ui/badges";

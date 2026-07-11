@@ -229,98 +229,104 @@ export function Tickets() {
         </div>
       </div>
 
-      <div className="glass mb-4 flex flex-wrap items-center gap-[9px] rounded-2xl p-[12px_14px]">
-        <ConnectionSelect groups={connectionGroups} value={connectionId} onChange={setTicketConnectionId} />
+      <div className="glass mb-4 flex flex-col gap-[10px] rounded-2xl p-[12px_14px]">
+        {/* Row 1 — connection · search · view pills, actions pinned right */}
+        <div className="flex flex-wrap items-center gap-[9px]">
+          <ConnectionSelect groups={connectionGroups} value={connectionId} onChange={setTicketConnectionId} />
 
-        <div className="flex h-9 max-w-[280px] min-w-[180px] flex-1 items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3">
-          <Search size={14} color="#7a7a8c" strokeWidth={2} />
-          <input
-            value={ticketSearch}
-            onChange={(e) => setTicketSearch(e.target.value)}
-            placeholder="Search tickets…"
-            className="flex-1 border-none bg-transparent text-[13px] text-ink outline-none"
-          />
+          <div className="flex h-9 max-w-[320px] min-w-[180px] flex-1 items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3">
+            <Search size={14} color="#7a7a8c" strokeWidth={2} />
+            <input
+              value={ticketSearch}
+              onChange={(e) => setTicketSearch(e.target.value)}
+              placeholder="Search tickets…"
+              className="flex-1 border-none bg-transparent text-[13px] text-ink outline-none"
+            />
+          </div>
+
+          {FILTERS.filter((f) => f.id !== "mine" || !!userName).map((f) => {
+            const active = ticketFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setTicketFilter(f.id)}
+                className="cursor-pointer rounded-[11px] px-[13px] py-2 text-[12.5px] font-semibold transition-colors"
+                style={
+                  active
+                    ? { background: "linear-gradient(135deg,#8b5cf6,#6366f1)", border: "1px solid transparent", color: "#fff" }
+                    : { background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.09)", color: "#dcdce4" }
+                }
+              >
+                {f.label}
+              </button>
+            );
+          })}
+
+          <div className="ml-auto flex items-center gap-[9px]">
+            <Button variant="glass" onClick={() => setSyncOpen(true)}>
+              <RefreshCw size={13} />
+              Sync
+            </Button>
+            <Button variant="primary" onClick={openCreateRun}>
+              <Plus size={14} strokeWidth={2.3} />
+              Create Run {selCount > 0 && `(${selCount})`}
+            </Button>
+          </div>
         </div>
 
-        {FILTERS.filter((f) => f.id !== "mine" || !!userName).map((f) => {
-          const active = ticketFilter === f.id;
-          return (
+        {/* Row 2 — attribute filters */}
+        <div className="flex flex-wrap items-center gap-[9px] border-t border-white/[0.06] pt-[10px]">
+          <Select
+            value={selectedSprint?.path ?? null}
+            options={sprintOptions}
+            placeholder="Sprint"
+            onChange={onPickSprint}
+            emptyLabel="No sprints found"
+          />
+          {isJira && (
+            <Select
+              value={ticketEpic}
+              options={epicOptions}
+              placeholder="Epic"
+              onChange={setTicketEpic}
+              emptyLabel="No epics"
+            />
+          )}
+          {isAdo && (
+            <Select
+              value={areaPath}
+              options={areaOptions}
+              placeholder="Area path"
+              onChange={setAreaPath}
+              emptyLabel="No area paths"
+            />
+          )}
+          <MultiSelect
+            values={states}
+            options={stateOptions}
+            placeholder={isJira ? "Status" : "State"}
+            onChange={setStates}
+          />
+          <MultiSelect
+            values={workItemTypes}
+            options={typeOptions}
+            placeholder={isJira ? "Issue type" : "Work item type"}
+            onChange={setWorkItemTypes}
+          />
+          <Select
+            value={ticketPriority}
+            options={PRIORITY_OPTIONS}
+            placeholder="Priority"
+            onChange={setTicketPriority}
+          />
+          {userName && (
             <button
-              key={f.id}
-              onClick={() => setTicketFilter(f.id)}
-              className="cursor-pointer rounded-[11px] px-[13px] py-2 text-[12.5px] font-semibold transition-colors"
-              style={
-                active
-                  ? { background: "linear-gradient(135deg,#8b5cf6,#6366f1)", border: "1px solid transparent", color: "#fff" }
-                  : { background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.09)", color: "#dcdce4" }
-              }
+              onClick={selectAssigned}
+              className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
             >
-              {f.label}
+              Select my assigned
             </button>
-          );
-        })}
-
-        <Select
-          value={selectedSprint?.path ?? null}
-          options={sprintOptions}
-          placeholder="Sprint"
-          onChange={onPickSprint}
-          emptyLabel="No sprints found"
-        />
-        {isJira && (
-          <Select
-            value={ticketEpic}
-            options={epicOptions}
-            placeholder="Epic"
-            onChange={setTicketEpic}
-            emptyLabel="No epics"
-          />
-        )}
-        {isAdo && (
-          <Select
-            value={areaPath}
-            options={areaOptions}
-            placeholder="Area path"
-            onChange={setAreaPath}
-            emptyLabel="No area paths"
-          />
-        )}
-        <MultiSelect
-          values={states}
-          options={stateOptions}
-          placeholder={isJira ? "Status" : "State"}
-          onChange={setStates}
-        />
-        <MultiSelect
-          values={workItemTypes}
-          options={typeOptions}
-          placeholder={isJira ? "Issue type" : "Work item type"}
-          onChange={setWorkItemTypes}
-        />
-        <Select
-          value={ticketPriority}
-          options={PRIORITY_OPTIONS}
-          placeholder="Priority"
-          onChange={setTicketPriority}
-        />
-        {userName && (
-          <button
-            onClick={selectAssigned}
-            className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
-          >
-            Select my assigned
-          </button>
-        )}
-
-        <div className="ml-auto flex items-center gap-[9px]">
-          <Button variant="glass" onClick={() => setSyncOpen(true)}>
-            <RefreshCw size={13} />
-            Sync
-          </Button>
-          <Button variant="primary" onClick={openCreateRun}>
-            <Plus size={14} strokeWidth={2.3} />
-            Create Run {selCount > 0 && `(${selCount})`}
-          </Button>
+          )}
         </div>
       </div>
 

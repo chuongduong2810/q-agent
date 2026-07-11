@@ -1,11 +1,44 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import fs from "node:fs";
 import path from "node:path";
+
+// Dev-only stopgap: serve the Local Agent installers from the repo `downloads/`
+// dir at `/downloads/*`, mirroring the production nginx route. Lets the dev
+// server (when it's what a Cloudflare tunnel fronts) hand out the installer;
+// in real production the docker `web`/nginx container serves this instead.
+function serveDownloads(): PluginOption {
+  const dir = path.resolve(__dirname, "../downloads");
+  return {
+    name: "serve-downloads",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url || !req.url.startsWith("/downloads/")) return next();
+        const rel = decodeURIComponent(req.url.split("?")[0].slice("/downloads/".length));
+        const filePath = path.join(dir, rel);
+        if (filePath !== dir && !filePath.startsWith(dir + path.sep)) {
+          res.statusCode = 403;
+          return res.end("Forbidden");
+        }
+        fs.stat(filePath, (err, st) => {
+          if (err || !st.isFile()) {
+            res.statusCode = 404;
+            return res.end("Not found");
+          }
+          res.setHeader("Content-Type", "application/octet-stream");
+          res.setHeader("Content-Disposition", "attachment");
+          res.setHeader("Content-Length", String(st.size));
+          fs.createReadStream(filePath).pipe(res);
+        });
+      });
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), serveDownloads()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

@@ -1,12 +1,13 @@
-import { Check, File, KeyRound, Lock, Trash2, UploadCloud, Users } from "lucide-react";
+import { Check, File, KeyRound, Lock, ShieldCheck, Trash2, UploadCloud, Users } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Pill } from "@/components/ui/badges";
 import { ClaudeLogo, Spinner } from "@/components/ui/misc";
 import {
   useClaudeCredentialsStatus,
   useDeleteOwnClaudeCredentials,
+  useTestClaudeCredentials,
   useUploadOwnClaudeCredentials,
 } from "@/hooks/queries";
 import { cn } from "@/lib/cn";
@@ -25,6 +26,54 @@ export function formatExpiry(iso: string | null | undefined): string {
   if (hours < 24) return `in ${hours} hour${hours === 1 ? "" : "s"}`;
   const days = Math.round(hours / 24);
   return `in ${days} day${days === 1 ? "" : "s"}`;
+}
+
+/** True when a credential's metadata indicates the token is no longer usable: a
+ * real call flagged it "expired", or its expiry is already past. Shared with the
+ * top-bar AI-stats indicator so both surfaces agree. */
+export function isCredentialExpired(meta: ClaudeCredentialsMeta | null | undefined): boolean {
+  if (!meta) return false;
+  if (meta.status === "expired") return true;
+  if (meta.expiresAt) {
+    const t = new Date(meta.expiresAt).getTime();
+    if (!Number.isNaN(t) && t <= Date.now()) return true;
+  }
+  return false;
+}
+
+/** Active/Expired chip driven by the credential's real status. */
+function StatusPill({ meta }: { meta: ClaudeCredentialsMeta | null | undefined }) {
+  return isCredentialExpired(meta) ? (
+    <Pill color="#fbbf24" bg="rgba(251,191,36,.14)" dot>
+      Expired
+    </Pill>
+  ) : (
+    <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)" dot>
+      Active
+    </Pill>
+  );
+}
+
+/** "Test credential" button — runs a real minimal Claude call under the
+ * effective credential and toasts the outcome. */
+function TestCredentialButton() {
+  const test = useTestClaudeCredentials();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        test.mutate(undefined, {
+          onSuccess: (r) => (r.ok ? toast.success(r.message) : toast.error(r.message)),
+          onError: (e) => toast.error((e as Error).message || "Test failed"),
+        })
+      }
+      disabled={test.isPending}
+      className="flex items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50"
+    >
+      {test.isPending ? <Spinner size={14} /> : <ShieldCheck size={14} strokeWidth={2} />}
+      {test.isPending ? "Testing…" : "Test credential"}
+    </button>
+  );
 }
 
 /** A file-picker `<label>` that also accepts drag-and-drop of a single file
@@ -211,12 +260,14 @@ function SharedAccountCard({ meta }: { meta: ClaudeCredentialsMeta | null | unde
           <ClaudeLogo size={20} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-bold">Shared Claude account</div>
-          <div className="font-mono text-[12px] text-[#8b8b9e]">Maintained by your workspace admin</div>
+          <div className="truncate text-[14px] font-bold">
+            {meta?.accountEmail ?? "Shared Claude account"}
+          </div>
+          <div className="truncate font-mono text-[12px] text-[#8b8b9e]">
+            {meta?.accountOrg ?? "Maintained by your workspace admin"}
+          </div>
         </div>
-        <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)" dot>
-          Active
-        </Pill>
+        <StatusPill meta={meta} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="SUBSCRIPTION" value={meta?.subscriptionType ?? "—"} />
@@ -224,7 +275,10 @@ function SharedAccountCard({ meta }: { meta: ClaudeCredentialsMeta | null | unde
         <Field label="SCOPES" value={<ScopeChips scopes={meta?.scopes} />} />
         <Field label="MAINTAINED BY" value="Workspace admin" valueClassName="text-[#c4b5fd]" />
       </div>
-      <div className="mt-4 flex items-center gap-2 border-t border-white/[0.06] pt-[14px] text-[11.5px] text-[#7a7a8c]">
+      <div className="mt-4 flex flex-wrap gap-[10px] border-t border-white/[0.06] pt-[14px]">
+        <TestCredentialButton />
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-[11.5px] text-[#7a7a8c]">
         <Lock size={13} strokeWidth={2} className="shrink-0" />
         <span>
           The admin rotates and maintains this token. Switch to{" "}
@@ -256,12 +310,14 @@ function PersonalAccountCard({
           <File size={18} strokeWidth={2} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-mono text-[13.5px] font-bold">.credentials.json</div>
-          <div className="text-[11.5px] text-[#8b8b9e]">Your personal Claude account</div>
+          <div className="truncate font-mono text-[13.5px] font-bold">
+            {meta?.accountEmail ?? ".credentials.json"}
+          </div>
+          <div className="truncate text-[11.5px] text-[#8b8b9e]">
+            {meta?.accountOrg ?? "Your personal Claude account"}
+          </div>
         </div>
-        <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)" dot>
-          Active
-        </Pill>
+        <StatusPill meta={meta} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="SUBSCRIPTION" value={meta?.subscriptionType ?? "—"} />
@@ -274,6 +330,7 @@ function PersonalAccountCard({
       </div>
       <AccessTokenRow />
       <div className="mt-4 flex flex-wrap gap-[10px] border-t border-white/[0.06] pt-[14px]">
+        <TestCredentialButton />
         <FileDropLabel
           onFile={onReplace}
           className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1]"

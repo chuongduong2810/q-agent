@@ -94,6 +94,41 @@ export async function claimNextJob(cfg: AgentConfig): Promise<Job | null> {
   return (await res.json()) as Job;
 }
 
+/** A queued manual-login capture: open a headed browser at `baseUrl` on THIS
+ * machine, let the operator log in, and save the session for `origin` locally. */
+export interface CaptureJob {
+  captureId: number;
+  projectKey: string;
+  baseUrl: string;
+  origin: string;
+}
+
+/** Claim the next queued auth-capture for this device's owner. `null` on 204. */
+export async function claimNextCapture(cfg: AgentConfig): Promise<CaptureJob | null> {
+  const res = await fetch(`${cfg.serverUrl}/agent/auth/next`, {
+    method: "POST",
+    headers: authHeaders(cfg.deviceToken),
+  });
+  if (res.status === 204) return null;
+  await throwIfNotOk(res);
+  return (await res.json()) as CaptureJob;
+}
+
+/** Report a capture's outcome so the server clears "capturing" + stamps the marker. */
+export async function postCaptureComplete(
+  cfg: AgentConfig,
+  captureId: number,
+  ok: boolean,
+  error?: string
+): Promise<void> {
+  const res = await fetch(`${cfg.serverUrl}/agent/auth/${captureId}/complete`, {
+    method: "POST",
+    headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+    body: JSON.stringify({ ok, error }),
+  });
+  await throwIfNotOk(res);
+}
+
 /** Push one progress event; the server re-emits it on the run's WebSocket unchanged. */
 export async function postEvent(
   cfg: AgentConfig,

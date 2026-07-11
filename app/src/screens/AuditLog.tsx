@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronRight, Download, Search, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   useAuditEvents,
   useAuditStats,

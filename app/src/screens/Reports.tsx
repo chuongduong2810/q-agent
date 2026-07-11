@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Download } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/misc";

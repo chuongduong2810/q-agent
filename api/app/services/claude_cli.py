@@ -142,6 +142,24 @@ def _resolve_claude_env() -> tuple[dict[str, str], int | None]:
     return {**os.environ, "CLAUDE_CONFIG_DIR": str(config_dir)}, owner_id
 
 
+def _mark_credential_invalid(owner_id: int | None) -> None:
+    """Best-effort: flag the effective credential ``expired`` after a call failed
+    with an auth error, so the header/AI-stats reflect it without a separate
+    probe (Layer 1). Never raises."""
+    from app.db import SessionLocal
+    from app.models.claude_credentials import STATUS_EXPIRED
+    from app.services import claude_credentials
+
+    try:
+        db = SessionLocal()
+        try:
+            claude_credentials.set_effective_status(db, owner_id, STATUS_EXPIRED)
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not flag Claude credential invalid: {}", exc)
+
+
 def _persist_refreshed_credential(owner_id: int | None) -> None:
     """Best-effort: capture any token the CLI just refreshed back into the store
     (see :func:`app.services.claude_credentials.persist_refreshed`). Never raises
@@ -240,6 +258,11 @@ def run_prompt(
             out[:800],
         )
         activity.finish(call_id, ok=False, error=f"exit {proc.returncode}")
+        # Feed an auth failure back into the stored credential so the UI can flag
+        # it (Layer 1) — the CLI writes "Not logged in · Please run /login" to
+        # stdout as JSON when the token is expired/revoked.
+        if "not logged in" in (out + err).lower() or "please run /login" in (out + err).lower():
+            _mark_credential_invalid(owner_id)
         detail = (err or out or "no output on stderr/stdout")[:800]
         raise ClaudeError(f"Claude CLI exited {proc.returncode}: {detail}")
 
@@ -300,6 +323,53 @@ def run_json(
         cwd=cwd,
     )
     return _extract_json(text)
+
+
+def verify_credentials(config_dir: str | Path) -> tuple[str, str]:
+    """Run a minimal prompt under an explicit ``CLAUDE_CONFIG_DIR`` and classify
+    the outcome for the credential-test endpoint.
+
+    Returns ``(result, message)`` where ``result`` is one of:
+      * ``"ok"``      — the credential authenticated and Claude replied.
+      * ``"invalid"`` — the CLI reported "Not logged in" (expired/revoked token).
+      * ``"error"``   — anything else (CLI missing, timeout, rate-limit, …).
+
+    Deliberately does NOT record usage/activity or resolve ambient owners — the
+    caller passes the exact config dir to test (see ``routers.ai.test_credentials``),
+    so testing user A's credential never accidentally probes the shared one.
+    """
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": str(config_dir)}
+    cmd = [
+        settings.claude_bin,
+        "-p",
+        "Reply with exactly: ok",
+        "--output-format",
+        "json",
+        "--model",
+        _resolve_model(),
+    ]
+    try:
+        proc = subprocess.run(  # noqa: S603
+            cmd, capture_output=True, text=True, timeout=60, encoding="utf-8", env=env
+        )
+    except FileNotFoundError:
+        return ("error", f"Claude CLI not found (looked for '{settings.claude_bin}').")
+    except subprocess.TimeoutExpired:
+        return ("error", "Claude CLI timed out while testing the credential.")
+    out = (proc.stdout or "").strip()
+    err = (proc.stderr or "").strip()
+    if proc.returncode == 0:
+        try:
+            envelope = json.loads(out)
+            is_error = isinstance(envelope, dict) and bool(envelope.get("is_error"))
+        except json.JSONDecodeError:
+            is_error = False
+        if not is_error:
+            return ("ok", "Credential is valid — Claude responded.")
+    combined = f"{out}\n{err}".lower()
+    if "not logged in" in combined or "please run /login" in combined:
+        return ("invalid", "Not logged in — the token is expired or revoked. Re-upload it.")
+    return ("error", (err or out or "Unknown error")[:200])
 
 
 def is_available() -> bool:

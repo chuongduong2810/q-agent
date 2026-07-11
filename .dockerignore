@@ -1,0 +1,29 @@
+# Build context for api/Dockerfile is the repo root, but the backend image only
+# needs api/ + skills/. Exclude everything else so the context stays small.
+# (The web service uses ./app as its own context with app/.dockerignore.)
+.git/
+.claude/
+app/
+agent/
+design/
+docs/
+scripts/
+template/
+
+# dependencies / caches / build junk
+node_modules/
+**/node_modules/
+**/__pycache__/
+**/*.py[cod]
+**/*.tsbuildinfo
+*.log
+
+# backend runtime state + secrets — never bake these into the image
+api/.venv/
+api/workspace/
+api/.env
+**/*.db
+.env
+
+# staged Local Agent installers — not needed in the api image
+downloads/

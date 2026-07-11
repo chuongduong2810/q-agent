@@ -9,7 +9,7 @@
  */
 
 import { useParams, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { ArrowLeft, Lock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ProjectSettingsForm, ManualLoginStatusView } from "@/screens/ProjectDetail";
@@ -17,6 +17,7 @@ import {
   useCaptureSharedProjectAuth,
   useClearSharedProjectAuth,
   useCreateSharedProject,
+  useSettings,
   useSharedProjectAuth,
   useSharedProjectConfig,
 } from "@/hooks/queries";
@@ -100,11 +101,13 @@ function SharedManualLoginStatus({
   hasBaseUrl: boolean;
 }) {
   const { data: auth } = useSharedProjectAuth(projectKey);
+  const { data: settings } = useSettings();
   const clear = useClearSharedProjectAuth(projectKey);
   const capture = useCaptureSharedProjectAuth(projectKey);
   return (
     <ManualLoginStatusView
       auth={auth}
+      localAgentMode={settings?.executionTarget === "local-agent"}
       capturing={capture.isPending || auth?.capturing === true}
       hasBaseUrl={hasBaseUrl}
       clearing={clear.isPending}

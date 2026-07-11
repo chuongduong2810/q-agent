@@ -80,9 +80,17 @@ export function runBadge(status: RunStatus): { label: string; color: string } {
   return RUN_BADGE[status] ?? { label: status, color: "#a0a0b2" };
 }
 
-/** A run that is actively computing (renders a spinner) vs. waiting/terminal. */
+/** A run whose worker is actively computing on its own — only the initial
+ * analysis pass. Renders the animated spinner. */
 export function isWorkingRun(status: RunStatus): boolean {
-  return !isTerminalRun(status) && status !== "review";
+  return status === "processing";
+}
+
+/** A run parked at an interactive stage, waiting for the user to drive it
+ * forward (past analysis, not terminal). It isn't computing, so it renders a
+ * static "pending" indicator rather than the running spinner. */
+export function isPausedRun(status: RunStatus): boolean {
+  return !isTerminalRun(status) && status !== "processing";
 }
 
 /** Compact relative time for dense rows: "now" / "5m" / "1h" / "1d". */
