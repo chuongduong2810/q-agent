@@ -198,6 +198,15 @@ select:-webkit-autofill {
   background-clip: padding-box;
 }
 
+/* Hidden scrollbar for the mobile horizontal chip / stepper rails (design .scrl). */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /*
  * Reusable surface utilities. The design repeats a frosted-glass recipe
  * everywhere; these classes capture it so screens stay DRY.

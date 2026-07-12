@@ -1,77 +1,17 @@
-import {
-  BarChart3,
-  Boxes,
-  FolderKanban,
-  GraduationCap,
-  Laptop,
-  LayoutDashboard,
-  LogOut,
-  Settings,
-  ShieldCheck,
-  Sparkles,
-  SquareStack,
-  Ticket,
-  User,
-  UserRound,
-  Users,
-} from "lucide-react";
-import { type ComponentType, useEffect, useRef, useState } from "react";
+import { LogOut, Sparkles, User, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api, markLoggingOut } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useLogout } from "@/hooks/useLogout";
 import { useAuth } from "@/store/auth";
-
-interface NavItem {
-  path: string;
-  label: string;
-  icon: ComponentType<{ size?: number; strokeWidth?: number }>;
-}
-
-/** Global-only navigation. Run-scoped screens (Review / Automation / Execution /
- * Evidence) deliberately never appear here — they exist only inside a run's
- * workspace (see RunSidebar), which is what prevents opening them without a run. */
-const PRIMARY_NAV: NavItem[] = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/projects", label: "Projects", icon: FolderKanban },
-  { path: "/tickets", label: "Tickets", icon: Ticket },
-  { path: "/runs", label: "Runs", icon: SquareStack },
-];
-
-const SECONDARY_NAV: NavItem[] = [
-  { path: "/reports", label: "Reports", icon: BarChart3 },
-  { path: "/getting-started", label: "Getting Started", icon: GraduationCap },
-  { path: "/local-agent", label: "Local Agent", icon: Laptop },
-  { path: "/settings", label: "Settings", icon: Settings },
-];
-
-/** Claude credentials nav icon — the Claude sunburst as a monochrome *stroked*
- * line icon (`currentColor`), matching the design's nav treatment (`ic()`:
- * `fill="none" stroke="currentColor"`) and the other line icons in the rail.
- * NOT the filled brand-orange `ClaudeLogo` (that stays on the credential cards). */
-const ClaudeNavIcon = ({ size = 18, strokeWidth = 2 }: { size?: number; strokeWidth?: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={strokeWidth}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M12 2.4l2.6 6.6 6.9.4-5.3 4.4 1.8 6.7L12 17.3 6 20.9l1.8-6.7L2.5 9.4l6.9-.4z" />
-  </svg>
-);
-
-/** Admin-only navigation — rendered in a dedicated, gated ADMIN section (design
- * "Navigation Model"), not the account popover. */
-const ADMIN_NAV: NavItem[] = [
-  { path: "/settings/users", label: "Users", icon: Users },
-  { path: "/settings/claude-credentials", label: "Claude credentials", icon: ClaudeNavIcon },
-  { path: "/settings/shared-workspace", label: "Shared workspace", icon: Boxes },
-  { path: "/audit", label: "Audit Log", icon: ShieldCheck },
-];
+import {
+  ADMIN_NAV,
+  PRIMARY_NAV,
+  SECONDARY_NAV,
+  activeNavPath,
+  type NavItem,
+} from "@/components/shell/navConfig";
 
 /** The global (non-run) sidebar: brand header, two global nav groups, account
  * footer. Structurally the pre-split sidebar, minus the run-scoped items. */
@@ -92,26 +32,11 @@ export function GlobalSidebar() {
   const hasIdentity = displayName.length > 0;
   const isAdmin = user?.role === "admin";
 
-  // Single-active navigation: the admin pages live UNDER /settings/* (e.g.
-  // /settings/claude-credentials), so a naive `startsWith("/settings")` lit up
-  // both "Settings" AND the admin item at once. Instead we pick the ONE item
-  // whose path is the *longest* boundary-aware match for the current URL, so a
-  // nested route highlights only its own item — never its ancestor.
+  // Single-active navigation (see activeNavPath): pick the ONE item whose path
+  // is the longest boundary-aware match, so a nested admin route under
+  // /settings/* highlights only its own item — never its "Settings" ancestor.
   const allNav = [...PRIMARY_NAV, ...SECONDARY_NAV, ...(isAdmin ? ADMIN_NAV : [])];
-
-  const matchLength = (path: string): number => {
-    if (path === "/") return pathname === "/" ? 0 : -1;
-    return pathname === path || pathname.startsWith(`${path}/`) ? path.length : -1;
-  };
-
-  const activePath = allNav.reduce<{ path: string | null; len: number }>(
-    (best, n) => {
-      const len = matchLength(n.path);
-      return len > best.len ? { path: n.path, len } : best;
-    },
-    { path: null, len: -1 },
-  ).path;
-
+  const activePath = activeNavPath(allNav, pathname);
   const isActive = (path: string): boolean => path === activePath;
 
   const renderItem = (n: NavItem) => {
@@ -184,19 +109,10 @@ export function GlobalSidebar() {
     navigate(path);
   };
 
-  const handleLogout = async () => {
+  const logout = useLogout();
+  const handleLogout = () => {
     closeMenu();
-    // Suppress the api 401 interceptor's redirect to /login so the in-flight
-    // authenticated requests that 401 after logout don't beat us to /signed-out.
-    // Navigate to the public /signed-out route while still "authed" so
-    // RequireAuth stays satisfied and simply unmounts (no /login redirect).
-    // SignedOut clears the local session on mount; we just revoke server-side.
-    // markLoggingOut() keeps the api 401 interceptor inert during the handoff.
-    markLoggingOut();
-    navigate("/signed-out", { replace: true });
-    void api.auth.logout().catch(() => {
-      // Session is cleared locally by SignedOut even if the revoke call fails.
-    });
+    logout();
   };
 
   const avatarInitials = userInitials;
