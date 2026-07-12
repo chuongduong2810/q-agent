@@ -21,6 +21,28 @@ const emptyGroup = (kind: ProviderKind): ProviderGroupOut => ({
   connections: [],
 });
 
+/** The Claude models offered in the per-action override dropdowns. */
+const AI_MODEL_OPTIONS = [
+  { value: "claude-opus-4-8", label: "Opus 4.8 — highest quality" },
+  { value: "claude-sonnet-5", label: "Sonnet 5 — balanced" },
+  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — fastest" },
+];
+
+/** AI actions that accept a per-skill model override — mirrors the backend
+ * skills that are actually invoked with `skill=` (see api skills.SKILLS +
+ * claude_cli._resolve_model). `haikuDefault` marks the mechanical actions that
+ * fall back to Haiku when left on "inherit". */
+const TUNABLE_SKILLS: { id: string; label: string; haikuDefault?: boolean }[] = [
+  { id: "test-case-generator", label: "Analyze + generate test cases" },
+  { id: "test-case-reviewer", label: "Review & expand coverage" },
+  { id: "automation-generator", label: "Generate Playwright spec" },
+  { id: "automation-reviewer", label: "Review Playwright spec" },
+  { id: "project-bootstrap", label: "Build project knowledge base" },
+  { id: "execution-analyzer", label: "Classify run failures", haikuDefault: true },
+  { id: "screenshot-annotator", label: "Annotate screenshots", haikuDefault: true },
+  { id: "ticket-comment-generator", label: "Summarize ticket comments", haikuDefault: true },
+];
+
 export function Settings() {
   const { data: providers, isLoading: providersLoading } = useProviders();
   const { data: settings, isLoading: settingsLoading } = useSettings();
@@ -35,6 +57,14 @@ export function Settings() {
     if (settings) setDraft(settings);
   }, [settings]);
   const set = (patch: Partial<SettingsOut>) => setDraft((d) => (d ? { ...d, ...patch } : d));
+  // Per-action model override: set one, or clear it (null = inherit default/global).
+  const setSkillModel = (skillId: string, model: string | null) => {
+    if (!draft) return;
+    const next = { ...draft.skillModels };
+    if (model) next[skillId] = model;
+    else delete next[skillId];
+    set({ skillModels: next });
+  };
   const dirty = Boolean(draft && settings && JSON.stringify(draft) !== JSON.stringify(settings));
   const save = () => {
     if (draft && dirty) updateSettings.mutate(draft);
@@ -231,6 +261,69 @@ export function Settings() {
             <span className="text-[12px] text-muted">
               Shown as a usage bar in the Claude stats panel. 0 = no budget.
             </span>
+          </div>
+        )}
+      </GlassCard>
+
+      <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
+        PER-ACTION MODELS &amp; CONCURRENCY
+      </div>
+      <GlassCard className="p-[22px]">
+        {settingsLoading || !draft ? (
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <span className="text-[12px] font-semibold text-[#9494a6]">Ticket concurrency</span>
+            <Select
+              value={String(draft.aiPipelineWorkers)}
+              onChange={(v) => v != null && set({ aiPipelineWorkers: Number(v) })}
+              placeholder="Auto"
+              allowClear={false}
+              options={[
+                { value: "0", label: "Auto (3 on Postgres, 1 on SQLite)" },
+                { value: "1", label: "1 - sequential" },
+                { value: "2", label: "2" },
+                { value: "3", label: "3" },
+                { value: "4", label: "4" },
+              ]}
+            />
+            <span className="text-[12px] text-muted">
+              How many tickets in a run are analyzed &amp; generated in parallel. Higher is
+              faster but uses more of your Claude rate window; values above 1 only take
+              effect on Postgres.
+            </span>
+
+            <span className="mt-4 text-[12px] font-semibold text-[#9494a6]">
+              Per-action model overrides
+            </span>
+            <span className="mb-1 text-[12px] text-muted">
+              Override the Claude model for a specific AI action. Leave on "Inherit" to use
+              each action's default (mechanical actions default to Haiku; the rest use the
+              Claude model above).
+            </span>
+            <div className="flex flex-col divide-y divide-white/[0.06]">
+              {TUNABLE_SKILLS.map((skill) => (
+                <div key={skill.id} className="flex items-center justify-between gap-4 py-2.5">
+                  <div className="min-w-0">
+                    <div className="text-[13px] text-ink">{skill.label}</div>
+                    <div className="text-[11px] text-muted">
+                      Default: {skill.haikuDefault ? "Haiku 4.5" : "Claude model above"}
+                    </div>
+                  </div>
+                  <div className="w-[220px] shrink-0">
+                    <Select
+                      value={draft.skillModels[skill.id] ?? ""}
+                      onChange={(v) => setSkillModel(skill.id, v ?? null)}
+                      placeholder="Inherit default"
+                      allowClear
+                      options={AI_MODEL_OPTIONS}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </GlassCard>

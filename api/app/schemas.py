@@ -688,6 +688,10 @@ class SettingsOut(ApiModel):
     auto_annotate: bool = True
     neural_background: bool = True
     claude_model: str = "claude-sonnet-5"
+    # Per-action model overrides keyed by skill name (#175); {} = defaults/global.
+    skill_models: dict[str, str] = Field(default_factory=dict)
+    # Ticket concurrency for analyze+generate (#179); 0 = auto (3 Postgres/1 SQLite).
+    ai_pipeline_workers: int = 0
     weekly_token_budget: int = 0
     # Default execution target for new runs (Local Agent feature — see
     # EXEC_TARGETS): "server" (legacy in-process runner) or "local-agent"
@@ -705,6 +709,8 @@ class SettingsUpdate(ApiModel):
     auto_annotate: bool | None = None
     neural_background: bool | None = None
     claude_model: str | None = None
+    skill_models: dict[str, str] | None = None
+    ai_pipeline_workers: int | None = None
     weekly_token_budget: int | None = None
     execution_target: str | None = None
 

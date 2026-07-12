@@ -21,6 +21,12 @@ DEFAULTS: dict[str, Any] = {
     "autoAnnotate": True,
     "neuralBackground": True,
     "claudeModel": "claude-sonnet-5",
+    # Per-action model overrides, keyed by skill name (#175). Empty = every action
+    # uses its built-in default / the global claudeModel (see claude_cli._resolve_model).
+    "skillModels": {},
+    # Ticket concurrency for the analyze+generate pipeline (#179); 0 = auto (3 on
+    # Postgres, 1 on SQLite). See ai_service._resolve_worker_count.
+    "aiPipelineWorkers": 0,
     "weeklyTokenBudget": 0,
     # Default execution target for new runs when a request doesn't specify one
     # (Local Agent feature — see EXEC_TARGETS): "server" (legacy in-process

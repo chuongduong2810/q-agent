@@ -337,6 +337,8 @@ def update_settings_endpoint(body: SettingsUpdate) -> SettingsOut:
         "autoAnnotate": updates.get("auto_annotate"),
         "neuralBackground": updates.get("neural_background"),
         "claudeModel": updates.get("claude_model"),
+        "skillModels": updates.get("skill_models"),
+        "aiPipelineWorkers": updates.get("ai_pipeline_workers"),
         "weeklyTokenBudget": updates.get("weekly_token_budget"),
         "executionTarget": updates.get("execution_target"),
     }
