@@ -390,8 +390,11 @@ export interface TestCaseOut {
   ticketExternalId: string;
   code: string;
   title: string;
+  objective: string;
   precondition: string;
   steps: TestStep[];
+  testData: { field: string; value: string }[];
+  linkedAc: string[];
   priority: string;
   testType: string;
   automation: string;

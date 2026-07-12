@@ -412,8 +412,29 @@ function CaseRow({
                     </span>
                   )}
                 </div>
+                {c.objective ? (
+                  <>
+                    <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">OBJECTIVE</div>
+                    <p className="m-0 mb-3 text-[12.5px] leading-relaxed text-ink-soft">{c.objective}</p>
+                  </>
+                ) : null}
                 <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">PRECONDITION</div>
                 <p className="m-0 mb-3 text-[12.5px] leading-relaxed text-ink-soft">{c.precondition || "—"}</p>
+                {c.testData?.length ? (
+                  <>
+                    <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">TEST DATA</div>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {c.testData.map((d, i) => (
+                        <span
+                          key={i}
+                          className="rounded-lg bg-white/5 px-2.5 py-[3px] text-[11px] text-ink-dim"
+                        >
+                          {d.field}: <b className="text-ink-soft">{d.value}</b>
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
                 <div className="mb-3 overflow-hidden rounded-[11px] border border-white/[0.07]">
                   <div className="grid grid-cols-[28px_1fr_1fr] gap-2.5 bg-white/[0.04] px-3 py-2 text-[10px] font-bold tracking-wider text-faint">
                     <span>#</span>
@@ -431,6 +452,19 @@ function CaseRow({
                     </div>
                   ))}
                 </div>
+                {c.linkedAc?.length ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-semibold tracking-wider text-faint">COVERS AC</span>
+                    {c.linkedAc.map((ac, i) => (
+                      <span
+                        key={i}
+                        className="rounded-lg bg-white/5 px-2.5 py-[3px] text-[11px] text-ink-soft"
+                      >
+                        {ac}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="flex gap-2">
                   <button
                     onClick={() => onSetApproval("approved")}

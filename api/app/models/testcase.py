@@ -27,8 +27,13 @@ class TestCase(Base):
     code: Mapped[str] = mapped_column(String(32))  # e.g. "TC-01"
 
     title: Mapped[str] = mapped_column(String(500))
+    objective: Mapped[str] = mapped_column(Text, default="")  # one-line "what this proves"
     precondition: Mapped[str] = mapped_column(Text, default="")
     steps: Mapped[list] = mapped_column(JSON, default=list)  # [{a, e}]
+    test_data: Mapped[list] = mapped_column(JSON, default=list)  # [{field, value}]
+    # Acceptance-criterion ids/text this case covers — the atomic traceability
+    # link; the run's AC→cases coverage matrix is derived from these (#177).
+    linked_ac: Mapped[list] = mapped_column(JSON, default=list)
 
     priority: Mapped[str] = mapped_column(String(16), default="Medium")
     test_type: Mapped[str] = mapped_column(String(48), default="Functional")

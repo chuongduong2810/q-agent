@@ -117,6 +117,39 @@ def _validated_repo_guess(analysis: dict, context: dict) -> str:
     return default_name or context.get("repo", "") or ""
 
 
+def _case_kwargs_from_raw(raw_case: dict) -> dict:
+    """Map a raw Claude case dict to ``TestCase`` column kwargs.
+
+    Shared by the generation and review stages so the JSON→columns mapping —
+    including the #177 fields (objective, testData, linkedAc) — lives in one
+    place. ``run_id``/``ticket_external_id``/``code``/``source`` are supplied by
+    the caller.
+    """
+    steps = [
+        {"a": s.get("a", ""), "e": s.get("e", "")}
+        for s in (raw_case.get("steps") or [])
+        if isinstance(s, dict)
+    ]
+    test_data = [
+        {"field": d.get("field", ""), "value": d.get("value", "")}
+        for d in (raw_case.get("testData") or [])
+        if isinstance(d, dict)
+    ]
+    linked_ac = [str(a) for a in (raw_case.get("linkedAc") or []) if a]
+    return {
+        "title": raw_case.get("title", ""),
+        "objective": raw_case.get("objective", ""),
+        "precondition": raw_case.get("precondition", ""),
+        "steps": steps,
+        "test_data": test_data,
+        "linked_ac": linked_ac,
+        "priority": raw_case.get("priority", "Medium"),
+        "test_type": raw_case.get("testType", "Functional"),
+        "automation": raw_case.get("automation", "Playwright"),
+        "platform": raw_case.get("platform", "Web"),
+    }
+
+
 def _review_and_expand(
     db: Session,
     run: Run,
@@ -174,21 +207,13 @@ def _review_and_expand(
     for i, raw_case in enumerate(additional, start=1):
         if not isinstance(raw_case, dict):
             continue
-        steps = raw_case.get("steps") or []
-        steps = [{"a": s.get("a", ""), "e": s.get("e", "")} for s in steps if isinstance(s, dict)]
         db.add(
             TestCase(
                 run_id=run.id,
                 ticket_external_id=ticket.external_id,
                 code=f"TC-{start_offset + i:02d}",
-                title=raw_case.get("title", ""),
-                precondition=raw_case.get("precondition", ""),
-                steps=steps,
-                priority=raw_case.get("priority", "Medium"),
-                test_type=raw_case.get("testType", "Functional"),
-                automation=raw_case.get("automation", "Playwright"),
-                platform=raw_case.get("platform", "Web"),
                 source="ai-review",
+                **_case_kwargs_from_raw(raw_case),
             )
         )
         added += 1
@@ -281,24 +306,15 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         for i, raw_case in enumerate(cases, start=1):
             if not isinstance(raw_case, dict):
                 continue
-            steps = raw_case.get("steps") or []
-            steps = [
-                {"a": s.get("a", ""), "e": s.get("e", "")} for s in steps if isinstance(s, dict)
-            ]
-            test_case = TestCase(
-                run_id=run.id,
-                ticket_external_id=ticket.external_id,
-                code=f"TC-{offset + i:02d}",
-                title=raw_case.get("title", ""),
-                precondition=raw_case.get("precondition", ""),
-                steps=steps,
-                priority=raw_case.get("priority", "Medium"),
-                test_type=raw_case.get("testType", "Functional"),
-                automation=raw_case.get("automation", "Playwright"),
-                platform=raw_case.get("platform", "Web"),
-                source="ai",
+            db.add(
+                TestCase(
+                    run_id=run.id,
+                    ticket_external_id=ticket.external_id,
+                    code=f"TC-{offset + i:02d}",
+                    source="ai",
+                    **_case_kwargs_from_raw(raw_case),
+                )
             )
-            db.add(test_case)
             case_count += 1
         db.commit()
 
@@ -433,8 +449,11 @@ def regenerate_case(db: Session, test_case: TestCase) -> TestCase:
 
     existing_case = {
         "title": test_case.title,
+        "objective": test_case.objective,
         "precondition": test_case.precondition,
+        "testData": test_case.test_data,
         "steps": test_case.steps,
+        "linkedAc": test_case.linked_ac,
         "priority": test_case.priority,
         "testType": test_case.test_type,
         "automation": test_case.automation,
@@ -447,12 +466,14 @@ def regenerate_case(db: Session, test_case: TestCase) -> TestCase:
     if not isinstance(result, dict):
         raise ClaudeError("Claude case-regenerate response was not a JSON object")
 
-    steps = result.get("steps") or []
-    steps = [{"a": s.get("a", ""), "e": s.get("e", "")} for s in steps if isinstance(s, dict)]
+    fields = _case_kwargs_from_raw(result)
 
     test_case.title = result.get("title", test_case.title)
+    test_case.objective = result.get("objective", test_case.objective)
     test_case.precondition = result.get("precondition", test_case.precondition)
-    test_case.steps = steps or test_case.steps
+    test_case.steps = fields["steps"] or test_case.steps
+    test_case.test_data = fields["test_data"] or test_case.test_data
+    test_case.linked_ac = fields["linked_ac"] or test_case.linked_ac
     test_case.priority = result.get("priority", test_case.priority)
     test_case.test_type = result.get("testType", test_case.test_type)
     test_case.automation = result.get("automation", test_case.automation)

@@ -412,8 +412,11 @@ class TestCaseOut(ApiModel):
     ticket_external_id: str
     code: str
     title: str
+    objective: str = ""
     precondition: str = ""
     steps: list[TestStep] = Field(default_factory=list)
+    test_data: list[dict] = Field(default_factory=list)
+    linked_ac: list[str] = Field(default_factory=list)
     priority: str = "Medium"
     test_type: str = "Functional"
     automation: str = "Playwright"

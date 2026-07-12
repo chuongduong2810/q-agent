@@ -26,8 +26,11 @@ ANALYSIS_JSON_SHAPE = """{
 CASES_JSON_SHAPE = """[
   {
     "title": string,
+    "objective": string,
     "precondition": string,
+    "testData": [ { "field": string, "value": string } ],
     "steps": [ { "a": string, "e": string } ],
+    "linkedAc": string[],
     "priority": "High" | "Medium" | "Low",
     "testType": string,
     "automation": "Playwright" | "Selenium" | "Cypress" | "Manual",
@@ -37,8 +40,11 @@ CASES_JSON_SHAPE = """[
 
 CASE_JSON_SHAPE = """{
   "title": string,
+  "objective": string,
   "precondition": string,
+  "testData": [ { "field": string, "value": string } ],
   "steps": [ { "a": string, "e": string } ],
+  "linkedAc": string[],
   "priority": "High" | "Medium" | "Low",
   "testType": string,
   "automation": "Playwright" | "Selenium" | "Cypress" | "Manual",
@@ -51,8 +57,11 @@ REVIEW_JSON_SHAPE = """{
   "additionalCases": [
     {
       "title": string,
+      "objective": string,
       "precondition": string,
+      "testData": [ { "field": string, "value": string } ],
       "steps": [ { "a": string, "e": string } ],
+      "linkedAc": string[],
       "priority": "High" | "Medium" | "Low",
       "testType": string,
       "automation": "Playwright" | "Selenium" | "Cypress" | "Manual",
@@ -227,11 +236,14 @@ def build_generation_prompt(
         f"{project_section}"
         f"{_ticket_context(ticket)}\n\n"
         f"Prior analysis (JSON):\n{analysis}\n\n"
-        "Each test case must have: a clear title, a precondition, a list of steps "
-        "where each step has an action (a) and expected result (e), a priority "
-        "(High/Medium/Low), a testType (typically 'Functional' for these "
-        "primary-flow cases), an automation type "
-        "(Playwright/Selenium/Cypress/Manual), and a platform (e.g. Web).\n\n"
+        "Each test case must have: a clear title; a one-line objective (what the "
+        "case proves); a precondition; any test data it needs as testData "
+        "[{field, value}] pairs; a list of steps where each step has an action "
+        "(a) and expected result (e); linkedAc — the acceptance criteria this "
+        "case covers, quoted or identified from the ticket; a priority "
+        "(High/Medium/Low); a testType (typically 'Functional' for these "
+        "primary-flow cases); an automation type "
+        "(Playwright/Selenium/Cypress/Manual); and a platform (e.g. Web).\n\n"
         "Automation type: DEFAULT to 'Playwright' for web UI and functional cases "
         "that a browser can drive (navigation, forms, validation, CRUD, permissions). "
         "Only use 'Manual' when a case genuinely cannot be automated reliably — e.g. "
@@ -282,8 +294,9 @@ def build_review_prompt(
         f"Prior analysis (JSON):\n{analysis}\n\n"
         f"Existing happy-path cases (JSON):\n{existing_cases}\n\n"
         "Each additional case uses the same fields as the existing cases: title, "
-        "precondition, steps ([{a, e}]), priority (High/Medium/Low), testType "
-        "(e.g. Negative, Boundary, Security, Permission), automation "
+        "objective, precondition, testData ([{field, value}]), steps ([{a, e}]), "
+        "linkedAc (the acceptance criteria it covers), priority (High/Medium/Low), "
+        "testType (e.g. Negative, Boundary, Security, Permission), automation "
         "(Playwright/Selenium/Cypress/Manual), and platform (e.g. Web).\n\n"
         f"Respond with ONLY a JSON object of this exact shape:\n{REVIEW_JSON_SHAPE}"
     )
@@ -304,7 +317,7 @@ def build_case_regenerate_prompt(ticket: Ticket, analysis: dict, existing_case: 
         f"Prior analysis (JSON):\n{analysis}\n\n"
         f"Existing test case (JSON):\n{existing_case}\n\n"
         "Return an improved version of this single test case with the same "
-        "fields: title, precondition, steps ([{a, e}]), priority, testType, "
-        "automation, platform.\n\n"
+        "fields: title, objective, precondition, testData ([{field, value}]), "
+        "steps ([{a, e}]), linkedAc, priority, testType, automation, platform.\n\n"
         f"Respond with ONLY a JSON object of this exact shape:\n{CASE_JSON_SHAPE}"
     )

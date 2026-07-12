@@ -114,6 +114,34 @@ def test_pipeline_caps_and_continues_numbering(db_session, seed_ticket, monkeypa
     assert [c.code for c in cases] == ["TC-06", "TC-07"]  # continued from offset
 
 
+def test_pipeline_persists_new_contract_fields(db_session, seed_ticket, monkeypatch):
+    """objective / testData / linkedAc from the generator are persisted (#177)."""
+    run = _make_run(db_session, seed_ticket.external_id)
+    rich = [
+        {
+            "title": "Sign in with valid credentials",
+            "objective": "Prove a registered user can sign in",
+            "precondition": "User account exists",
+            "testData": [{"field": "email", "value": "a@b.com"}],
+            "steps": [{"a": "Submit valid credentials", "e": "Dashboard loads"}],
+            "linkedAc": ["AC-1", "AC-2"],
+            "priority": "High",
+            "testType": "Functional",
+            "automation": "Playwright",
+            "platform": "Web",
+        }
+    ]
+    responses = iter([CANNED_ANALYSIS, rich, CANNED_REVIEW_EMPTY])
+    monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
+
+    ai_service.run_generation_pipeline(run.id, blocking=True)
+
+    case = db_session.query(TestCase).filter(TestCase.run_id == run.id).one()
+    assert case.objective == "Prove a registered user can sign in"
+    assert case.test_data == [{"field": "email", "value": "a@b.com"}]
+    assert case.linked_ac == ["AC-1", "AC-2"]
+
+
 def test_pipeline_surfaces_claude_error(db_session, seed_ticket, monkeypatch):
     run = _make_run(db_session, seed_ticket.external_id)
 
