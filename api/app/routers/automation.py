@@ -38,9 +38,11 @@ from app.services import (
     spec_examples,
     spec_service,
 )
-from app.services.claude_cli import ClaudeError
+from app.services.claude_cli import ClaudeError, run_json
 from app.services.ownership import get_owned_or_404
+from app.services.prompts import build_automation_review_prompt
 from app.services.run_status import set_run_status
+from app.services.skills import AUTOMATION_REVIEWER
 from app.ws import hub
 
 router = APIRouter(tags=["automation"])
@@ -107,12 +109,53 @@ def _select_examples_for_case(db: Session, case: TestCase) -> list[dict]:
     return spec_examples.select_examples(db, project_key, repo, case, limit=2)
 
 
+def _run_automation_review(code: str, case: TestCase, context: dict) -> dict | None:
+    """Best-effort static review of a gate-passed spec via ``automation-reviewer`` (#181).
+
+    Runs only after the deterministic placeholder/flaky-pattern gate has already
+    passed a spec — this is the AI review stage that catches what regex
+    heuristics can't (correctness against the case, reuse discipline, subtler
+    flakiness). Additive and best-effort, matching the ``test-case-reviewer``
+    wiring pattern (#173): any failure (Claude error, non-JSON response) is
+    logged and skipped rather than blocking generation.
+
+    Returns:
+        The parsed ``{"verdict", "findings"}`` dict, or ``None`` if the review
+        could not be obtained.
+    """
+    try:
+        review = run_json(
+            build_automation_review_prompt(code, case, context),
+            skill=AUTOMATION_REVIEWER,
+            label=f"Review spec: {case.ticket_external_id} {case.code}",
+        )
+    except Exception as exc:  # noqa: BLE001 - review is additive, best-effort
+        logger.warning("Automation review skipped for case {}: {}", case.id, exc)
+        return None
+    return review if isinstance(review, dict) else None
+
+
+def _review_critical_findings(review: dict) -> list[str]:
+    """Critical-severity finding messages from an automation-reviewer verdict."""
+    findings = review.get("findings")
+    if not isinstance(findings, list):
+        return []
+    return [
+        str(f.get("message", "") or "Critical finding")
+        for f in findings
+        if isinstance(f, dict) and str(f.get("severity", "")).strip().lower() == "critical"
+    ]
+
+
 def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
     """Generate (or regenerate) and persist the AutomationSpec for one case.
 
     Generation is grounded with few-shot examples (proven passing specs from the
-    same project) and gated by the placeholder / invented-reference gate plus a
-    best-effort ``playwright --list`` parse check before the spec is accepted:
+    same project) and gated by the placeholder / invented-reference / flaky-pattern
+    gate plus a best-effort ``playwright --list`` parse check before the spec is
+    accepted. A gate-passed spec then gets a best-effort static review from
+    ``automation-reviewer`` (#181); a Critical finding flips the outcome to
+    ``rejected`` just like the deterministic gate would:
 
     - ``passed``   -> write the file, ``status="draft"`` (runnable).
     - ``blocked``  -> save the row ``status="blocked"`` with ``block_reason``; the
@@ -162,6 +205,27 @@ def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
             "reason": "Playwright could not parse/collect the generated spec.",
             "unblock_action": "Regenerate the spec so it parses cleanly under Playwright.",
         }
+
+    # Deterministic gate passed -> ask automation-reviewer for a static review
+    # (#181). Additive: a Critical finding is treated like a gate rejection; the
+    # verdict/findings are persisted in gate_report either way so they surface
+    # on the automation screen. Best-effort — a failed/unparseable review never
+    # blocks a spec the deterministic gate already passed.
+    if outcome == "passed":
+        review = _run_automation_review(code, case, context)
+        if review is not None:
+            gate = dict(gate)
+            gate["review"] = review
+            critical = _review_critical_findings(review)
+            if critical or str(review.get("verdict", "")).strip().lower() == "reject":
+                outcome = "rejected"
+                gate["outcome"] = "rejected"
+                gate["reason"] = (
+                    "automation-reviewer flagged Critical findings: " + "; ".join(critical[:6])
+                    if critical
+                    else "automation-reviewer verdict was reject."
+                )
+                gate["unblock_action"] = "Address the review findings above and regenerate."
 
     if outcome == "blocked":
         # Missing-input: persist the generated code + reason but never write the

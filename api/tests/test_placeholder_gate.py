@@ -1,0 +1,89 @@
+"""Tests for the placeholder / flaky-pattern static spec gate (#181)."""
+
+from __future__ import annotations
+
+from app.services import placeholder_gate
+
+
+def _clean_spec(body: str = "") -> str:
+    return (
+        "import { test, expect } from '@playwright/test';\n\n"
+        "test('TC-01 — Login works', async ({ page }) => {\n"
+        f"{body}"
+        "  await page.goto('/login');\n"
+        "  await expect(page.getByTestId('login-btn')).toBeVisible();\n"
+        "});\n"
+    )
+
+
+def test_find_flaky_patterns_clean_spec_is_empty():
+    assert placeholder_gate.find_flaky_patterns(_clean_spec()) == []
+
+
+def test_find_flaky_patterns_flags_hard_wait():
+    code = _clean_spec("  await page.waitForTimeout(2000);\n")
+    findings = placeholder_gate.find_flaky_patterns(code)
+    assert any("waitForTimeout" in f for f in findings)
+
+
+def test_find_flaky_patterns_flags_zero_assertions():
+    code = (
+        "import { test } from '@playwright/test';\n\n"
+        "test('TC-01', async ({ page }) => {\n"
+        "  await page.goto('/login');\n"
+        "});\n"
+    )
+    findings = placeholder_gate.find_flaky_patterns(code)
+    assert any("zero assertions" in f for f in findings)
+
+
+def test_find_flaky_patterns_flags_brittle_class_selector():
+    code = _clean_spec("  await page.locator('.btn-primary').click();\n")
+    findings = placeholder_gate.find_flaky_patterns(code)
+    assert any("brittle CSS locator" in f and ".btn-primary" in f for f in findings)
+
+
+def test_find_flaky_patterns_flags_nth_child_selector():
+    code = _clean_spec("  await page.locator('table tr:nth-child(2) td').click();\n")
+    findings = placeholder_gate.find_flaky_patterns(code)
+    assert any("brittle CSS locator" in f for f in findings)
+
+
+def test_find_flaky_patterns_does_not_flag_data_testid_or_id():
+    code = _clean_spec(
+        "  await page.locator('#user-menu').click();\n"
+        "  await page.locator('[data-testid=\"submit\"]').click();\n"
+    )
+    assert placeholder_gate.find_flaky_patterns(code) == []
+
+
+def test_gate_spec_rejects_hard_wait_regardless_of_grounding():
+    """Flaky-pattern findings are always a rejection — a genuine code defect the
+    model should fix, not a missing-KB-input situation — even with no KB at all."""
+    code = _clean_spec("  await page.waitForTimeout(500);\n")
+    result = placeholder_gate.gate_spec(code, {})
+    assert result["outcome"] == "rejected"
+    assert any("waitForTimeout" in f for f in result["findings"])
+
+
+def test_gate_spec_rejects_zero_assertions_even_with_full_grounding():
+    code = (
+        "import { test } from '@playwright/test';\n\n"
+        "test('TC-01', async ({ page }) => {\n"
+        "  await page.goto('/login');\n"
+        "});\n"
+    )
+    grounded = {"routes": [{"path": "/login"}], "selectors": ["#user"], "base_url": "https://x"}
+    result = placeholder_gate.gate_spec(code, grounded)
+    assert result["outcome"] == "rejected"
+    assert any("zero assertions" in f for f in result["findings"])
+
+
+def test_gate_spec_passes_clean_grounded_spec():
+    grounded = {
+        "routes": [{"path": "/login"}],
+        "selectors": [{"selector": "login-btn"}],
+        "base_url": "https://x",
+    }
+    result = placeholder_gate.gate_spec(_clean_spec(), grounded)
+    assert result["outcome"] == "passed"
