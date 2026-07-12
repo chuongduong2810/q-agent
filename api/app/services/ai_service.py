@@ -165,6 +165,13 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         db.add(run_ticket)
         db.commit()
 
+        # Cancel can land between the analyze and generate Claude calls; bail
+        # before spawning the generate call rather than relying solely on
+        # run_control killing it (belt-and-suspenders with register_process).
+        if run_control.is_cancelled(run.id, db):
+            logger.info("Run {} cancelled mid-ticket {} — skipping generation", run.id, ticket.external_id)
+            return
+
         _publish_phase(run.id, ticket.external_id, PHASE_GENERATING, "Generating test cases...")
 
         max_cases = int(settings_store.load_settings().get("maxCasesPerTicket", 8) or 8)
