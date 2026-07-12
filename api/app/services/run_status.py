@@ -12,9 +12,16 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.db import utcnow
-from app.models.run import TERMINAL_RUN_STATUSES, Run
+from app.models.run import RUN_STATUSES, TERMINAL_RUN_STATUSES, Run
 from app.services import audit_service
 from app.ws import hub
+
+# Active-work statuses with no live worker to recover after a restart —
+# every non-terminal status except "review", which is a legitimate
+# human-gated pause and must be left alone (see recover_orphaned_runs).
+_ORPHANABLE_RUN_STATUSES = tuple(
+    s for s in RUN_STATUSES if s not in TERMINAL_RUN_STATUSES and s != "review"
+)
 
 
 def set_run_status(db: Session, run: Run, new: str) -> bool:
@@ -45,6 +52,36 @@ def set_run_status(db: Session, run: Run, new: str) -> bool:
     )
     hub.publish(str(run.id), "run.status", {"status": new})
     return True
+
+
+def recover_orphaned_runs(db: Session) -> int:
+    """Sweep runs left in a non-terminal "active work" status with no worker.
+
+    Called once at API startup (ADR 0005 / ARCHITECTURE-REVIEW §4.1), after the
+    process's own worker threads are known to be dead — a bare `threading.Thread`
+    never survives a process restart, so any run still sitting in an in-progress
+    stage (``processing``, ``sync``, ``automation``, ``executing``, ``evidence``,
+    ``comment``) was abandoned mid-work by a crashed/killed/redeployed process.
+    ``review`` is excluded: it is a legitimate human-gated pause, not a stuck
+    worker, so it is left untouched.
+
+    Each orphaned run is marked ``failed`` with ``failed_stage`` set to its
+    abandoned status, via :func:`set_run_status` (so the normal audit row +
+    ``run.status`` WS event fire exactly as any other failure would). This makes
+    the run terminal and retryable through the existing ADR-0005
+    ``_RETRY_RESUME_STAGE`` dispatch table.
+
+    Args:
+        db: Active session.
+
+    Returns:
+        The number of runs recovered.
+    """
+    orphaned = db.query(Run).filter(Run.status.in_(_ORPHANABLE_RUN_STATUSES)).all()
+    for run in orphaned:
+        run.failed_stage = run.status
+        set_run_status(db, run, "failed")
+    return len(orphaned)
 
 
 def force_status(db: Session, run: Run, new: str) -> None:
