@@ -114,6 +114,71 @@ def test_read_stats_missing_home_is_zero(workspace_dir, tmp_path, monkeypatch):
     assert s["breakdown"] == {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
 
 
+def test_parse_usage_payload_maps_windows():
+    """five_hour → session / seven_day → week, utilization rounded to pctUsed,
+    resets_at carried through as resetsAt."""
+    parsed = claude_usage_reader._parse_usage_payload({
+        "five_hour": {"utilization": 22.4, "resets_at": "2026-07-12T17:59:59+00:00"},
+        "seven_day": {"utilization": 7.0, "resets_at": "2026-07-17T12:59:59+00:00"},
+    })
+
+    assert parsed == {
+        "session": {"pctUsed": 22, "resetsAt": "2026-07-12T17:59:59+00:00"},
+        "week": {"pctUsed": 7, "resetsAt": "2026-07-17T12:59:59+00:00"},
+    }
+    # No usable windows → None (caller moves to the next candidate/fallback).
+    assert claude_usage_reader._parse_usage_payload({"five_hour": None}) is None
+    assert claude_usage_reader._parse_usage_payload("nope") is None
+
+
+def _write_cred(cfg, *, expires_in_ms: int, token: str = "tok") -> None:
+    cfg.mkdir(parents=True, exist_ok=True)
+    now_ms = int(__import__("time").time() * 1000)
+    (cfg / ".credentials.json").write_text(json.dumps({
+        "claudeAiOauth": {"accessToken": token, "expiresAt": now_ms + expires_in_ms},
+    }), encoding="utf-8")
+
+
+def test_fetch_limits_skips_expired_and_uses_live_credential(tmp_path, monkeypatch):
+    """The API path walks candidates in order, skips expired tokens (never
+    refreshes them), and returns the first live credential's parsed usage —
+    the TUI scrape is never reached."""
+    expired = tmp_path / "claude-config" / "shared"
+    live = tmp_path / "claude-config" / "1"
+    _write_cred(expired, expires_in_ms=-60_000, token="stale")
+    _write_cred(live, expires_in_ms=3_600_000, token="fresh")
+    monkeypatch.setattr(app_settings, "workspace_dir", tmp_path)
+    monkeypatch.setattr(app_settings, "claude_home", tmp_path / "no-home")
+    monkeypatch.setattr(claude_usage_reader, "_usage_config_dir", lambda: expired)
+    used_tokens: list[str] = []
+
+    def fake_api(token):
+        used_tokens.append(token)
+        return {"session": {"pctUsed": 7}, "week": {"pctUsed": 6}}
+
+    monkeypatch.setattr(claude_usage_reader, "_fetch_usage_api", fake_api)
+    monkeypatch.setattr(
+        claude_usage_reader, "_run_cli_usage",
+        lambda: (_ for _ in ()).throw(AssertionError("scrape must not run")))
+
+    parsed = claude_usage_reader._fetch_limits()
+
+    assert parsed == {"session": {"pctUsed": 7}, "week": {"pctUsed": 6}}
+    assert used_tokens == ["fresh"]  # expired "stale" token was never sent
+
+
+def test_fetch_limits_falls_back_to_scrape_when_api_dry(tmp_path, monkeypatch):
+    """No live credential (or the API yields nothing) → last-resort TUI scrape."""
+    monkeypatch.setattr(app_settings, "workspace_dir", tmp_path)
+    monkeypatch.setattr(app_settings, "claude_home", tmp_path / "no-home")
+    monkeypatch.setattr(claude_usage_reader, "_usage_config_dir", lambda: None)
+    sentinel = {"session": {"pctUsed": 3, "resetLabel": ""},
+                "week": {"pctUsed": 4, "resetLabel": ""}}
+    monkeypatch.setattr(claude_usage_reader, "_run_cli_usage", lambda: sentinel)
+
+    assert claude_usage_reader._fetch_limits() is sentinel
+
+
 def test_run_cli_usage_falls_back_to_default_home(tmp_path, monkeypatch):
     """When the selected credential's materialized config renders no `/usage`
     (the regressed case), the scrape falls back to the machine's default

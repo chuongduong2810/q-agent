@@ -23,6 +23,7 @@ import re
 import subprocess
 import threading
 import time
+import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -71,6 +72,15 @@ _LIMITS_USAGE_TIMEOUT_S = 45
 _limits_cache: tuple[float, dict[str, Any] | None] | None = None
 _limits_refreshing = False
 _limits_lock = threading.Lock()
+
+# The OAuth usage endpoint the CLI's `/usage` view itself consumes. Called with a
+# credential's bearer token it returns the plan-limit windows as JSON
+# (`five_hour` → session, `seven_day` → week) — deterministic, headless-safe
+# (works in Docker where no interactive `~/.claude` login exists), and
+# per-credential. Preferred over scraping the TUI.
+_USAGE_API_URL = "https://api.anthropic.com/api/oauth/usage"
+_USAGE_API_BETA = "oauth-2025-04-20"
+_USAGE_API_TIMEOUT_S = 15
 
 
 def _transcript_roots() -> list[Path]:
@@ -164,10 +174,108 @@ def _run_cli_usage() -> dict[str, Any] | None:
     return None
 
 
+def _credential_candidates() -> list[Path]:
+    """Config dirs holding a ``.credentials.json`` to source the plan-limit %
+    from: the selected credential's materialized dir first (shared-preferred,
+    matching ``_usage_config_dir``), then every other materialized credential
+    dir, then the machine's default ``claude_home``."""
+    ordered: list[Path] = []
+    preferred = _usage_config_dir()
+    if preferred is not None:
+        ordered.append(preferred)
+    config_root = app_settings.workspace_dir / "claude-config"
+    if config_root.is_dir():
+        for child in sorted(config_root.iterdir()):
+            if child not in ordered and (child / ".credentials.json").is_file():
+                ordered.append(child)
+    home = app_settings.claude_home
+    if home not in ordered and (home / ".credentials.json").is_file():
+        ordered.append(home)
+    return ordered
+
+
+def _read_live_access_token(cfg: Path) -> str | None:
+    """The OAuth access token from ``cfg/.credentials.json`` if it is still
+    live, else None. Expired tokens are skipped — never refreshed here — the
+    CLI refreshes and rewrites the file on its next real run under that dir."""
+    try:
+        raw = json.loads((cfg / ".credentials.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    oauth = raw.get("claudeAiOauth")
+    if not isinstance(oauth, dict):
+        return None
+    token = oauth.get("accessToken")
+    try:
+        expires_ms = float(oauth.get("expiresAt") or 0)
+    except (TypeError, ValueError):
+        expires_ms = 0
+    if not token or time.time() * 1000 >= expires_ms:
+        return None
+    return str(token)
+
+
+def _parse_usage_payload(payload: Any) -> dict[str, Any] | None:
+    """Map the usage endpoint's JSON to the parsed-limits shape, or None.
+
+    ``five_hour`` → session and ``seven_day`` → week; each window contributes
+    ``pctUsed`` (rounded ``utilization``) and, when present, the authoritative
+    ``resetsAt`` ISO timestamp (overlaying the transcript-derived estimate).
+    """
+    if not isinstance(payload, dict):
+        return None
+
+    def window(raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, dict) or raw.get("utilization") is None:
+            return {}
+        try:
+            out: dict[str, Any] = {"pctUsed": int(round(float(raw["utilization"])))}
+        except (TypeError, ValueError):
+            return {}
+        if raw.get("resets_at"):
+            out["resetsAt"] = str(raw["resets_at"])
+        return out
+
+    session = window(payload.get("five_hour"))
+    week = window(payload.get("seven_day"))
+    if not session and not week:
+        return None
+    return {"session": session, "week": week}
+
+
+def _fetch_usage_api(token: str) -> dict[str, Any] | None:
+    """GET the OAuth usage endpoint with ``token`` and parse it, or None."""
+    req = urllib.request.Request(  # noqa: S310 - fixed https URL
+        _USAGE_API_URL,
+        headers={"Authorization": f"Bearer {token}", "anthropic-beta": _USAGE_API_BETA},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_USAGE_API_TIMEOUT_S) as resp:  # noqa: S310
+            payload = json.load(resp)
+    except Exception as exc:  # noqa: BLE001 - never break stats on a network hiccup
+        logger.warning("Claude usage API read failed: {}", exc)
+        return None
+    return _parse_usage_payload(payload)
+
+
+def _fetch_limits() -> dict[str, Any] | None:
+    """Plan-limit % — usage API first (per-credential, headless-safe), then the
+    TUI scrape as last resort. First candidate with a live token that yields a
+    parseable result wins."""
+    for cfg in _credential_candidates():
+        token = _read_live_access_token(cfg)
+        if token is None:
+            continue
+        parsed = _fetch_usage_api(token)
+        if parsed is not None:
+            return parsed
+    return _run_cli_usage()
+
+
 def _refresh_limits() -> None:
     global _limits_cache, _limits_refreshing
     try:
-        parsed = _run_cli_usage()
+        parsed = _fetch_limits()
         _limits_cache = (time.monotonic(), parsed)
     finally:
         _limits_refreshing = False
