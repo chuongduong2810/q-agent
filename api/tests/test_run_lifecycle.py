@@ -11,7 +11,7 @@ from app.models.run import Run, RunTicket
 from app.models.testcase import AutomationSpec, TestCase
 from app.routers import runs as runs_router
 from app.services import link_service
-from app.services.run_status import set_run_status
+from app.services.run_status import recover_orphaned_runs, set_run_status
 
 
 def _make_run(db_session, *, code: str, status: str = "executing", **kwargs) -> Run:
@@ -182,3 +182,24 @@ def test_delete_in_progress_run_returns_409(client, db_session):
 def test_delete_unknown_run_404(client):
     resp = client.delete("/runs/999999")
     assert resp.status_code == 404
+
+
+# ------------------------------------------------------- orphaned-run recovery
+
+
+def test_recover_orphaned_runs_fails_active_work_leaves_review_alone(db_session):
+    processing_run = _make_run(db_session, status="processing", code="RUN-908")
+    review_run = _make_run(db_session, status="review", code="RUN-909")
+
+    recovered = recover_orphaned_runs(db_session)
+    assert recovered == 1
+
+    db_session.refresh(processing_run)
+    assert processing_run.status == "failed"
+    assert processing_run.failed_stage == "processing"
+    assert processing_run.finished_at is not None
+
+    db_session.refresh(review_run)
+    assert review_run.status == "review"
+    assert review_run.failed_stage is None
+    assert review_run.finished_at is None

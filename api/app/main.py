@@ -141,6 +141,29 @@ def _run_ws_access_allowed(run_id: str, token: str | None) -> bool:
     return _run_owner_allows(run.owner_id, user_id)
 
 
+def _recover_orphaned_runs() -> None:
+    """Sweep runs stuck in a non-terminal, non-``review`` status at boot.
+
+    Worker threads never survive a process restart (ADR 0005 /
+    ARCHITECTURE-REVIEW §4.1), so a run left in an active-work stage after a
+    crash/kill/redeploy has no worker behind it and would otherwise hang
+    forever. Best-effort: never blocks startup.
+    """
+    from app.db import SessionLocal
+    from app.services.run_status import recover_orphaned_runs
+
+    db = SessionLocal()
+    try:
+        recovered = recover_orphaned_runs(db)
+        if recovered:
+            logger.warning("Recovered {} orphaned run(s) from a prior process", recovered)
+    except Exception as exc:  # noqa: BLE001 - never block startup on the sweep
+        logger.warning("orphaned run recovery failed: {}", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _seed_admin() -> None:
     """Ensure a first admin exists so an auth-required install is reachable.
 
@@ -204,6 +227,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     setup_logging()
     settings.ensure_dirs()
     init_db()
+    _recover_orphaned_runs()
     _seed_admin()
     hub.bind_loop(asyncio.get_running_loop())
     logger.info("Q-Agent API ready on {}:{}", settings.host, settings.port)
