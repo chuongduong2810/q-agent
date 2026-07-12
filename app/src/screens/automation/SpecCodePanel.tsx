@@ -80,12 +80,12 @@ export function SpecCodePanel({
       }`}
       style={{ background: "rgba(8,8,13,.8)", backdropFilter: "blur(22px)" }}
     >
-      <div className="flex items-center gap-2.5 border-b border-white/[0.06] px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2.5 border-b border-white/[0.06] px-4 py-3">
         <span className="font-mono text-[12.5px] text-ink-soft">tests/{selectedSpec?.filename}</span>
         <span className="rounded-md px-2 py-0.5 text-[10px] font-bold" style={{ background: "rgba(34,211,238,.13)", color: "#67e8f9" }}>
           TypeScript
         </span>
-        <div className="ml-auto flex gap-1.5">
+        <div className="flex w-full flex-wrap gap-1.5 md:ml-auto md:w-auto">
           {editing ? (
             <>
               <button
@@ -250,12 +250,12 @@ export function SpecCodePanel({
           )}
         </div>
       ) : null}
-      <div className="flex items-center gap-2.5 border-t border-white/[0.06] px-4 py-3.5">
-        <span className="flex-1 text-xs text-muted">Execute the approved suite in parallel across the Run</span>
+      <div className="flex flex-col gap-2.5 border-t border-white/[0.06] px-4 py-3.5 md:flex-row md:items-center">
+        <span className="text-xs text-muted md:flex-1">Execute the approved suite in parallel across the Run</span>
         <button
           onClick={onStartExecution}
           disabled={startExecutionPending}
-          className="flex items-center gap-2 rounded-xl px-[18px] py-2.5 text-[13px] font-bold text-white disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-xl px-[18px] py-2.5 text-[13px] font-bold text-white disabled:opacity-60 md:w-auto"
           style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)", boxShadow: "0 8px 22px -8px rgba(139,92,246,.8)" }}
         >
           <Play size={14} fill="#fff" />

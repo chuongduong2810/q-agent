@@ -19,7 +19,7 @@ export function NoAutomationEmptyState({
   onGenerate: () => void;
 }) {
   return (
-    <div className="glass flex flex-col items-center rounded-[22px] px-8 py-14 text-center">
+    <div className="glass flex flex-col items-center rounded-[22px] px-5 py-10 text-center md:px-8 md:py-14">
       <div
         className="mb-5 flex h-[70px] w-[70px] items-center justify-center rounded-[22px]"
         style={{ background: "linear-gradient(135deg,rgba(139,92,246,.24),rgba(99,102,241,.12))" }}
@@ -33,7 +33,7 @@ export function NoAutomationEmptyState({
             {automatableCount} approved case{automatableCount === 1 ? "" : "s"} ready to automate.
             Generate Playwright specs from them.
           </p>
-          <Button variant="primary" size="lg" onClick={onGenerate} disabled={generating}>
+          <Button variant="primary" size="lg" onClick={onGenerate} disabled={generating} className="w-full md:w-auto">
             <Sparkles size={16} strokeWidth={2.2} /> Generate automation
           </Button>
         </>

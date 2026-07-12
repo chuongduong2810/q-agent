@@ -29,16 +29,16 @@ export function CommentPublish() {
 
   return (
     <div className="px-1 pb-10 pt-0.5">
-      <div className="mb-3.5 flex items-end justify-between">
+      <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
             {run?.code} &middot; publish results to each work item
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Ticket Comments</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Ticket Comments</h1>
         </div>
-        <div className="flex gap-2.5">
+        <div className="flex flex-col gap-2.5 md:flex-row">
           {anyFailed && (
-            <Button variant="danger" onClick={() => retry.mutate()} disabled={retry.isPending}>
+            <Button variant="danger" onClick={() => retry.mutate()} disabled={retry.isPending} className="w-full md:w-auto">
               Retry failed
             </Button>
           )}
@@ -51,6 +51,7 @@ export function CommentPublish() {
               })
             }
             disabled={publishAll.isPending || !comments?.length}
+            className="w-full md:w-auto"
           >
             {publishAll.isPending ? (
               <>
@@ -65,7 +66,7 @@ export function CommentPublish() {
         </div>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 hidden md:block">
         <PipelineRail stage={9} />
       </div>
 
@@ -85,6 +86,7 @@ export function CommentPublish() {
               <Button
                 variant="primary"
                 size="lg"
+                className="w-full md:w-auto"
                 onClick={() =>
                   prepare.mutate(undefined, {
                     onError: (e) => toast.error(e instanceof Error ? e.message : "Prepare failed"),
@@ -149,7 +151,7 @@ function PublishCard({
       transition={{ duration: 0.4, delay: Math.min(index * 0.05, 0.3), ease: "easeOut" }}
     >
       <GlassCard className="overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-white/[0.06] p-[15px_18px]">
+        <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.06] p-3 md:p-[15px_18px]">
           <div
             className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] text-[13px] font-black text-white"
             style={{ background: glyphBg }}
@@ -167,7 +169,7 @@ function PublishCard({
             Publish
           </Button>
         </div>
-        <div className="whitespace-pre-wrap p-[14px_18px] text-[13px] leading-[1.6] text-ink-soft">
+        <div className="whitespace-pre-wrap p-3 text-[13px] leading-[1.6] text-ink-soft md:p-[14px_18px]">
           {comment.body}
         </div>
         {comment.errorMessage && (

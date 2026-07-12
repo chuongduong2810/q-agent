@@ -93,19 +93,19 @@ export function Execution() {
 
   return (
     <div className="px-1 pb-10 pt-0.5">
-      <div className="mb-3.5 flex items-end justify-between">
+      <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
             {run?.code ?? `RUN-${runId}`} &middot; {run?.framework ?? "Playwright"} &middot;{" "}
             {run?.env ?? "Staging"} &middot; {run?.workers ?? execution?.workers ?? 0} parallel workers
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Execution</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Execution</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:gap-3">
           <Link
             to="/settings#execution"
             title="Change the default execution target in Settings"
-            className="glass flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-ink-dim transition-colors hover:text-white"
+            className="glass flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-ink-dim transition-colors hover:text-white"
           >
             {effectiveTarget === "local-agent" ? (
               <Laptop size={13} strokeWidth={2.2} />
@@ -114,7 +114,13 @@ export function Execution() {
             )}
             {effectiveTarget === "local-agent" ? "My machine" : "Server"}
           </Link>
-          <Button variant="primary" size="lg" onClick={handleRun} disabled={isRunning || startExecution.isPending}>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleRun}
+            disabled={isRunning || startExecution.isPending}
+            className="w-full md:w-auto"
+          >
           {isRunning || startExecution.isPending ? (
             <>
               <Spinner size={15} />
@@ -137,7 +143,7 @@ export function Execution() {
 
       {authWaiting && (
         <div
-          className="mb-3.5 flex items-center gap-3.5 rounded-[16px] p-[15px_18px]"
+          className="mb-3.5 flex flex-wrap items-center gap-3.5 rounded-[16px] p-4 md:p-[15px_18px]"
           style={{ background: "rgba(139,92,246,.12)", border: "1px solid rgba(139,92,246,.34)" }}
         >
           <div
@@ -173,12 +179,12 @@ export function Execution() {
         </div>
       )}
 
-      <div className="mb-3.5">
+      <div className="mb-3.5 hidden md:block">
         <PipelineRail stage={7} />
       </div>
 
-      <div className="mb-3.5 grid grid-cols-[1.1fr_1fr] gap-3.5">
-        <div className="glass flex items-center gap-5 rounded-[18px] p-[18px_22px]">
+      <div className="mb-3.5 grid grid-cols-[1.1fr_1fr] gap-2.5 md:gap-3.5">
+        <div className="glass flex items-center gap-3 rounded-[18px] p-3 md:gap-5 md:p-[18px_22px]">
           <ProgressRing value={progress} label={<span className="text-lg font-black">{progress}%</span>} />
           <div className="flex flex-1 gap-[18px]">
             <div>
@@ -196,7 +202,7 @@ export function Execution() {
           </div>
         </div>
 
-        <div className="glass flex flex-col justify-center gap-2 rounded-[18px] p-[18px_22px]">
+        <div className="glass flex flex-col justify-center gap-2 rounded-[18px] p-3 md:p-[18px_22px]">
           <div className="text-[11px] font-semibold tracking-[.06em] text-[#6c6c7e]">CURRENTLY EXECUTING</div>
           <div className="flex items-center gap-2.5">
             <span className="font-mono text-[12px] font-semibold text-violet">

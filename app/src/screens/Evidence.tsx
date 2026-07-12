@@ -111,12 +111,12 @@ export function Evidence() {
         <h1 className="m-0 text-[28px] font-black tracking-tight">Evidence</h1>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 hidden md:block">
         <PipelineRail stage={8} />
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-[240px_1fr] gap-3.5">
+        <div className="flex flex-col gap-3.5 md:grid md:grid-cols-[240px_1fr]">
           <div className="glass h-64 animate-pulse rounded-[18px]" />
           <div className="glass h-96 animate-pulse rounded-[18px]" />
         </div>
@@ -126,15 +126,48 @@ export function Evidence() {
           title="No evidence yet"
           body="Run the approved suite to capture evidence for every ticket in the Run."
           action={
-            <Button variant="primary" size="lg" onClick={() => navigate("/runs/" + runId + "/execution")}>
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full md:w-auto"
+              onClick={() => navigate("/runs/" + runId + "/execution")}
+            >
               Go to execution
             </Button>
           }
         />
       ) : (
-        <div className="grid grid-cols-[240px_1fr] items-start gap-3.5">
-          {/* Tickets — status is the aggregate of all the ticket's cases. */}
-          <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3.5 md:grid md:grid-cols-[240px_1fr] md:items-start">
+          {/* Mobile: horizontal-scroll ticket chips (MOBILE_SPEC §4 pattern 7). */}
+          <div className="scrollbar-none flex gap-2 overflow-x-auto md:hidden">
+            {tickets.map((t) => {
+              const active = t.id === evidenceTicket;
+              const statusColor =
+                t.statusLabel === "Passed" ? "#6ee7b7" : t.statusLabel === "Failed" ? "#fb7185" : "#fbbf24";
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setEvidenceTicket(t.id)}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                    active ? "border-violet/40 bg-white/[0.1]" : "border-white/10 bg-white/[0.03]",
+                  )}
+                >
+                  <span
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-[10px] font-black text-white"
+                    style={{ background: t.provColor }}
+                  >
+                    {t.provGlyph}
+                  </span>
+                  <span className="font-mono text-violet">{t.id}</span>
+                  <span className="h-[6px] w-[6px] shrink-0 rounded-full" style={{ background: statusColor }} />
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tickets — status is the aggregate of all the ticket's cases. Desktop only. */}
+          <div className="hidden flex-col gap-3 md:flex">
             <div className="glass rounded-[18px] p-3.5">
               <div className="m-[2px_4px_10px] text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">
                 TICKETS IN RUN
@@ -183,8 +216,29 @@ export function Evidence() {
           </div>
 
           {/* Test cases for the selected ticket + the chosen case's evidence. */}
-          <div className="grid grid-cols-[210px_1fr] items-start gap-3.5">
-            <div className="glass rounded-[18px] p-3">
+          <div className="flex flex-col gap-3.5 md:grid md:grid-cols-[210px_1fr] md:items-start">
+            {/* Mobile: horizontal-scroll test-case chips instead of the vertical list. */}
+            <div className="scrollbar-none flex gap-2 overflow-x-auto md:hidden">
+              {results.map((r) => {
+                const active = r.id === selectedResult?.id;
+                const color = STATUS_COLOR[r.status] ?? "#9494a6";
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => setSelectedResultId(r.id)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                      active ? "border-violet/40 bg-white/[0.1]" : "border-white/10 bg-white/[0.03]",
+                    )}
+                  >
+                    <span className="h-[6px] w-[6px] shrink-0 rounded-full" style={{ background: color }} />
+                    <span className="font-mono text-ink-soft">{r.caseCode}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="glass hidden rounded-[18px] p-3 md:block">
               <div className="m-[2px_4px_6px] text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">
                 TEST CASES · {selectedTicket?.id ?? "—"}
               </div>
@@ -229,7 +283,7 @@ export function Evidence() {
             </div>
 
             <div className="glass overflow-hidden rounded-[18px]">
-              <div className="flex items-center gap-2.5 border-b border-white/[0.06] p-[14px_18px]">
+              <div className="flex items-center gap-2.5 border-b border-white/[0.06] p-3 md:p-[14px_18px]">
                 <span className="font-mono text-[12px] font-semibold text-violet">
                   {selectedResult?.caseCode ?? "—"}
                 </span>
@@ -248,14 +302,14 @@ export function Evidence() {
                   </span>
                 )}
               </div>
-              <div className="flex flex-wrap gap-[7px] border-b border-white/[0.06] p-[12px_18px]">
+              <div className="scrollbar-none flex gap-[7px] overflow-x-auto border-b border-white/[0.06] p-3 md:flex-wrap md:overflow-x-visible md:p-[12px_18px]">
                 {TABS.map((t) => {
                   const active = evidenceTab === t.id;
                   return (
                     <button
                       key={t.id}
                       onClick={() => setEvidenceTab(t.id)}
-                      className="cursor-pointer rounded-[10px] px-3 py-[7px] text-[12.5px] font-semibold transition-colors"
+                      className="shrink-0 cursor-pointer whitespace-nowrap rounded-[10px] px-3 py-[7px] text-[12.5px] font-semibold transition-colors"
                       style={
                         active
                           ? { background: "linear-gradient(135deg,#8b5cf6,#6366f1)", color: "#fff" }
@@ -267,7 +321,7 @@ export function Evidence() {
                   );
                 })}
               </div>
-              <div className="p-[18px]">
+              <div className="p-3 md:p-[18px]">
                 {selectedResult ? (
                   <EvidencePanel
                     tab={evidenceTab}
@@ -298,6 +352,17 @@ export function Evidence() {
               </div>
             </div>
           </div>
+
+          {/* Mobile-only primary CTA (desktop shows it in the left column above). */}
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => navigate("/runs/" + runId + "/comment")}
+            className="w-full md:hidden"
+          >
+            Prepare ticket comments
+            <ArrowRight size={15} strokeWidth={2.2} />
+          </Button>
         </div>
       )}
     </div>

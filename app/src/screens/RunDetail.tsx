@@ -95,7 +95,7 @@ export function RunDetail() {
         All runs
       </button>
 
-      <div className="mb-4 flex items-start justify-between gap-4">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
         <div>
           <div className="mb-1.5 flex items-center gap-2.5">
             <span className="font-mono text-[13px] font-semibold text-violet">{run.code}</span>
@@ -109,24 +109,24 @@ export function RunDetail() {
               {RUN_STATUS_LABEL[run.status] ?? run.status}
             </span>
           </div>
-          <h1 className="m-0 text-[26px] font-black tracking-tight">{run.name}</h1>
+          <h1 className="m-0 text-[22px] font-black tracking-tight md:text-[26px]">{run.name}</h1>
           <div className="mt-1.5 text-[12.5px] text-ink-dim">
             {run.scopeLabel} &middot; {run.framework} &middot; {run.env} &middot; {run.workers} workers
           </div>
         </div>
-        <Button variant="primary" onClick={goReview} className="shrink-0">
+        <Button variant="primary" onClick={goReview} className="w-full shrink-0 md:w-auto">
           Open Review Center
           <ArrowRight size={14} strokeWidth={2.2} />
         </Button>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 hidden md:block">
         <PipelineRail stage={runStatusToStage[run.status] ?? 0} />
       </div>
 
       {processing && (
         <div
-          className="relative mb-3.5 overflow-hidden rounded-[20px] p-[22px_24px]"
+          className="relative mb-3.5 overflow-hidden rounded-[20px] p-4 md:p-[22px_24px]"
           style={{
             background: "linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.08))",
             border: "1px solid rgba(139,92,246,.34)",
@@ -532,28 +532,125 @@ function AiUsageCard({
         </div>
       </div>
 
-      {/* Column headers */}
-      <div
-        className="grid items-center gap-[10px] p-[9px_18px] text-[10px] font-bold tracking-[.05em] text-[#6c6c7e]"
-        style={{ gridTemplateColumns: AI_COST_GRID, background: "rgba(255,255,255,.02)" }}
-      >
-        <span>{grouped ? "TICKET / PROCESS" : "AI PROCESS"}</span>
-        <span className="text-right">INPUT</span>
-        <span className="text-right">OUTPUT</span>
-        <span className="text-right">TOKENS</span>
-        <span className="text-right">COST</span>
+      {/* Desktop: column headers + grid rows (unchanged). */}
+      <div className="hidden md:block">
+        <div
+          className="grid items-center gap-[10px] p-[9px_18px] text-[10px] font-bold tracking-[.05em] text-[#6c6c7e]"
+          style={{ gridTemplateColumns: AI_COST_GRID, background: "rgba(255,255,255,.02)" }}
+        >
+          <span>{grouped ? "TICKET / PROCESS" : "AI PROCESS"}</span>
+          <span className="text-right">INPUT</span>
+          <span className="text-right">OUTPUT</span>
+          <span className="text-right">TOKENS</span>
+          <span className="text-right">COST</span>
+        </div>
+
+        {grouped
+          ? usage.tickets.map((t) => (
+              <AiTicketGroup
+                key={t.ticketExternalId || "__run-level"}
+                ticket={t}
+                resolveTicket={resolveTicket}
+              />
+            ))
+          : usage.processes.map((p) => <AiProcessRow key={p.key} process={p} />)}
       </div>
 
-      {/* Rows: grouped by ticket, or the flat process list as a fallback. */}
-      {grouped
-        ? usage.tickets.map((t) => (
-            <AiTicketGroup
-              key={t.ticketExternalId || "__run-level"}
-              ticket={t}
-              resolveTicket={resolveTicket}
-            />
-          ))
-        : usage.processes.map((p) => <AiProcessRow key={p.key} process={p} />)}
+      {/* Mobile: stacked cards instead of the wide grid table. */}
+      <div className="md:hidden">
+        {grouped
+          ? usage.tickets.map((t) => (
+              <AiTicketGroupMobile
+                key={t.ticketExternalId || "__run-level"}
+                ticket={t}
+                resolveTicket={resolveTicket}
+              />
+            ))
+          : usage.processes.map((p) => <AiProcessRowMobile key={p.key} process={p} />)}
+      </div>
+    </div>
+  );
+}
+
+/** Mobile stacked-row equivalent of {@link AiProcessRow} (no grid, name + tokens/cost stack). */
+function AiProcessRowMobile({ process }: { process: RunAiProcess }) {
+  const Icon = PROCESS_ICON[process.key] ?? Cpu;
+  return (
+    <div
+      className="flex items-center gap-2.5 p-[9px_14px_9px_36px]"
+      style={{ borderTop: "1px solid rgba(255,255,255,.045)" }}
+    >
+      <span
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px]"
+        style={{ background: "rgba(139,92,246,.14)" }}
+      >
+        <Icon size={11} strokeWidth={2} color="#a78bfa" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[11.5px] font-semibold">{process.name}</div>
+        <div className="truncate text-[10px] text-[#7a7a8c]">{process.meta}</div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="font-mono text-[11px] font-semibold text-[#c7c7d4]">{fmtCompact(process.tokens)} tok</div>
+        <div className="font-mono text-[11px] font-bold text-[#6ee7b7]">{fmtCost(process.costUsd)}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Mobile stacked-row equivalent of {@link AiTicketGroup} — same header, cards instead of a grid. */
+function AiTicketGroupMobile({
+  ticket,
+  resolveTicket,
+}: {
+  ticket: RunAiTicket;
+  resolveTicket: (externalId: string) => { title: string; providerKind: string };
+}) {
+  const runLevel = ticket.ticketExternalId === "";
+  const { title, providerKind } = resolveTicket(ticket.ticketExternalId);
+  const [glyph, color] = providerGlyph[providerKind] ?? ["?", "#8b8b9e"];
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-[11px] p-[12px_14px]"
+        style={{ borderTop: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.025)" }}
+      >
+        {runLevel ? (
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px]"
+            style={{ background: "rgba(139,92,246,.14)" }}
+          >
+            <Cpu size={14} strokeWidth={2} color="#a78bfa" />
+          </span>
+        ) : (
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[11px] font-black text-white"
+            style={{ background: color }}
+          >
+            {glyph}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          {runLevel ? (
+            <div className="text-[12.5px] font-bold">Run&#8209;level</div>
+          ) : (
+            <>
+              <div className="font-mono text-[10.5px] font-semibold text-violet">{ticket.ticketExternalId}</div>
+              <div className="truncate text-[12px] font-semibold">{title}</div>
+            </>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="font-mono text-[12.5px] font-black tracking-[-.02em] text-[#6ee7b7]">
+            {fmtCost(ticket.costUsd)}
+          </div>
+          <div className="text-[9.5px] text-[#8b8b9e]">{fmtCompact(ticket.tokens)} tok</div>
+        </div>
+      </div>
+      {ticket.processes.map((p) => (
+        <AiProcessRowMobile key={p.key} process={p} />
+      ))}
     </div>
   );
 }
