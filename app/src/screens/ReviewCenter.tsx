@@ -82,14 +82,14 @@ export function ReviewCenter() {
 
   return (
     <div className="animate-fade-in-up px-1 pb-10 pt-0.5">
-      <div className="mb-3.5 flex items-end justify-between">
+      <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-1 text-[13px] font-medium text-muted">
             {run?.code} &middot; {run?.name}
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Review Center</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Review Center</h1>
         </div>
-        <div className="flex flex-wrap justify-end gap-2.5">
+        <div className="hidden flex-wrap justify-end gap-2.5 md:flex">
           {selectedIds.length > 0 && (
             <Button variant="success" onClick={approveSelected}>
               Approve selected ({selectedIds.length})
@@ -120,11 +120,11 @@ export function ReviewCenter() {
         </div>
       </div>
 
-      <div className="mb-3.5">
+      <div className="mb-3.5 hidden md:block">
         <PipelineRail stage={4} />
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-3">
+      <div className="mb-4 grid grid-cols-3 gap-3 md:grid-cols-4">
         <GlassCard className="px-[18px] py-4">
           <div className="text-[26px] font-black leading-none text-success-soft">{stats.approved}</div>
           <div className="mt-[5px] text-xs text-muted">Approved</div>
@@ -138,7 +138,7 @@ export function ReviewCenter() {
           <div className="mt-[5px] text-xs text-muted">Rejected</div>
         </GlassCard>
         <div
-          className="rounded-[20px] border px-[18px] py-4"
+          className="col-span-3 rounded-[20px] border px-[18px] py-4 md:col-span-1"
           style={{
             background: "linear-gradient(135deg,rgba(139,92,246,.16),rgba(99,102,241,.08))",
             borderColor: "rgba(139,92,246,.26)",
@@ -183,6 +183,47 @@ export function ReviewCenter() {
           />
         ))}
       </div>
+
+      {/* Mobile sticky bottom action bar — progress + approve/continue, replacing
+          the desktop header's button row (MOBILE_SPEC §4 pattern 3). Opaque bg
+          (no backdrop-filter) since it layers over the animated background. */}
+      {(cases?.length ?? 0) > 0 && (
+        <div
+          className="sticky bottom-0 z-10 -mx-1 mt-4 border-t border-white/[0.08] px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 md:hidden"
+          style={{ background: "rgba(12,12,18,.92)" }}
+        >
+          <div className="mb-2 flex items-center justify-between text-[11.5px] font-semibold text-ink-dim">
+            <span>
+              {stats.approved}/{cases?.length ?? 0} approved
+            </span>
+            <span>{stats.pct}%</span>
+          </div>
+          <div className="mb-3 h-[6px] overflow-hidden rounded-full bg-white/[0.08]">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${stats.pct}%`, background: "linear-gradient(90deg,#8b5cf6,#22d3ee)" }}
+            />
+          </div>
+          <div className="flex gap-2.5">
+            <Button
+              variant="glass"
+              className="flex-1"
+              onClick={() => (selectedIds.length > 0 ? approveSelected() : approveAll.mutate())}
+              disabled={approveAll.isPending}
+            >
+              {selectedIds.length > 0 ? `Approve selected (${selectedIds.length})` : "Approve all"}
+            </Button>
+            <Button
+              variant="primary"
+              className="flex-[1.35] disabled:opacity-50"
+              onClick={() => startCreateLink(true)}
+              disabled={stats.approved === 0}
+            >
+              Continue to Sync
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -221,7 +262,10 @@ function TicketAccordion({
 
   return (
     <GlassCard className="overflow-hidden">
-      <div className="flex cursor-pointer items-center gap-3.5 px-[18px] py-4" onClick={onToggle}>
+      <div
+        className="flex cursor-pointer items-center gap-3 px-4 py-3.5 md:gap-3.5 md:px-[18px] md:py-4"
+        onClick={onToggle}
+      >
         <div
           className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full"
           style={{ background: `conic-gradient(#8b5cf6 ${pct}%, rgba(255,255,255,.08) ${pct}%)` }}
@@ -236,11 +280,18 @@ function TicketAccordion({
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center gap-2.5">
             <span className="font-mono text-xs font-semibold text-violet">{ticketExternalId}</span>
-            <span className="text-[11px] text-faint">{total} test cases</span>
+            <span className="hidden text-[11px] text-faint md:inline">{total} test cases</span>
           </div>
           <div className="truncate text-[14.5px] font-semibold">{title}</div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5 text-[11.5px] font-semibold">
+        {/* Mobile: compact approved/total count pill (desktop shows the two pills + button instead). */}
+        <span
+          className="shrink-0 rounded-full px-2.5 py-[3px] text-[11px] font-bold md:hidden"
+          style={{ color: "#a78bfa", background: "rgba(139,92,246,.14)" }}
+        >
+          {approved}/{total}
+        </span>
+        <div className="hidden shrink-0 items-center gap-1.5 text-[11.5px] font-semibold md:flex">
           <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)">
             {approved} approved
           </Pill>
@@ -254,7 +305,7 @@ function TicketAccordion({
             onApproveTicket();
           }}
           disabled={fullyApproved || approveTicketPending}
-          className="flex items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-[11.5px] font-semibold disabled:cursor-default"
+          className="hidden items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-[11.5px] font-semibold disabled:cursor-default md:flex"
           style={
             fullyApproved
               ? { background: "rgba(16,185,129,.16)", borderColor: "rgba(16,185,129,.3)", color: "#6ee7b7" }
@@ -279,7 +330,22 @@ function TicketAccordion({
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="overflow-hidden"
           >
-            <div className="flex flex-col gap-2.5 px-[18px] pb-4">
+            <div className="flex flex-col gap-2.5 px-4 pb-3.5 md:px-[18px] md:pb-4">
+              {/* Mobile-only: the desktop header's "Approve all" button moves here,
+                  above the per-case list (MOBILE_SPEC §3 Review Center). */}
+              <button
+                onClick={onApproveTicket}
+                disabled={fullyApproved || approveTicketPending}
+                className="flex w-full items-center justify-center gap-1.5 rounded-[10px] border px-3 py-2 text-[12.5px] font-semibold disabled:cursor-default md:hidden"
+                style={
+                  fullyApproved
+                    ? { background: "rgba(16,185,129,.16)", borderColor: "rgba(16,185,129,.3)", color: "#6ee7b7" }
+                    : { background: "rgba(255,255,255,.05)", borderColor: "rgba(255,255,255,.1)", color: "#c3c3d0" }
+                }
+              >
+                {fullyApproved && <Check size={13} />}
+                {fullyApproved ? "All approved" : `Approve all ${total} cases`}
+              </button>
               {cases.map((c) => (
                 <CaseRow
                   key={c.id}
@@ -345,7 +411,7 @@ function CaseRow({
 
   return (
     <div className="overflow-hidden rounded-[14px] border" style={{ background: "rgba(255,255,255,.03)", borderColor: statusBorder }}>
-      <div className="flex cursor-pointer items-center gap-2.5 px-[15px] py-3" onClick={() => toggleCase(c.id)}>
+      <div className="flex cursor-pointer items-center gap-2 px-3 py-2.5 md:gap-2.5 md:px-[15px] md:py-3" onClick={() => toggleCase(c.id)}>
         <div
           onClick={(e) => {
             e.stopPropagation();
@@ -361,13 +427,13 @@ function CaseRow({
         </div>
         <ChevronRight
           size={15}
-          className="text-muted transition-transform"
+          className="shrink-0 text-muted transition-transform"
           style={{ transform: expanded ? "rotate(90deg)" : undefined }}
         />
         <span className="shrink-0 font-mono text-[11.5px] font-semibold text-violet">{c.code}</span>
-        <span className="flex-1 text-[13.5px] font-semibold leading-snug">{c.title}</span>
+        <span className="flex-1 truncate text-[13.5px] font-semibold leading-snug">{c.title}</span>
         {regenerating && (
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-violet">
+          <span className="hidden shrink-0 items-center gap-1.5 text-[11px] font-semibold text-violet md:flex">
             <Spinner size={12} />
             regenerating
           </span>
@@ -386,7 +452,7 @@ function CaseRow({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2 }}
-            className="px-[15px] pb-[15px] pl-[41px]"
+            className="px-3 pb-3 pl-3 md:px-[15px] md:pb-[15px] md:pl-[41px]"
           >
             {!isEditing ? (
               <div>
@@ -436,7 +502,7 @@ function CaseRow({
                   </>
                 ) : null}
                 <div className="mb-3 overflow-hidden rounded-[11px] border border-white/[0.07]">
-                  <div className="grid grid-cols-[28px_1fr_1fr] gap-2.5 bg-white/[0.04] px-3 py-2 text-[10px] font-bold tracking-wider text-faint">
+                  <div className="hidden grid-cols-[28px_1fr_1fr] gap-2.5 bg-white/[0.04] px-3 py-2 text-[10px] font-bold tracking-wider text-faint md:grid">
                     <span>#</span>
                     <span>ACTION</span>
                     <span>EXPECTED RESULT</span>
@@ -444,11 +510,16 @@ function CaseRow({
                   {c.steps.map((st, i) => (
                     <div
                       key={i}
-                      className="grid grid-cols-[28px_1fr_1fr] gap-2.5 border-t border-white/5 px-3 py-2.5 text-xs leading-snug"
+                      className="grid grid-cols-[20px_1fr] gap-2 border-t border-white/5 px-3 py-2.5 text-xs leading-snug md:grid-cols-[28px_1fr_1fr] md:gap-2.5"
                     >
                       <span className="font-mono text-violet">{i + 1}</span>
-                      <span className="text-ink-soft">{st.a}</span>
-                      <span className="text-ink-dim">{st.e}</span>
+                      <div className="flex flex-col gap-1 md:contents">
+                        <span className="text-ink-soft">{st.a}</span>
+                        <span className="text-ink-dim">
+                          <span className="mr-1 text-faint md:hidden">&#8594;</span>
+                          {st.e}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -465,7 +536,7 @@ function CaseRow({
                     ))}
                   </div>
                 ) : null}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => onSetApproval("approved")}
                     className="flex items-center gap-1.5 rounded-[10px] px-[13px] py-[7px] text-xs font-semibold"
@@ -512,7 +583,7 @@ function CaseRow({
                   </button>
                   <button
                     onClick={() => startEdit(c.id, { title: c.title, precondition: c.precondition, steps: c.steps })}
-                    className="ml-auto flex items-center gap-1.5 rounded-[10px] border border-white/10 bg-white/5 px-[13px] py-[7px] text-xs font-semibold text-ink-soft hover:bg-white/10"
+                    className="flex items-center gap-1.5 rounded-[10px] border border-white/10 bg-white/5 px-[13px] py-[7px] text-xs font-semibold text-ink-soft hover:bg-white/10 md:ml-auto"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
@@ -539,26 +610,31 @@ function CaseRow({
                   <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">STEPS</div>
                   <div className="mb-3 flex flex-col gap-2">
                     {draft.steps.map((st, i) => (
-                      <div key={i} className="grid grid-cols-[24px_1fr_1fr] items-center gap-2">
-                        <span className="font-mono text-xs text-violet">{i + 1}</span>
-                        <input
-                          value={st.a}
-                          placeholder="Action"
-                          onChange={(e) => {
-                            const steps = draft.steps.map((s, j) => (j === i ? { ...s, a: e.target.value } : s));
-                            updateDraft({ steps });
-                          }}
-                          className="w-full rounded-[9px] border border-white/[0.12] bg-white/5 px-[11px] py-2 text-[12.5px] text-ink-soft outline-none focus:border-[rgba(139,92,246,.5)]"
-                        />
-                        <input
-                          value={st.e}
-                          placeholder="Expected result"
-                          onChange={(e) => {
-                            const steps = draft.steps.map((s, j) => (j === i ? { ...s, e: e.target.value } : s));
-                            updateDraft({ steps });
-                          }}
-                          className="w-full rounded-[9px] border border-white/[0.12] bg-white/5 px-[11px] py-2 text-[12.5px] text-ink-dim outline-none focus:border-[rgba(139,92,246,.5)]"
-                        />
+                      <div
+                        key={i}
+                        className="grid grid-cols-[20px_1fr] items-start gap-2 md:grid-cols-[24px_1fr_1fr] md:items-center"
+                      >
+                        <span className="pt-2 font-mono text-xs text-violet md:pt-0">{i + 1}</span>
+                        <div className="flex flex-col gap-2 md:contents">
+                          <input
+                            value={st.a}
+                            placeholder="Action"
+                            onChange={(e) => {
+                              const steps = draft.steps.map((s, j) => (j === i ? { ...s, a: e.target.value } : s));
+                              updateDraft({ steps });
+                            }}
+                            className="w-full rounded-[9px] border border-white/[0.12] bg-white/5 px-[11px] py-2 text-[12.5px] text-ink-soft outline-none focus:border-[rgba(139,92,246,.5)]"
+                          />
+                          <input
+                            value={st.e}
+                            placeholder="Expected result"
+                            onChange={(e) => {
+                              const steps = draft.steps.map((s, j) => (j === i ? { ...s, e: e.target.value } : s));
+                              updateDraft({ steps });
+                            }}
+                            className="w-full rounded-[9px] border border-white/[0.12] bg-white/5 px-[11px] py-2 text-[12.5px] text-ink-dim outline-none focus:border-[rgba(139,92,246,.5)]"
+                          />
+                        </div>
                       </div>
                     ))}
                     <button

@@ -297,27 +297,27 @@ export function Automation() {
 
   return (
     <div className="animate-fade-in-up px-1 pb-10 pt-0.5">
-      <div className="mb-3.5 flex items-end justify-between">
+      <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-1 text-[13px] font-medium text-muted">
             {run?.code} &middot; Playwright · TypeScript · approved cases only
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Automation</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Automation</h1>
         </div>
         {specCount > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
             {missingCount > 0 && (
-              <Button variant="primary" onClick={startGenerate} disabled={generating}>
+              <Button variant="primary" onClick={startGenerate} disabled={generating} className="w-full md:w-auto">
                 <Sparkles size={15} strokeWidth={2.2} /> Generate new ({missingCount})
               </Button>
             )}
-            <Button variant="glass" onClick={regenerateAll} disabled={generating}>
+            <Button variant="glass" onClick={regenerateAll} disabled={generating} className="w-full md:w-auto">
               <RotateCcw size={15} strokeWidth={2.2} /> Regenerate all
             </Button>
           </div>
         )}
       </div>
-      <div className="mb-4">
+      <div className="mb-4 hidden md:block">
         <PipelineRail stage={6} />
       </div>
 
@@ -357,7 +357,7 @@ export function Automation() {
       )}
 
       {!thinking && specs && specs.length > 0 && (
-        <div className="grid grid-cols-[230px_1fr] items-start gap-3.5">
+        <div className="flex flex-col gap-3.5 md:grid md:grid-cols-[230px_1fr] md:items-start">
           <SpecList
             specs={specs}
             selectedTestCaseId={selectedSpec?.testCaseId ?? null}

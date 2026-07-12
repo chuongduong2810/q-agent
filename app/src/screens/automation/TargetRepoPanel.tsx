@@ -42,7 +42,7 @@ export function TargetRepoPanel({
           return (
             <div
               key={rt.ticketExternalId}
-              className="flex items-center gap-3 rounded-[11px] border border-white/[0.07] bg-white/[0.03] px-3 py-2"
+              className="flex flex-wrap items-center gap-3 rounded-[11px] border border-white/[0.07] bg-white/[0.03] px-3 py-2"
             >
               <span className="shrink-0 font-mono text-[12px] font-semibold text-violet">
                 {rt.ticketExternalId}

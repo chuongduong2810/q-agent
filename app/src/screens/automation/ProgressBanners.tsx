@@ -6,7 +6,7 @@ import type { GenProgress, HealProgress } from "./useAutomationEvents";
 /** Full-height placeholder card shown while the first generation pass runs. */
 export function ThinkingBanner({ runCode, thinkStep }: { runCode: string | undefined; thinkStep: number }) {
   return (
-    <GlassCard className="p-[26px]" style={{ borderColor: "rgba(139,92,246,.28)" }}>
+    <GlassCard className="p-4 md:p-[26px]" style={{ borderColor: "rgba(139,92,246,.28)" }}>
       <div className="mb-[22px] flex items-center gap-[13px]">
         <div
           className="flex h-11 w-11 items-center justify-center rounded-[14px]"

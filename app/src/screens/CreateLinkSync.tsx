@@ -53,17 +53,18 @@ export function CreateLinkSync() {
 
   return (
     <div className="px-1 pb-10 pt-0.5">
-      <div className="mb-3.5 flex items-end justify-between">
+      <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
             {run?.code} &middot; create approved cases in the provider &amp; link to each work item
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Create &amp; Link Test Cases</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Create &amp; Link Test Cases</h1>
         </div>
         {state === "done" && (
           <Button
             variant="primary"
             size="lg"
+            className="w-full md:w-auto"
             onClick={() => {
               generateAutomation.mutate(undefined);
               navigate("/runs/" + runId + "/automation");
@@ -74,12 +75,12 @@ export function CreateLinkSync() {
         )}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 hidden md:block">
         <PipelineRail stage={5} />
       </div>
 
       {state === "idle" && (
-        <div className="glass flex flex-col items-center rounded-[22px] px-8 py-12 text-center">
+        <div className="glass flex flex-col items-center rounded-[22px] px-5 py-10 text-center md:px-8 md:py-12">
           <div
             className="mb-5 flex h-[70px] w-[70px] items-center justify-center rounded-[22px]"
             style={{ background: "linear-gradient(135deg,rgba(139,92,246,.24),rgba(99,102,241,.12))" }}
@@ -94,7 +95,7 @@ export function CreateLinkSync() {
           </p>
 
           <label
-            className="mb-[18px] flex cursor-pointer items-center gap-2.5 rounded-xl border px-[14px] py-2.5"
+            className="mb-[18px] flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-[14px] py-2.5 md:w-auto"
             style={{
               background: localMode ? "rgba(139,92,246,.12)" : "rgba(255,255,255,.03)",
               borderColor: localMode ? "rgba(139,92,246,.35)" : "rgba(255,255,255,.08)",
@@ -102,7 +103,7 @@ export function CreateLinkSync() {
           >
             <input
               type="checkbox"
-              className="h-4 w-4 accent-violet"
+              className="h-4 w-4 shrink-0 accent-violet"
               checked={localMode}
               onChange={(e) => toggleLocalMode(e.target.checked)}
             />
@@ -114,6 +115,7 @@ export function CreateLinkSync() {
           <Button
             variant="primary"
             size="lg"
+            className="w-full md:w-auto"
             onClick={() =>
               createAndLink.mutate(
                 { link: !localMode, dryRun: localMode },
@@ -129,7 +131,7 @@ export function CreateLinkSync() {
 
       {state === "running" && (
         <div
-          className="glass mb-3.5 flex items-center gap-3 rounded-[22px] p-[20px_22px]"
+          className="glass mb-3.5 flex flex-wrap items-center gap-3 rounded-[22px] p-4 md:p-[20px_22px]"
           style={{ borderColor: "rgba(139,92,246,.28)" }}
         >
           <RefreshCw size={20} className="animate-[spin_.8s_linear_infinite] text-violet" />
@@ -142,7 +144,7 @@ export function CreateLinkSync() {
 
       {state === "done" && (
         <div
-          className="mb-3.5 flex items-center gap-[11px] rounded-2xl p-[14px_18px]"
+          className="mb-3.5 flex flex-wrap items-center gap-[11px] rounded-2xl p-[14px_18px]"
           style={{ background: "rgba(16,185,129,.1)", border: "1px solid rgba(16,185,129,.28)" }}
         >
           <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-success">
@@ -170,7 +172,7 @@ export function CreateLinkSync() {
             return (
               <div
                 key={rt.ticketExternalId}
-                className="glass flex items-center gap-3.5 rounded-2xl p-[16px_18px]"
+                className="glass flex items-center gap-3 rounded-2xl p-3 md:gap-3.5 md:p-[16px_18px]"
               >
                 <div
                   className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[14px] font-black text-white"
