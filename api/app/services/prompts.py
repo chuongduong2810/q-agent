@@ -70,6 +70,13 @@ REVIEW_JSON_SHAPE = """{
   ]
 }"""
 
+AUTOMATION_REVIEW_JSON_SHAPE = """{
+  "verdict": "approve" | "approve-with-changes" | "reject",
+  "findings": [
+    { "severity": "Critical" | "Major" | "Minor" | "Nit", "message": string }
+  ]
+}"""
+
 
 def _ticket_context(ticket: Ticket) -> str:
     """Render the ticket fields Claude needs: title, description, acceptance criteria."""
@@ -301,4 +308,50 @@ def build_case_regenerate_prompt(
         "fields: title, objective, precondition, testData ([{field, value}]), "
         "steps ([{a, e}]), linkedAc, priority, testType, automation, platform.\n\n"
         f"Respond with ONLY a JSON object of this exact shape:\n{CASE_JSON_SHAPE}"
+    )
+
+
+def build_automation_review_prompt(
+    code: str, case: Any, context: dict[str, Any] | None = None
+) -> str:
+    """Prompt for ``automation-reviewer``: statically review a gate-passed spec.
+
+    Runs AFTER the deterministic placeholder / flaky-pattern gate (see
+    ``app.services.placeholder_gate``) has already passed a spec — this stage's
+    job is what regex heuristics can't catch: correctness against the case's
+    expected results, reuse discipline, and subtler flakiness/locator-quality
+    issues.
+
+    Args:
+        code: The generated Playwright/TypeScript spec source to review.
+        case: The source ``TestCase`` (title/precondition/steps) the spec
+            automates, used to check the spec actually covers it.
+        context: Resolved project context (Knowledge Base) for convention checks.
+
+    Returns:
+        A prompt instructing Claude to respond with a JSON object matching
+        :data:`AUTOMATION_REVIEW_JSON_SHAPE`. A ``Critical`` finding is treated
+        like a gate rejection by the caller (see ``app.routers.automation``).
+    """
+    project_block = render_project_context(context)
+    project_section = f"{project_block}\n\n" if project_block else ""
+    steps_lines = "\n".join(
+        f"  {i + 1}. Action: {step.get('a', '')} | Expected: {step.get('e', '')}"
+        for i, step in enumerate(getattr(case, "steps", None) or [])
+    )
+    return (
+        "You are a senior QA automation reviewer. Statically review the "
+        "Playwright + TypeScript spec below against the source test case and "
+        "the Project Knowledge Base. Focus on correctness (does it assert every "
+        "Expected Result?), flakiness risk (hard waits, non-web-first "
+        "assertions, races), locator quality, and reuse discipline.\n\n"
+        f"{project_section}"
+        f"Test case:\nTitle: {getattr(case, 'title', '')}\n"
+        f"Precondition: {getattr(case, 'precondition', '') or 'None'}\n"
+        f"Steps:\n{steps_lines or '  (none provided)'}\n\n"
+        f"Generated spec:\n```typescript\n{(code or '').strip()}\n```\n\n"
+        "Rate each finding: Critical (the spec doesn't test the intended "
+        "behavior, or will fail/pass incorrectly) / Major (real flakiness risk "
+        "or brittle locators) / Minor (convention deviation) / Nit (polish).\n\n"
+        f"Respond with ONLY a JSON object of this exact shape:\n{AUTOMATION_REVIEW_JSON_SHAPE}"
     )

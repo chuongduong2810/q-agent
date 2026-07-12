@@ -61,6 +61,20 @@ _TESTID_RE = re.compile(r"getByTestId\(\s*[\"'`]([^\"'`]+)[\"'`]")
 _CSS_ID_RE = re.compile(r"[\"'`](#[A-Za-z][\w-]*)[\"'`]")
 _DATA_TESTID_ATTR_RE = re.compile(r"[\"'`](\[data-testid=[^\"'`\]]+\])[\"'`]")
 
+# ----------------------------------------------------------- flaky patterns
+# Deterministic, cheap flaky/brittle-pattern checks (#181) — run BEFORE any AI
+# review (automation-reviewer) so obviously bad specs never cost a Claude call.
+_HARD_WAIT_RE = re.compile(r"\bwaitForTimeout\(")
+# Brittle raw-CSS locators: a bare class selector, a descendant/child
+# combinator, or an nth-child/nth-of-type index passed to `.locator(...)` —
+# all DOM-structure-dependent and prone to breaking on any markup change.
+# data-testid / id / attribute selectors are handled separately above and are
+# NOT considered brittle here.
+_BRITTLE_CSS_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\.locator\(\s*[\"'`](\.[\w-]+(?:\s*[>\s][^\"'`]*)?)[\"'`]"),
+    re.compile(r"\.locator\(\s*[\"'`]([^\"'`]*:nth-(?:child|of-type)\([^\"'`]*\)[^\"'`]*)[\"'`]"),
+]
+
 
 def count_assertions(code: str) -> int:
     """Count Playwright assertion occurrences in a spec's source.
@@ -102,6 +116,39 @@ def find_placeholders(code: str) -> list[str]:
                 seen.add(key)
                 found.append(token)
     return found
+
+
+def find_flaky_patterns(code: str) -> list[str]:
+    """Return deterministic flaky/brittle-pattern findings in a spec's source.
+
+    Cheap, regex-based checks that run BEFORE any AI review (``automation-reviewer``):
+    hard-coded waits (``page.waitForTimeout``), specs that assert nothing at all
+    (reuses :func:`count_assertions`), and obviously brittle raw-CSS locators (bare
+    class selectors, descendant/child combinators, ``:nth-child``/``:nth-of-type`` —
+    all DOM-order dependent).
+
+    Args:
+        code: The spec's TypeScript source.
+
+    Returns:
+        Human-readable finding strings, de-duplicated. Empty when the spec is
+        clean of these patterns.
+    """
+    if not code:
+        return []
+    findings: list[str] = []
+    if _HARD_WAIT_RE.search(code):
+        findings.append("hard-coded wait: page.waitForTimeout(...)")
+    if count_assertions(code) == 0:
+        findings.append("zero assertions — spec verifies nothing")
+    seen: set[str] = set()
+    for pat in _BRITTLE_CSS_PATTERNS:
+        for match in pat.findall(code):
+            value = match.strip()
+            if value and value not in seen:
+                seen.add(value)
+                findings.append(f"brittle CSS locator: {value}")
+    return findings
 
 
 def _normalize_path(url: str) -> str:
@@ -219,8 +266,27 @@ def gate_spec(code: str, known: dict) -> dict:
           used the grounding it was given).
 
     A clean spec that only uses known routes/selectors always returns ``passed``.
+
+    Deterministic flaky-pattern findings (hard waits, zero assertions, brittle raw
+    CSS — see :func:`find_flaky_patterns`) win first: they are genuine code-quality
+    defects the model should fix, not a missing-KB-input situation, so they always
+    reject regardless of what grounding the KB provides.
     """
     known = known or {}
+    flaky = find_flaky_patterns(code or "")
+    if flaky:
+        detail = ", ".join(flaky[:6])
+        return {
+            "outcome": "rejected",
+            "findings": flaky,
+            "reason": f"The spec contains flaky/brittle patterns ({detail}).",
+            "unblock_action": (
+                "Regenerate using web-first assertions (with at least one "
+                "assertion) instead of hard waits, and prefer KB-known "
+                "data-testid/role locators over brittle raw CSS."
+            ),
+        }
+
     placeholders = find_placeholders(code or "")
     invented = _find_invented(code or "", known)
     findings = placeholders + invented

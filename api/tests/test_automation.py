@@ -183,7 +183,11 @@ def test_update_case_spec_persists_and_rewrites_file(client, db_session, monkeyp
     # Seed a spec via regenerate, then edit it.
     assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
 
-    edited = "import { test } from '@playwright/test';\n\ntest('edited', async () => {});\n"
+    # Carries a real assertion so it isn't caught by the zero-assertion flaky check.
+    edited = (
+        "import { test, expect } from '@playwright/test';\n\n"
+        "test('edited', async ({ page }) => { await expect(page).toHaveTitle(/x/); });\n"
+    )
     resp = client.patch(f"/cases/{case.id}/spec", json={"code": edited})
     assert resp.status_code == 200
     body = resp.json()
@@ -234,8 +238,12 @@ def test_edit_unblocks_spec_when_placeholders_removed(client, db_session, monkey
     assert got["status"] == "blocked"
     assert got["blockReason"]
 
-    # Edit away the placeholders -> unblocked (draft, reason cleared).
-    clean = "import { test } from '@playwright/test';\n\ntest('login', async () => {});\n"
+    # Edit away the placeholders -> unblocked (draft, reason cleared). Carries a
+    # real assertion so it isn't caught by the zero-assertion flaky check.
+    clean = (
+        "import { test, expect } from '@playwright/test';\n\n"
+        "test('login', async ({ page }) => { await expect(page).toHaveTitle(/x/); });\n"
+    )
     body = client.patch(f"/cases/{case.id}/spec", json={"code": clean}).json()
     assert body["status"] == "draft"
     assert not body["blockReason"]
@@ -743,3 +751,85 @@ def test_generation_gate_blocked_vs_rejected(db_session, monkeypatch):
     import json as _json
 
     assert _json.loads(spec2.gate_report)["outcome"] == "rejected"
+
+
+def test_automation_review_critical_finding_rejects_gate_passed_spec(db_session, monkeypatch):
+    """A spec that passes the deterministic gate is still rejected when
+    automation-reviewer (#181) flags a Critical finding — treated like a gate
+    rejection, with the verdict persisted in gate_report."""
+    from app.routers import automation
+    from app.models.run import Run
+    from app.services import spec_service
+
+    monkeypatch.setattr(spec_service, "generate_spec_code", lambda *a, **k: CANNED_SPEC)
+    monkeypatch.setattr(spec_service, "build_case_context", lambda *a, **k: {})
+
+    review = {
+        "verdict": "reject",
+        "findings": [{"severity": "Critical", "message": "Assertion never runs"}],
+    }
+    monkeypatch.setattr(automation, "run_json", lambda *a, **k: review)
+
+    run, case = _seed_run_and_case(db_session)
+    spec = automation._generate_one(db_session, db_session.get(Run, run.id), case)
+    db_session.commit()
+
+    assert spec.status == "blocked"
+    import json as _json
+
+    gate_report = _json.loads(spec.gate_report)
+    assert gate_report["outcome"] == "rejected"
+    assert gate_report["review"] == review
+    from app.services.workspace_scope import scoped_specs_dir
+
+    assert not (scoped_specs_dir(run.owner_id) / run.code / "1428-TC-01.spec.ts").exists()
+
+
+def test_automation_review_non_critical_findings_still_passes(db_session, monkeypatch):
+    """A gate-passed spec with only Major/Minor automation-reviewer findings still
+    accepts and writes the spec, with the verdict persisted for the UI."""
+    from app.routers import automation
+    from app.models.run import Run
+    from app.services import spec_service
+
+    monkeypatch.setattr(spec_service, "generate_spec_code", lambda *a, **k: CANNED_SPEC)
+    monkeypatch.setattr(spec_service, "build_case_context", lambda *a, **k: {})
+
+    review = {
+        "verdict": "approve-with-changes",
+        "findings": [{"severity": "Minor", "message": "Prefer getByRole"}],
+    }
+    monkeypatch.setattr(automation, "run_json", lambda *a, **k: review)
+
+    run, case = _seed_run_and_case(db_session)
+    spec = automation._generate_one(db_session, db_session.get(Run, run.id), case)
+    db_session.commit()
+
+    assert spec.status == "draft"
+    import json as _json
+
+    gate_report = _json.loads(spec.gate_report)
+    assert gate_report["outcome"] == "passed"
+    assert gate_report["review"] == review
+
+
+def test_automation_review_failure_does_not_block_gate_passed_spec(db_session, monkeypatch):
+    """The reviewer call is best-effort: a Claude/parse error must never block a
+    spec the deterministic gate already passed."""
+    from app.routers import automation
+    from app.models.run import Run
+    from app.services import spec_service
+
+    monkeypatch.setattr(spec_service, "generate_spec_code", lambda *a, **k: CANNED_SPEC)
+    monkeypatch.setattr(spec_service, "build_case_context", lambda *a, **k: {})
+
+    def boom(*a, **k):
+        raise RuntimeError("Claude unavailable")
+
+    monkeypatch.setattr(automation, "run_json", boom)
+
+    run, case = _seed_run_and_case(db_session)
+    spec = automation._generate_one(db_session, db_session.get(Run, run.id), case)
+    db_session.commit()
+
+    assert spec.status == "draft"
