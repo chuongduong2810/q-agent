@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, create_engine
+from sqlalchemy import DateTime, Engine, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, mapped_column, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
@@ -25,6 +25,26 @@ engine = create_engine(
     connect_args=_connect_args(settings.resolved_database_url),
     echo=False,
 )
+
+@event.listens_for(Engine, "connect")
+def _sqlite_pragmas(dbapi_connection, _connection_record):  # noqa: ANN001
+    """Enable WAL + a busy timeout on every SQLite connection (any engine).
+
+    The backend touches the DB from multiple threads (request handlers, the
+    background AI/execution worker, the usage recorder, and — when enabled — the
+    bounded ticket pool, #179). WAL lets readers and a writer coexist, and
+    busy_timeout makes a contended writer wait instead of immediately raising
+    "database is locked". Registered on the Engine class (not one instance) so it
+    also covers the per-test engines the test suite rebinds. No-op on Postgres.
+    """
+    import sqlite3
+
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 

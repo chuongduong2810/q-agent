@@ -211,6 +211,80 @@ def test_regenerate_case_updates_fields_and_sets_edited(db_session, seed_ticket,
     assert updated.edited is True
 
 
+def test_resolve_worker_count_defaults_and_clamps(workspace_dir, monkeypatch):
+    """SQLite defaults to sequential; explicit settings are honored + clamped (#179).
+
+    ``workspace_dir`` rebinds the engine to the temp SQLite DB so the dialect
+    default is deterministic regardless of the ambient dev database.
+    """
+    from app.services import settings_store
+
+    monkeypatch.setattr(settings_store, "load_settings", lambda: {})
+    assert ai_service._resolve_worker_count() == 1  # sqlite → sequential
+    monkeypatch.setattr(settings_store, "load_settings", lambda: {"aiPipelineWorkers": 3})
+    assert ai_service._resolve_worker_count() == 3
+    monkeypatch.setattr(settings_store, "load_settings", lambda: {"aiPipelineWorkers": 99})
+    assert ai_service._resolve_worker_count() == 4  # clamped to 4
+    monkeypatch.setattr(settings_store, "load_settings", lambda: {"aiPipelineWorkers": "oops"})
+    assert ai_service._resolve_worker_count() == 1  # bad value → sqlite fallback
+
+
+def test_pipeline_parallel_processes_all_tickets(db_session, seed_ticket, monkeypatch):
+    """With aiPipelineWorkers>1 every ticket is processed in its own session (#179)."""
+    from app.models.ticket import Ticket
+    from app.services import settings_store
+    from app.services.skills import TEST_CASE_GENERATOR, TEST_CASE_REVIEWER
+
+    for ext in ("SUR-2001", "SUR-2002"):
+        db_session.add(
+            Ticket(
+                external_id=ext,
+                provider_kind="ado",
+                title=f"Ticket {ext}",
+                work_item_type="User Story",
+                status="Ready for QA",
+                description="desc",
+                acceptance_criteria=["AC1"],
+            )
+        )
+    run = Run(code="RUN-301", name="Parallel run", status="processing")
+    db_session.add(run)
+    db_session.flush()
+    externals = [seed_ticket.external_id, "SUR-2001", "SUR-2002"]
+    for i, ext in enumerate(externals):
+        db_session.add(RunTicket(run_id=run.id, ticket_external_id=ext, position=i))
+    db_session.commit()
+    db_session.refresh(run)
+
+    def _dispatch(*_a, **kwargs):  # thread-safe: no shared iterator
+        skill = kwargs.get("skill")
+        if skill == TEST_CASE_REVIEWER:
+            return {"verdict": "approve", "coverageGaps": [], "additionalCases": []}
+        if skill == TEST_CASE_GENERATOR:
+            return {"analysis": CANNED_ANALYSIS, "cases": CANNED_CASES}
+        return CANNED_ANALYSIS
+
+    monkeypatch.setattr(ai_service, "run_json", _dispatch)
+    monkeypatch.setattr(
+        settings_store, "load_settings", lambda: {"aiPipelineWorkers": 3, "maxCasesPerTicket": 8}
+    )
+
+    ai_service.run_generation_pipeline(run.id, blocking=True)
+
+    db_session.expire_all()
+    rts = db_session.query(RunTicket).filter(RunTicket.run_id == run.id).all()
+    assert {rt.gen_status for rt in rts} == {"done"}
+    for ext in externals:
+        n = (
+            db_session.query(TestCase)
+            .filter(TestCase.run_id == run.id, TestCase.ticket_external_id == ext)
+            .count()
+        )
+        assert n == len(CANNED_CASES)
+    db_session.refresh(run)
+    assert run.status == "review"
+
+
 def test_next_case_code_increments(db_session, seed_ticket):
     run = _make_run(db_session, seed_ticket.external_id)
     db_session.add(
