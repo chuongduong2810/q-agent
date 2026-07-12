@@ -24,8 +24,9 @@ DEFAULTS: dict[str, Any] = {
     "weeklyTokenBudget": 0,
     # Default execution target for new runs when a request doesn't specify one
     # (Local Agent feature — see EXEC_TARGETS): "server" (legacy in-process
-    # runner) or "local-agent" (queued for a paired device to claim).
-    "executionTarget": "server",
+    # runner) or "local-agent" (queued for a paired device to claim). Fresh
+    # installs default to the user's machine ("My machine").
+    "executionTarget": "local-agent",
 }
 
 
