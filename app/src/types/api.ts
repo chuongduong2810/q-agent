@@ -816,6 +816,9 @@ export interface ClaudeStats {
   breakdown: { input: number; output: number; cacheRead: number; cacheWrite: number };
   byModel: ByModelUsage[];
   limitsStatus: "loading" | "ready" | "unavailable"; // state of the CLI /usage % fetch
+  /** Signed-in user's own DB-recorded usage (#95). Drives the weekly-budget
+   * fallback bar when the CLI plan-limit % (`limitsStatus`) is unavailable. */
+  own?: { costMonth: number; weekTokens: number; weekBudget: number };
 }
 
 /** One AI process (ticket-analysis phase, automation, etc.) and its token spend. */

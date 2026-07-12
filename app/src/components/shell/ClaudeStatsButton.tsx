@@ -351,6 +351,17 @@ function StatsPanel({
   const limitsStatus = stats.limitsStatus ?? "unavailable";
   const session = stats.session ?? EMPTY_WINDOW;
   const week = stats.week ?? EMPTY_WINDOW;
+
+  // The weekly bar prefers the CLI's authoritative plan-limit % (`pctUsed`).
+  // When that's unavailable (no interactive CLI / headless deploy → pctUsed -1),
+  // fall back to the configured weekly token budget so the bar still renders —
+  // this is the "usage bar" the Weekly token budget setting promises.
+  const weekBudget = stats.own?.weekBudget ?? 0;
+  const weekTokens = stats.own?.weekTokens ?? 0;
+  const weekPctFromBudget =
+    weekBudget > 0 ? Math.round((weekTokens / weekBudget) * 100) : -1;
+  const effectiveWeek =
+    week.pctUsed >= 0 ? week : { ...week, pctUsed: weekPctFromBudget };
   const bd = stats.breakdown ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const byModel: ByModelUsage[] = stats.byModel ?? [];
 
@@ -478,7 +489,7 @@ function StatsPanel({
 
       {/* Rolling windows */}
       <UsageRow label="Current session" window={session} status={limitsStatus} />
-      <UsageRow label="Current week" window={week} resetsAsDate status={limitsStatus} />
+      <UsageRow label="Current week" window={effectiveWeek} resetsAsDate status={limitsStatus} />
 
       {/* Token breakdown */}
       <div className="mt-[15px] mb-[7px] text-[9px] font-bold tracking-[0.1em] text-ink-dim">
