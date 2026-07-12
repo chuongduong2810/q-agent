@@ -255,6 +255,46 @@ def test_record_still_writes_a_row(workspace_dir):
         session.close()
 
 
+def test_record_usage_falls_back_to_model_usage(workspace_dir):
+    """A newer-CLI envelope with an empty/all-zero top-level `usage` dict but a
+    per-model `modelUsage` breakdown (camelCase keys) still yields a non-zero
+    usage row (#171) instead of silently recording zeros."""
+    from app import db
+    from app.models.claude_usage import ClaudeUsage
+
+    envelope = {
+        "type": "result",
+        "usage": {},  # empty — the regressed shape the P0 issue is about
+        "modelUsage": {
+            "claude-sonnet-5-20260101": {
+                "inputTokens": 120,
+                "outputTokens": 45,
+                "cacheReadInputTokens": 800,
+                "cacheCreationInputTokens": 30,
+                "costUSD": 0.0123,
+            }
+        },
+    }
+    claude_cli._record_usage(
+        envelope, model="claude-sonnet-5", action="requirement-analyst",
+        wall_ms=999, owner_id=None,
+    )
+
+    session = db.SessionLocal()
+    try:
+        row = session.query(ClaudeUsage).order_by(ClaudeUsage.id.desc()).first()
+    finally:
+        session.close()
+
+    assert row is not None
+    assert row.input_tokens == 120
+    assert row.output_tokens == 45
+    assert row.cache_read_tokens == 800
+    assert row.cache_write_tokens == 30
+    assert row.cost_usd == 0.0123
+    assert row.duration_ms == 999  # no top-level duration_ms -> falls back to wall_ms
+
+
 def test_run_breakdown_groups_by_process_and_isolates_runs(workspace_dir):
     """run_breakdown groups a run's rows by process with correct totals, and a
     run with no recorded usage returns the empty shape."""
