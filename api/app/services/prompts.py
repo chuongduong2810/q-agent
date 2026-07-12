@@ -181,7 +181,14 @@ def build_analysis_prompt(ticket: Ticket, context: dict[str, Any] | None = None)
 def build_generation_prompt(
     ticket: Ticket, analysis: dict, max_cases: int = 8, context: dict[str, Any] | None = None
 ) -> str:
-    """Prompt asking Claude to generate ADO-style manual test cases for a ticket.
+    """Prompt asking Claude to generate the baseline happy-path test cases.
+
+    This is the FIRST of a two-stage design (see the ``test-case-generator``
+    skill v2): it produces a small, review-friendly set covering the PRIMARY
+    successful flow of each acceptance criterion. Edge, negative, boundary,
+    permission and error-handling coverage is deliberately deferred to the
+    ``test-case-reviewer`` stage, so this prompt must NOT ask for it (that
+    contradiction is exactly what made coverage depth nondeterministic).
 
     Returns a JSON array of case objects (title, precondition, steps, priority,
     testType, automation, platform). ``max_cases`` caps how many are generated.
@@ -192,18 +199,23 @@ def build_generation_prompt(
     project_section = f"{project_block}\n\n" if project_block else ""
     return (
         "You are a senior QA engineer. Using the ticket and the prior requirement "
-        "analysis below, write a set of ADO-style manual test cases that give good "
-        "coverage of the acceptance criteria, business rules, and edge cases.\n\n"
+        "analysis below, write a lightweight, review-friendly set of ADO-style "
+        "manual test cases that prove the feature works end-to-end.\n\n"
+        "Cover ONLY the primary successful flow (happy path) — aim for one "
+        "successful scenario per acceptance criterion, merging near-duplicate "
+        "journeys. Do NOT generate negative, invalid-input, boundary, permission, "
+        "empty-state or error-handling cases: those are added later in a separate "
+        "review stage, so leaving them out here is correct, not incomplete.\n\n"
         f"Generate AT MOST {max_cases} test cases — prioritise the highest-value "
-        "coverage if you would otherwise exceed that.\n\n"
+        "happy-path coverage if you would otherwise exceed that.\n\n"
         f"{project_section}"
         f"{_ticket_context(ticket)}\n\n"
         f"Prior analysis (JSON):\n{analysis}\n\n"
         "Each test case must have: a clear title, a precondition, a list of steps "
         "where each step has an action (a) and expected result (e), a priority "
-        "(High/Medium/Low), a testType (e.g. Functional, Negative, Boundary, "
-        "Security), an automation type (Playwright/Selenium/Cypress/Manual), and a "
-        "platform (e.g. Web).\n\n"
+        "(High/Medium/Low), a testType (typically 'Functional' for these "
+        "primary-flow cases), an automation type "
+        "(Playwright/Selenium/Cypress/Manual), and a platform (e.g. Web).\n\n"
         "Automation type: DEFAULT to 'Playwright' for web UI and functional cases "
         "that a browser can drive (navigation, forms, validation, CRUD, permissions). "
         "Only use 'Manual' when a case genuinely cannot be automated reliably — e.g. "
