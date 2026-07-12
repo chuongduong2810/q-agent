@@ -1020,6 +1020,12 @@ def heal_spec(case_id: int) -> None:
         attempts_log: list[dict[str, Any]] = []  # per-attempt trail for the heal report
 
         for attempt in range(1, max_attempts + 1):
+            # A run cancel should stop the heal loop rather than burn further
+            # attempts (and their Claude fixer/classifier calls) — bail before
+            # spawning the next Playwright/Claude process.
+            if run_control.is_cancelled(run.id, db):
+                logger.info("Run {} cancelled — stopping self-heal for case {}", run.code, case_id)
+                return
             emit("running", attempt, f"Running spec (attempt {attempt}/{max_attempts})")
             _write_config(spec_dir, 1, headless, base_url, storage_state)
             _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
@@ -1030,7 +1036,7 @@ def heal_spec(case_id: int) -> None:
             started = time.monotonic()
             try:
                 _rc, stdout, stderr = _invoke_playwright(
-                    spec_dir, 1, settings.exec_timeout_s, spec_file=filename
+                    spec_dir, 1, settings.exec_timeout_s, spec_file=filename, run_id=run.id
                 )
                 proc_output = "\n".join(p for p in (stdout, stderr) if p).strip()
             except FileNotFoundError as exc:

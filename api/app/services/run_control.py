@@ -57,10 +57,40 @@ def is_cancelled(run_id: int, db: Any = None) -> bool:
     return False
 
 
+def _kill_proc(proc: Any) -> None:
+    """Best-effort terminate one process/browser handle.
+
+    A process that's already exited or doesn't support kill()/terminate() is
+    ignored rather than raising.
+    """
+    try:
+        proc.kill()
+    except Exception:  # noqa: BLE001 - already exited or unsupported
+        try:
+            proc.terminate()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def register_process(run_id: int, proc: Any) -> None:
-    """Track a live subprocess/browser handle for a run so it can be killed."""
+    """Track a live subprocess/browser handle for a run so it can be killed.
+
+    If cancel was *already* requested for this run, the process is killed
+    immediately instead of being tracked. :func:`kill_processes` fires once at
+    cancel time, so without this a subprocess spawned in the window right after
+    that call (e.g. the generate-cases Claude call started just after the
+    analyze call was killed, or a later self-heal attempt) would escape the
+    cancel and run to completion. The in-memory cancel event outlives
+    ``kill_processes`` (only :func:`clear` drops it), so this guard stays armed
+    for every process spawned after the cancel.
+    """
     with _lock:
-        _processes.setdefault(run_id, set()).add(proc)
+        event = _events.get(run_id)
+        cancelled = event is not None and event.is_set()
+        if not cancelled:
+            _processes.setdefault(run_id, set()).add(proc)
+    if cancelled:
+        _kill_proc(proc)
 
 
 def unregister_process(run_id: int, proc: Any) -> None:
@@ -75,18 +105,13 @@ def kill_processes(run_id: int) -> None:
     """Terminate every tracked subprocess/browser handle for a run.
 
     Best-effort: a process that's already exited or doesn't support
-    kill()/terminate() is ignored rather than raising.
+    kill()/terminate() is ignored rather than raising. Processes spawned *after*
+    this call are handled by :func:`register_process`'s cancel guard.
     """
     with _lock:
         procs = _processes.pop(run_id, set())
     for proc in procs:
-        try:
-            proc.kill()
-        except Exception:  # noqa: BLE001 - already exited or unsupported
-            try:
-                proc.terminate()
-            except Exception:  # noqa: BLE001
-                pass
+        _kill_proc(proc)
 
 
 def clear(run_id: int) -> None:
