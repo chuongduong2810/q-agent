@@ -34,16 +34,37 @@ class ClaudeError(RuntimeError):
     """Raised when the Claude CLI is unavailable or returns an error."""
 
 
-def _resolve_model() -> str:
-    """Return the operator-selected Claude model, falling back to config.
+# Per-action model defaults (#175): small, mechanical structured-JSON tasks run
+# on a cheaper/faster model; heavy generation/review inherit the global model.
+# Keyed by skill name; overridable per skill via the "skillModels" settings map.
+_HAIKU = "claude-haiku-4-5-20251001"
+_DEFAULT_SKILL_MODELS = {
+    "execution-analyzer": _HAIKU,        # failure classification (runs up to 3x per heal)
+    "screenshot-annotator": _HAIKU,      # bounding-box / caption extraction
+    "ticket-comment-generator": _HAIKU,  # short prose summary
+}
 
-    The chosen model lives in the app-wide settings store (set from the Settings
-    screen); a blank/missing value falls back to ``settings.claude_model`` so
-    every CLI call inherits the selection with no per-caller changes.
+
+def _resolve_model(skill: str | None = None) -> str:
+    """Return the Claude model for a call, optionally specialized by ``skill``.
+
+    Resolution order (#175): an explicit per-skill override in the settings
+    ``skillModels`` map, then the built-in :data:`_DEFAULT_SKILL_MODELS` default
+    for that skill, then the operator-selected global ``claudeModel``, then
+    :attr:`settings.claude_model`. Heavy actions inherit the global model while
+    cheap mechanical actions default to Haiku — with no per-caller changes,
+    since the skill is already threaded through every call.
     """
     from app.services import settings_store  # local import avoids load-order coupling
 
-    return settings_store.load_settings().get("claudeModel") or settings.claude_model
+    stored = settings_store.load_settings()
+    if skill:
+        override = (stored.get("skillModels") or {}).get(skill)
+        if override:
+            return override
+        if skill in _DEFAULT_SKILL_MODELS:
+            return _DEFAULT_SKILL_MODELS[skill]
+    return stored.get("claudeModel") or settings.claude_model
 
 
 def _extract_json(text: str) -> Any:
@@ -290,7 +311,7 @@ def run_prompt(
     codebase (used by project-bootstrap against a local repo clone).
     """
     system = _compose_system(system, skill, include_template)
-    model = _resolve_model()
+    model = _resolve_model(skill)
     cmd = [
         settings.claude_bin,
         "-p",
