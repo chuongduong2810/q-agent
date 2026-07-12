@@ -39,6 +39,7 @@ itself each time:
 4. **Branch per issue** off the default branch: `feature/<issue-number>` for features/enhancements, `bug/<issue-number>` for fixes (e.g. `feature/152`, `bug/160`).
 5. **Implement + verify** against the relevant `CLAUDE.md` gates (typecheck/build; verify UI at runtime where it applies).
 6. **PR → self-merge.** Open a PR to the default branch, then squash-merge it yourself: `gh pr merge <n> --squash --admin --delete-branch`. **Auto-merging self-authored PRs is pre-authorized for this project** — don't wait for per-PR confirmation.
+7. **Rebuild the Docker image after shipping.** Whenever code is merged/shipped, the running container is stale until rebuilt — always remember (and explicitly confirm in your response) to rebuild it: `docker compose up -d --build` (or `docker compose build`). This is a standing reminder for **every** ship, not just full releases.
 
 Branch target: the repo's default branch is **`master`** — the user's "merge to main" means merge to the default branch.
 
