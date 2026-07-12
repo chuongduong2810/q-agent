@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -225,7 +226,7 @@ export function Tickets() {
             {(selectedConn ? `${PROVIDER_META[selectedConn.kind].name} · ${selectedConn.name}` : "No connection") +
               " · Synced 12m ago"}
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Tickets</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Tickets</h1>
         </div>
       </div>
 
@@ -267,7 +268,7 @@ export function Tickets() {
               <RefreshCw size={13} />
               Sync
             </Button>
-            <Button variant="primary" onClick={openCreateRun}>
+            <Button variant="primary" className="hidden md:inline-flex" onClick={openCreateRun}>
               <Plus size={14} strokeWidth={2.3} />
               Create Run {selCount > 0 && `(${selCount})`}
             </Button>
@@ -394,6 +395,8 @@ export function Tickets() {
           onClose={() => setSyncOpen(false)}
         />
       )}
+
+      <MobileSelectionBar count={selCount} onCreateRun={openCreateRun} />
     </div>
   );
 }
@@ -412,59 +415,134 @@ function TicketRow({
   index: number;
 }) {
   const [glyph, glyphColor] = providerGlyph[ticket.providerKind] ?? ["?", "#8b8b9e"];
+  const checkboxOn = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: Math.min(index * 0.03, 0.24), ease: "easeOut" }}
-      className="glass flex items-center gap-[15px] rounded-2xl p-[15px_18px] transition-colors hover:border-[rgba(139,92,246,.28)]"
+      className="glass rounded-2xl transition-colors hover:border-[rgba(139,92,246,.28)]"
       style={{ borderColor: selected ? "rgba(139,92,246,.5)" : undefined }}
     >
-      <div
-        onClick={onToggle}
-        className="flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-[6px] border transition-colors"
-        style={{
-          background: selected ? "linear-gradient(135deg,#8b5cf6,#6366f1)" : "rgba(255,255,255,.04)",
-          borderColor: selected ? "transparent" : "rgba(255,255,255,.18)",
-        }}
-      >
-        {selected && (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-        )}
-      </div>
-
-      <div
-        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[14px] font-black"
-        style={{ color: glyphColor, background: `${glyphColor}26` }}
-      >
-        {glyph}
-      </div>
-
-      <div className="min-w-0 flex-1 cursor-pointer" onClick={onOpen}>
-        <div className="mb-[3px] flex items-center gap-[9px]">
-          <span className="font-mono text-[11.5px] font-semibold text-violet">{ticket.externalId}</span>
-          <span className="text-[10.5px] text-[#7a7a8c]">{ticket.sprint}</span>
+      {/* Desktop row — unchanged single-line layout. */}
+      <div className="hidden items-center gap-[15px] p-[15px_18px] md:flex">
+        <div
+          onClick={onToggle}
+          className="flex h-[18px] w-[18px] shrink-0 cursor-pointer items-center justify-center rounded-[6px] border transition-colors"
+          style={{
+            background: selected ? "linear-gradient(135deg,#8b5cf6,#6366f1)" : "rgba(255,255,255,.04)",
+            borderColor: selected ? "transparent" : "rgba(255,255,255,.18)",
+          }}
+        >
+          {selected && checkboxOn}
         </div>
-        <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[14.5px] font-semibold">
-          {ticket.title}
+
+        <div
+          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[14px] font-black"
+          style={{ color: glyphColor, background: `${glyphColor}26` }}
+        >
+          {glyph}
+        </div>
+
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={onOpen}>
+          <div className="mb-[3px] flex items-center gap-[9px]">
+            <span className="font-mono text-[11.5px] font-semibold text-violet">{ticket.externalId}</span>
+            <span className="text-[10.5px] text-[#7a7a8c]">{ticket.sprint}</span>
+          </div>
+          <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[14.5px] font-semibold">
+            {ticket.title}
+          </div>
+        </div>
+
+        <StatusBadge status={ticket.status} />
+
+        <span className="w-[74px] shrink-0 text-right text-[11px] text-ink-dim">
+          {ticket.acCount} AC &middot; <span style={{ color: priorityColor(ticket.priority) }}>{ticket.priority}</span>
+        </span>
+
+        <div className="accent-gradient flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] text-[10.5px] font-bold text-white">
+          {initials(ticket.assignee)}
+        </div>
+
+        <Button variant="glass" size="sm" onClick={onOpen} className="shrink-0">
+          Details
+        </Button>
+      </div>
+
+      {/* Mobile card — checkbox + tappable body (glyph/id/priority, title, status·sprint·AC). */}
+      <div className="flex items-start gap-3 p-[14px_16px] md:hidden">
+        <div
+          onClick={onToggle}
+          className="mt-0.5 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border transition-colors"
+          style={{
+            background: selected ? "linear-gradient(135deg,#8b5cf6,#6366f1)" : "rgba(255,255,255,.04)",
+            borderColor: selected ? "transparent" : "rgba(255,255,255,.18)",
+          }}
+        >
+          {selected && checkboxOn}
+        </div>
+
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={onOpen}>
+          <div className="mb-[6px] flex items-center gap-[8px]">
+            <div
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] text-[12px] font-black"
+              style={{ color: glyphColor, background: `${glyphColor}26` }}
+            >
+              {glyph}
+            </div>
+            <span className="font-mono text-[11.5px] font-semibold text-violet">{ticket.externalId}</span>
+            <span
+              className="ml-auto shrink-0 text-[11px] font-semibold"
+              style={{ color: priorityColor(ticket.priority) }}
+            >
+              {ticket.priority}
+            </span>
+          </div>
+          <div className="mb-[6px] text-[14px] leading-snug font-semibold">{ticket.title}</div>
+          <div className="flex flex-wrap items-center gap-[7px] text-[11px] text-ink-dim">
+            <StatusBadge status={ticket.status} />
+            <span>{ticket.sprint}</span>
+            <span>&middot; {ticket.acCount} AC</span>
+          </div>
         </div>
       </div>
-
-      <StatusBadge status={ticket.status} />
-
-      <span className="w-[74px] shrink-0 text-right text-[11px] text-ink-dim">
-        {ticket.acCount} AC &middot; <span style={{ color: priorityColor(ticket.priority) }}>{ticket.priority}</span>
-      </span>
-
-      <div className="accent-gradient flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] text-[10.5px] font-bold text-white">
-        {initials(ticket.assignee)}
-      </div>
-
-      <Button variant="glass" size="sm" onClick={onOpen} className="shrink-0">
-        Details
-      </Button>
     </motion.div>
+  );
+}
+
+/**
+ * Floating "Create run · N selected" pill shown only on phones (below `md`)
+ * once one or more tickets are selected — the mobile stand-in for the desktop
+ * toolbar's always-visible "Create Run" button. Portalled to `document.body`
+ * per the floating-overlay convention, matching `RunBulkBar`'s pattern.
+ */
+function MobileSelectionBar({ count, onCreateRun }: { count: number; onCreateRun: () => void }) {
+  return createPortal(
+    <AnimatePresence>
+      {count > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 24, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, x: "-50%" }}
+          exit={{ opacity: 0, y: 24, x: "-50%" }}
+          transition={{ type: "spring", stiffness: 420, damping: 34 }}
+          className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-[900] w-[calc(100%-30px)] max-w-[440px] md:hidden"
+        >
+          <button
+            type="button"
+            onClick={onCreateRun}
+            className="flex w-full items-center justify-center gap-2 rounded-[15px] py-[15px] text-[14px] font-extrabold text-white shadow-[0_10px_26px_-8px_rgba(139,92,246,.7)]"
+            style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}
+          >
+            <Plus size={15} strokeWidth={2.4} />
+            Create run &middot; {count} selected
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
   );
 }

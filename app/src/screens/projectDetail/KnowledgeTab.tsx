@@ -81,7 +81,7 @@ export function KnowledgeTab({
     repo.status === "indexing" || pendingRepo === repo.name;
 
   return (
-    <div className="grid grid-cols-[260px_1fr] items-start gap-3.5">
+    <div className="grid grid-cols-1 items-start gap-3.5 md:grid-cols-[260px_1fr]">
       <GlassCard className="p-2">
         <div className="flex items-center justify-between px-2.5 pb-1.5 pt-2">
           <span className="text-[10.5px] font-semibold tracking-wider text-faint">REPOSITORIES</span>

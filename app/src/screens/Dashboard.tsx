@@ -109,7 +109,7 @@ export function Dashboard() {
             })}{" "}
             · Good morning{firstName ? `, ${firstName}` : ""}
           </div>
-          <h1 className="m-0 text-[32px] font-black tracking-tight">Mission control</h1>
+          <h1 className="m-0 text-[26px] font-black tracking-tight md:text-[32px]">Mission control</h1>
         </div>
         {reviewRuns.length > 0 && (
           <div
@@ -127,7 +127,7 @@ export function Dashboard() {
         )}
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-3.5">
+      <div className="mb-4 grid grid-cols-2 gap-3.5 md:grid-cols-4">
         {stats.map((s, i) => (
           <GlassCard key={s.label} hover index={i} className="p-[18px]">
             <div className="mb-4 flex items-center justify-between">
@@ -145,12 +145,12 @@ export function Dashboard() {
         ))}
       </div>
 
-      <div className="mb-4 grid grid-cols-[1.55fr_1fr] gap-3.5">
+      <div className="mb-4 grid grid-cols-1 gap-3.5 md:grid-cols-[1.55fr_1fr]">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="relative overflow-hidden rounded-[22px] p-[26px]"
+          className="relative overflow-hidden rounded-[22px] p-[18px] md:p-[26px]"
           style={{
             background: "linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.09))",
             border: "1px solid rgba(139,92,246,.26)",
@@ -253,7 +253,7 @@ export function Dashboard() {
         </GlassCard>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
         <GlassCard className="p-5">
           <div className="mb-4 text-[15px] font-bold">Recent activity</div>
           <div className="flex flex-col gap-0.5">

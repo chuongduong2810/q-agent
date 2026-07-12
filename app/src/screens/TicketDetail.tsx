@@ -39,7 +39,8 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
 
       {has ? (
         <>
-          <div className="overflow-hidden rounded-[13px] border border-white/[0.07]">
+          {/* Desktop — 4-column table. */}
+          <div className="hidden overflow-hidden rounded-[13px] border border-white/[0.07] md:block">
             <div className="grid grid-cols-[78px_1fr_92px_92px] gap-2.5 bg-white/[0.04] px-3.5 py-[9px] text-[10px] font-bold tracking-[.05em] text-[#7a7a8c]">
               <span>ID</span>
               <span>TITLE</span>
@@ -48,6 +49,13 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
             </div>
             {linked.map((lc) => (
               <LinkedRow key={lc.id} lc={lc} />
+            ))}
+          </div>
+
+          {/* Mobile — stacked cards. */}
+          <div className="flex flex-col gap-2 md:hidden">
+            {linked.map((lc) => (
+              <LinkedCard key={lc.id} lc={lc} />
             ))}
           </div>
         </>
@@ -59,6 +67,41 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
             Approve and create test cases in the Review Center to link them to this work item.
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Mobile stand-in for `LinkedRow` — one card per linked test case instead of a table row. */
+function LinkedCard({ lc }: { lc: LinkedTestCaseOut }) {
+  const [color, bg] = CASE_STATUS_COLOR[lc.status] ?? ["#a78bfa", "rgba(139,92,246,.14)"];
+  const prov = providerLabel[lc.providerKind as ProviderKind] ?? lc.providerKind;
+  return (
+    <div className="rounded-[13px] border border-white/[0.07] bg-white/[0.03] p-[12px_14px]">
+      <div className="mb-[6px] flex items-center gap-2">
+        <span className="truncate font-mono text-[12px] font-semibold text-cyan-soft">{lc.externalId}</span>
+        <span
+          className="ml-auto shrink-0 rounded-full px-[9px] py-[3px] text-[10.5px] font-bold"
+          style={{ color, background: bg }}
+        >
+          {lc.status}
+        </span>
+      </div>
+      <div className="mb-[8px] text-[13px] leading-snug text-ink-soft">{lc.title}</div>
+      {lc.url ? (
+        <a
+          href={lc.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-violet hover:underline"
+          title={`Open in ${prov}`}
+        >
+          Open <ExternalLink size={12} strokeWidth={2.2} />
+        </a>
+      ) : lc.linked ? (
+        <span className="text-[11px] text-[#6ee7b7]">linked</span>
+      ) : (
+        <span className="text-[11px] text-[#7a7a8c]">—</span>
       )}
     </div>
   );
@@ -109,7 +152,7 @@ export function TicketDetail() {
       <div className="px-1 pb-10 pt-0.5">
         <BackButton onClick={goTickets} />
         {isLoading ? (
-          <div className="grid grid-cols-[1.55fr_1fr] items-start gap-4">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[1.55fr_1fr]">
             <div className="glass h-[420px] animate-pulse rounded-[22px]" />
             <div className="glass h-[280px] animate-pulse rounded-[20px]" />
           </div>
@@ -130,7 +173,7 @@ export function TicketDetail() {
     <div className="px-1 pb-10 pt-0.5">
       <BackButton onClick={goTickets} />
 
-      <div className="grid grid-cols-[1.55fr_1fr] items-start gap-4">
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[1.55fr_1fr]">
         <div>
           <div className="glass mb-[14px] rounded-[22px] p-6">
             <div className="mb-[14px] flex items-center gap-[10px]">
@@ -143,7 +186,7 @@ export function TicketDetail() {
               <span className="font-mono text-[12.5px] font-semibold text-cyan-soft">{detail.externalId}</span>
               <StatusBadge status={detail.status} />
             </div>
-            <h1 className="m-0 mb-4 text-2xl leading-[1.25] font-black tracking-tight">{detail.title}</h1>
+            <h1 className="m-0 mb-4 text-xl leading-[1.25] font-black tracking-tight md:text-2xl">{detail.title}</h1>
 
             <div className="mb-[7px] text-[11px] font-semibold tracking-[0.08em] text-faint">DESCRIPTION</div>
             <p className="m-0 mb-4 text-[14px] leading-[1.6] text-ink-soft">{detail.description}</p>
@@ -200,7 +243,7 @@ export function TicketDetail() {
           </div>
         </div>
 
-        <div className="sticky top-0 flex flex-col gap-[14px]">
+        <div className="flex flex-col gap-[14px] md:sticky md:top-0">
           <div className="glass rounded-[20px] p-[18px]">
             <div className="flex flex-col gap-[13px]">
               <Row label="Priority">

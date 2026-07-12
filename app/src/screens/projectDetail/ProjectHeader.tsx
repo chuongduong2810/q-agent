@@ -33,22 +33,24 @@ export function ProjectHeader({
         <ArrowLeft size={14} strokeWidth={2.2} /> All projects
       </button>
 
-      <div className="mb-4 flex items-center gap-3.5">
-        <div
-          className="flex h-[46px] w-[46px] items-center justify-center rounded-[13px] text-[18px] font-black"
-          style={{ background: glyphBg, color: glyphColor }}
-        >
-          {glyph}
-        </div>
-        <div className="flex-1">
-          <h1 className="m-0 text-[26px] font-black tracking-tight">{meta.name}</h1>
-          <div className="font-mono text-[12.5px] text-ink-dim">
-            {meta.repo ? `${meta.repo} · ` : ""}
-            {meta.provider}
+      <div className="mb-4 flex flex-col gap-3.5 md:flex-row md:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
+          <div
+            className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[13px] text-[18px] font-black"
+            style={{ background: glyphBg, color: glyphColor }}
+          >
+            {glyph}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="m-0 text-[22px] font-black tracking-tight md:text-[26px]">{meta.name}</h1>
+            <div className="truncate font-mono text-[12.5px] text-ink-dim">
+              {meta.repo ? `${meta.repo} · ` : ""}
+              {meta.provider}
+            </div>
           </div>
         </div>
         <div
-          className="flex items-center gap-2 rounded-xl px-3 py-2"
+          className="flex items-center gap-2 self-start rounded-xl px-3 py-2 md:self-auto"
           style={{ background: statusBg }}
         >
           <span className="h-2 w-2 rounded-full" style={{ background: statusDot }} />

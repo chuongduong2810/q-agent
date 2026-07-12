@@ -48,7 +48,7 @@ export function ReposManager({
 
   return (
     <GlassCard className="p-5">
-      <div className="mb-1 flex items-center gap-2">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
         <div className="flex-1 text-[14px] font-bold">Repositories</div>
         <Button
           variant="glass"
@@ -147,7 +147,7 @@ export function ReposManager({
                   <Trash2 size={14} strokeWidth={2.1} />
                 </button>
               </div>
-              <div className="grid grid-cols-[2fr_1fr] gap-2.5">
+              <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[2fr_1fr]">
                 <input
                   className={inputCls}
                   placeholder="clone URL (https://…) — used when no local path is set"
