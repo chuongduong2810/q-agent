@@ -28,6 +28,7 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -48,6 +49,7 @@ from app.services import (
     evidence_service,
     execution_service,
     failure_classifier,
+    knowledge_service,
     placeholder_gate,
     project_config_service,
     run_context,
@@ -814,6 +816,40 @@ def run_execution(execution_id: int) -> None:
 _healing: dict[int, dict[str, int]] = {}
 _healing_lock = threading.Lock()
 
+# Selector string literals passed to `.locator(...)`/`getByTestId(...)` — used to
+# diff a heal's before/after code for heal->KB feedback (#182), below.
+_SELECTOR_LITERAL_RE = re.compile(r"(?:\.locator|getByTestId)\(\s*[\"'`]([^\"'`]+)[\"'`]")
+
+
+def _selector_literals(code: str) -> set[str]:
+    """Selector string literals passed to `.locator(...)`/`getByTestId(...)` in a spec."""
+    return set(_SELECTOR_LITERAL_RE.findall(code or ""))
+
+
+def _propose_healed_selector_to_kb(
+    project_key: str | None, repo: str, before_code: str, after_code: str, owner_id: int | None
+) -> None:
+    """Best-effort: propose a self-heal's selector fix back to the project KB (#182).
+
+    When a self-heal's accepted fix swapped exactly one selector literal and that
+    fix then passed, propose the correction to ``knowledge_service`` so future
+    generations reuse the healed value instead of repeating the same broken
+    selector. A no-op unless the diff resolves to a single, unambiguous old->new
+    selector swap (anything more ambiguous is skipped rather than guessed).
+    Never raises — heal->KB feedback must never break the heal loop.
+    """
+    if not project_key:
+        return
+    try:
+        removed = _selector_literals(before_code) - _selector_literals(after_code)
+        added = _selector_literals(after_code) - _selector_literals(before_code)
+        if len(removed) == 1 and len(added) == 1:
+            knowledge_service.propose_selector_fix(
+                project_key, repo, next(iter(removed)), next(iter(added)), owner_id
+            )
+    except Exception as exc:  # noqa: BLE001 - heal->KB feedback must never break the heal loop
+        logger.warning("Heal->KB selector feedback skipped: {}", exc)
+
 
 def is_healing(case_id: int) -> bool:
     return case_id in _healing
@@ -1018,6 +1054,9 @@ def heal_spec(case_id: int) -> None:
         attachments: list[dict] = []
         elapsed_ms = 0
         attempts_log: list[dict[str, Any]] = []  # per-attempt trail for the heal report
+        # (before, after) code of the most recently accepted fix — used for
+        # heal->KB selector feedback (#182) if that fix goes on to pass.
+        last_fix_pair: tuple[str, str] | None = None
 
         for attempt in range(1, max_attempts + 1):
             # A run cancel should stop the heal loop rather than burn further
@@ -1193,6 +1232,7 @@ def heal_spec(case_id: int) -> None:
             rec["fixed"] = True
             rec["diff"] = diff
             attempts_log.append(rec)
+            last_fix_pair = (previous_code, fixed)
 
             path = spec_service.write_spec_file(
                 run.code, case.ticket_external_id, case.code, fixed, run.owner_id
@@ -1208,6 +1248,13 @@ def heal_spec(case_id: int) -> None:
         if spec.status not in ("product_defect", "blocked"):
             spec.status = "passed" if final_status == "pass" else "failed"
             db.commit()
+
+        # Heal->KB feedback (#182): the fix that led to a pass corrected exactly
+        # one selector -> propose it back to the project KB, best-effort.
+        if final_status == "pass" and last_fix_pair is not None:
+            _propose_healed_selector_to_kb(
+                project_key, heal_repo, last_fix_pair[0], last_fix_pair[1], run.owner_id
+            )
 
         # Persist the heal trail on the spec so the UI can show the full process.
         try:

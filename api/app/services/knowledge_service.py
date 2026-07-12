@@ -401,3 +401,81 @@ def _run_build(row_key: str) -> None:
     finally:
         _building.discard(row_key)
         db.close()
+
+
+def propose_selector_fix(
+    project_key: str, repo: str, old_selector: str, new_selector: str, owner_id: int | None = None
+) -> bool:
+    """Best-effort: write a self-heal's corrected selector back into the KB (#182).
+
+    When a self-heal changes a spec's selector and the fix then passes, this
+    corrects the matching ``selectors`` entry (same screen/element, ``old_selector``
+    value) in the project's ``ProjectKnowledge`` row, so future generations reuse
+    the healed value instead of repeating the same broken selector.
+
+    Looks up the per-repo row first, falling back to the legacy project-level row
+    (mirrors ``project_config_service.build_context``'s KB resolution). Opens its
+    own session so it never interferes with the caller's (heal loop) transaction.
+    Never raises — any failure is logged and treated as a skipped proposal, since
+    heal->KB feedback is additive, not correctness-critical.
+
+    Args:
+        project_key: The project the selector belongs to.
+        repo: The target repository name ("" for the legacy project-level row).
+        old_selector: The selector value the heal replaced.
+        new_selector: The selector value the heal replaced it with (now passing).
+        owner_id: The knowledge row's owner (ADR 0009) — scopes the lookup to the
+            same private/shared namespace the heal's run belongs to.
+
+    Returns:
+        True if a matching selector entry was found and updated, False otherwise
+        (no matching row/entry, or any error).
+    """
+    if not project_key or not old_selector or not new_selector or old_selector == new_selector:
+        return False
+    db = db_module.SessionLocal()
+    try:
+        row = None
+        if repo:
+            row = (
+                db.query(ProjectKnowledge)
+                .filter(
+                    ProjectKnowledge.key == compose_key(project_key, repo),
+                    ProjectKnowledge.owner_id == owner_id,
+                )
+                .first()
+            )
+        if row is None:
+            row = (
+                db.query(ProjectKnowledge)
+                .filter(ProjectKnowledge.key == project_key, ProjectKnowledge.owner_id == owner_id)
+                .first()
+            )
+        if row is None:
+            return False
+
+        kn = dict(row.knowledge or {})
+        selectors = list(kn.get("selectors") or [])
+        updated = False
+        for i, sel in enumerate(selectors):
+            if isinstance(sel, dict) and sel.get("selector") == old_selector:
+                selectors[i] = {**sel, "selector": new_selector}
+                updated = True
+        if not updated:
+            return False
+
+        kn["selectors"] = selectors
+        row.knowledge = kn  # reassign so SQLAlchemy tracks the JSON change
+        db.commit()
+        write_knowledge_files(row)
+        logger.info(
+            "Self-heal proposed KB selector fix for {}: {!r} -> {!r}",
+            project_key, old_selector, new_selector,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 - heal->KB feedback is best-effort
+        db.rollback()
+        logger.warning("Self-heal KB selector proposal failed for {}: {}", project_key, exc)
+        return False
+    finally:
+        db.close()

@@ -8,9 +8,11 @@ JSON contracts easy to find and change in one place.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from app.models.ticket import Ticket
+from app.services.spec_examples import _keywords
 
 ANALYSIS_JSON_SHAPE = """{
   "businessRules": string[],
@@ -88,7 +90,37 @@ def _ticket_context(ticket: Ticket) -> str:
     )
 
 
-def render_project_context(context: dict[str, Any] | None, *, include_secrets: bool = False) -> str:
+def _rank_by_relevance(
+    items: list[dict], text_fn: Callable[[dict], str], query_keywords: set[str], limit: int
+) -> list[dict]:
+    """Order KB items by keyword overlap with a query, then truncate to ``limit``.
+
+    Replaces a blind ``items[:limit]`` slice (#182) so a project with more items
+    than the cap doesn't always lose whichever ones happen to sort last — the
+    ones most relevant to the case being generated win instead. Ties (including
+    the "no query" case, where every score is 0) keep their original order, so
+    behavior is unchanged when ``query_keywords`` is empty.
+
+    Args:
+        items: The raw KB list (routes or selectors, dict entries).
+        text_fn: Extracts the text of one item to score against the query.
+        query_keywords: Keyword set to score against (see ``spec_examples._keywords``).
+        limit: Max items to keep.
+
+    Returns:
+        The top ``limit`` items, most relevant first.
+    """
+    scored = [
+        (len(query_keywords & _keywords(text_fn(item))), idx, item)
+        for idx, item in enumerate(items)
+    ]
+    scored.sort(key=lambda t: (-t[0], t[1]))
+    return [item for _, _, item in scored[:limit]]
+
+
+def render_project_context(
+    context: dict[str, Any] | None, *, include_secrets: bool = False, rank_query: str = ""
+) -> str:
     """Render the resolved Project Knowledge Base + config for a prompt.
 
     This is the shared project grounding that lets downstream skills reuse real
@@ -100,12 +132,18 @@ def render_project_context(context: dict[str, Any] | None, *, include_secrets: b
         include_secrets: When True, test-account passwords are included verbatim
             (used ONLY by automation generation, per the "literal values" choice).
             When False, only roles/usernames are shown.
+        rank_query: Optional free text (typically the target case's title + steps)
+            used to relevance-rank ``routes``/``selectors`` before truncating to the
+            injected cap (#182), instead of always keeping the first N. Empty
+            (default) preserves the prior blind-slice behavior.
 
     Returns:
         A markdown block, or an empty string when there is no project context.
     """
     if not context or not context.get("projectKey"):
         return ""
+
+    query_keywords = _keywords(rank_query)
 
     lines = ["Project context (from the Project Knowledge Base — reuse this, do not invent):"]
     if context.get("baseUrl"):
@@ -121,16 +159,25 @@ def render_project_context(context: dict[str, Any] | None, *, include_secrets: b
 
     routes = context.get("routes") or []
     if routes:
+        ranked_routes = _rank_by_relevance(
+            routes, lambda r: f"{r.get('path', '')} {r.get('description', '')}", query_keywords, 20
+        )
         rendered = "; ".join(
-            f"{r.get('path', '')} ({r.get('description', '')})" for r in routes[:20]
+            f"{r.get('path', '')} ({r.get('description', '')})" for r in ranked_routes
         )
         lines.append(f"- Application routes: {rendered}")
 
     selectors = context.get("selectors") or []
     if selectors:
+        ranked_selectors = _rank_by_relevance(
+            selectors,
+            lambda s: f"{s.get('screen', '')} {s.get('element', '')} {s.get('selector', '')}",
+            query_keywords,
+            30,
+        )
         rendered = "; ".join(
             f"{s.get('screen', '')}:{s.get('element', '')}=`{s.get('selector', '')}`"
-            for s in selectors[:30]
+            for s in ranked_selectors
         )
         lines.append(f"- Known selectors: {rendered}")
 
