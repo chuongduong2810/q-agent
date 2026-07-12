@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Select } from "@/components/ui/Dropdown";
@@ -8,7 +8,7 @@ import { ProviderGroup } from "@/components/settings/ProviderGroup";
 import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMeta";
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
-import type { ExecutionTarget, ProviderGroupOut, ProviderKind } from "@/types/api";
+import type { ExecutionTarget, ProviderGroupOut, ProviderKind, SettingsOut } from "@/types/api";
 
 /** A never-configured provider: the backend catalog omits it (fresh machine),
  * so synthesize an empty group the user can add a first connection under. */
@@ -26,6 +26,22 @@ export function Settings() {
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettings = useUpdateSettings();
   const location = useLocation();
+
+  // Settings edit as a local draft — controls mutate `draft`, never the server,
+  // until the user hits "Save changes". `settings` only changes on save (cache
+  // is updated via setQueryData), so re-syncing the draft to it is safe.
+  const [draft, setDraft] = useState<SettingsOut | null>(null);
+  useEffect(() => {
+    if (settings) setDraft(settings);
+  }, [settings]);
+  const set = (patch: Partial<SettingsOut>) => setDraft((d) => (d ? { ...d, ...patch } : d));
+  const dirty = Boolean(draft && settings && JSON.stringify(draft) !== JSON.stringify(settings));
+  const save = () => {
+    if (draft && dirty) updateSettings.mutate(draft);
+  };
+  const discard = () => {
+    if (settings) setDraft(settings);
+  };
 
   // Deep-link support for in-page anchors — e.g. the AI status popover's
   // "Manage Claude account" button (`/settings#claude-account`) and the
@@ -77,7 +93,7 @@ export function Settings() {
 
       <div id="execution" className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">DEFAULT EXECUTION</div>
       <GlassCard className="p-[22px]">
-        {settingsLoading || !settings ? (
+        {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />
           </div>
@@ -92,8 +108,8 @@ export function Settings() {
               </div>
               <div className="w-[170px]">
                 <Select
-                  value={settings.executionTarget}
-                  onChange={(v) => v && updateSettings.mutate({ executionTarget: v as ExecutionTarget })}
+                  value={draft.executionTarget}
+                  onChange={(v) => v && set({ executionTarget: v as ExecutionTarget })}
                   placeholder="Select target"
                   allowClear={false}
                   options={[
@@ -107,7 +123,7 @@ export function Settings() {
               <div>
                 <div className="text-[14px] font-semibold">Parallel workers</div>
                 <div className="text-[12px] text-muted">
-                  Default up to {settings.parallel} cases at once per Run
+                  Default up to {draft.parallel} cases at once per Run
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -115,18 +131,18 @@ export function Settings() {
                   type="range"
                   min={1}
                   max={8}
-                  value={settings.parallel}
-                  onChange={(e) => updateSettings.mutate({ parallel: Number(e.target.value) })}
+                  value={draft.parallel}
+                  onChange={(e) => set({ parallel: Number(e.target.value) })}
                   className="w-[150px] accent-[#8b5cf6]"
                 />
-                <span className="w-5 text-center font-mono text-[14px] font-bold">{settings.parallel}</span>
+                <span className="w-5 text-center font-mono text-[14px] font-bold">{draft.parallel}</span>
               </div>
             </div>
             <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
               <div>
                 <div className="text-[14px] font-semibold">Max test cases per ticket</div>
                 <div className="text-[12px] text-muted">
-                  Cap AI generation to at most {settings.maxCasesPerTicket} cases per ticket
+                  Cap AI generation to at most {draft.maxCasesPerTicket} cases per ticket
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -134,44 +150,44 @@ export function Settings() {
                   type="range"
                   min={1}
                   max={20}
-                  value={settings.maxCasesPerTicket}
-                  onChange={(e) => updateSettings.mutate({ maxCasesPerTicket: Number(e.target.value) })}
+                  value={draft.maxCasesPerTicket}
+                  onChange={(e) => set({ maxCasesPerTicket: Number(e.target.value) })}
                   className="w-[150px] accent-[#8b5cf6]"
                 />
                 <span className="w-5 text-center font-mono text-[14px] font-bold">
-                  {settings.maxCasesPerTicket}
+                  {draft.maxCasesPerTicket}
                 </span>
               </div>
             </div>
             <ToggleRow
               title="Auto-retry flaky tests"
               description="Retry failed cases up to 2 times"
-              checked={settings.retryFlaky}
-              onChange={(v) => updateSettings.mutate({ retryFlaky: v })}
+              checked={draft.retryFlaky}
+              onChange={(v) => set({ retryFlaky: v })}
             />
             <ToggleRow
               title="Screenshot on failure"
               description="Capture full-page evidence for every failed step"
-              checked={settings.screenshotOnFail}
-              onChange={(v) => updateSettings.mutate({ screenshotOnFail: v })}
+              checked={draft.screenshotOnFail}
+              onChange={(v) => set({ screenshotOnFail: v })}
             />
             <ToggleRow
               title="Auto-annotate failure screenshots"
               description="Runs a Claude vision analysis on each failed screenshot to draw the problem area — one AI call per failure"
-              checked={settings.autoAnnotate}
-              onChange={(v) => updateSettings.mutate({ autoAnnotate: v })}
+              checked={draft.autoAnnotate}
+              onChange={(v) => set({ autoAnnotate: v })}
             />
             <ToggleRow
               title="Record video"
               description="Save an MP4 of each run (uses more storage)"
-              checked={settings.video}
-              onChange={(v) => updateSettings.mutate({ video: v })}
+              checked={draft.video}
+              onChange={(v) => set({ video: v })}
             />
             <ToggleRow
               title="Run browser headless"
               description="Execute Playwright without a visible browser window (turn off to watch runs)"
-              checked={settings.headless}
-              onChange={(v) => updateSettings.mutate({ headless: v })}
+              checked={draft.headless}
+              onChange={(v) => set({ headless: v })}
               bordered={false}
             />
           </>
@@ -180,7 +196,7 @@ export function Settings() {
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">AI MODEL</div>
       <GlassCard className="p-[22px]">
-        {settingsLoading || !settings ? (
+        {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />
           </div>
@@ -188,8 +204,8 @@ export function Settings() {
           <div className="flex flex-col gap-2">
             <span className="text-[12px] font-semibold text-[#9494a6]">Claude model</span>
             <Select
-              value={settings.claudeModel}
-              onChange={(v) => v && updateSettings.mutate({ claudeModel: v })}
+              value={draft.claudeModel}
+              onChange={(v) => v && set({ claudeModel: v })}
               placeholder="Select a model"
               allowClear={false}
               options={[
@@ -208,8 +224,8 @@ export function Settings() {
             <input
               type="number"
               min={0}
-              value={settings.weeklyTokenBudget}
-              onChange={(e) => updateSettings.mutate({ weeklyTokenBudget: Number(e.target.value) })}
+              value={draft.weeklyTokenBudget}
+              onChange={(e) => set({ weeklyTokenBudget: Number(e.target.value) })}
               className="rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-[10px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
             />
             <span className="text-[12px] text-muted">
@@ -230,7 +246,7 @@ export function Settings() {
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">INTERFACE</div>
       <GlassCard className="p-[22px]">
-        {settingsLoading || !settings ? (
+        {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />
           </div>
@@ -238,12 +254,36 @@ export function Settings() {
           <ToggleRow
             title="3D background"
             description="Animated neural-constellation backdrop. Turn off for a flat background (lighter on the GPU)."
-            checked={settings.neuralBackground}
-            onChange={(v) => updateSettings.mutate({ neuralBackground: v })}
+            checked={draft.neuralBackground}
+            onChange={(v) => set({ neuralBackground: v })}
             bordered={false}
           />
         )}
       </GlassCard>
+
+      {/* Sticky action bar — only while there are unsaved edits. Opaque bg (no
+          backdrop-filter) since it layers over the animated 3D background. */}
+      {dirty && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-6">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-[16px] border border-white/[0.12] bg-[#16161f] px-5 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
+            <span className="text-[13px] font-medium text-muted">You have unsaved changes</span>
+            <button
+              onClick={discard}
+              disabled={updateSettings.isPending}
+              className="rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[13px] font-semibold text-ink transition-colors hover:bg-white/[0.1] disabled:opacity-50"
+            >
+              Discard
+            </button>
+            <button
+              onClick={save}
+              disabled={updateSettings.isPending}
+              className="rounded-[11px] bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] px-[17px] py-[9px] text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {updateSettings.isPending ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
