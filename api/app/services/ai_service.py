@@ -32,11 +32,15 @@ from app.services import (
 )
 from app.services.claude_cli import ClaudeError, run_json
 from app.services.run_status import set_run_status
-from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR, TEST_CASE_REVIEWER
+from app.services.skills import (
+    REQUIREMENT_ANALYST,
+    TEST_CASE_GENERATOR,
+    TEST_CASE_REVIEWER,
+    load_skill,
+)
 from app.services.prompts import (
-    build_analysis_prompt,
     build_case_regenerate_prompt,
-    build_generation_prompt,
+    build_combined_prompt,
     build_review_prompt,
 )
 from app.ws import hub
@@ -266,13 +270,30 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             run.id, ticket.external_id, PHASE_BUSINESS_RULES, "Identifying business rules..."
         )
 
-        analysis = run_json(
-            build_analysis_prompt(ticket, context),
-            skill=REQUIREMENT_ANALYST,
-            label=f"Analyze {ticket.external_id}",
+        _publish_phase(run.id, ticket.external_id, PHASE_GENERATING, "Generating test cases...")
+
+        max_cases = int(settings_store.load_settings().get("maxCasesPerTicket", 8) or 8)
+        # Continue numbering from existing provider test cases (match convention).
+        offset = provider_case_offset(db, ticket)
+
+        # One combined call does analysis + happy-path generation (#174), cutting
+        # per-ticket CLI/overhead cost. Compose BOTH skills as the system prompt so
+        # neither the analysis nor the generation loses its methodology.
+        combined = run_json(
+            build_combined_prompt(ticket, max_cases=max_cases, context=context),
+            skill=TEST_CASE_GENERATOR,
+            system=load_skill(REQUIREMENT_ANALYST),
+            label=f"Analyze+generate {ticket.external_id}",
         )
+        if not isinstance(combined, dict):
+            raise ClaudeError("Claude analyze+generate response was not a JSON object")
+        analysis = combined.get("analysis")
         if not isinstance(analysis, dict):
-            raise ClaudeError("Claude analysis response was not a JSON object")
+            raise ClaudeError("Claude analyze+generate response had no 'analysis' object")
+        cases = combined.get("cases")
+        if not isinstance(cases, list):
+            raise ClaudeError("Claude analyze+generate 'cases' was not a JSON array")
+        cases = cases[:max_cases]  # enforce the per-ticket cap
 
         run_ticket.analysis = analysis
         run_ticket.repo = _validated_repo_guess(analysis, context)
@@ -280,27 +301,11 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         db.add(run_ticket)
         db.commit()
 
-        # Cancel can land between the analyze and generate Claude calls; bail
-        # before spawning the generate call rather than relying solely on
-        # run_control killing it (belt-and-suspenders with register_process).
+        # A cancel may have landed during the call; bail before persisting rather
+        # than relying solely on run_control killing the subprocess.
         if run_control.is_cancelled(run.id, db):
-            logger.info("Run {} cancelled mid-ticket {} — skipping generation", run.id, ticket.external_id)
+            logger.info("Run {} cancelled mid-ticket {} — skipping persistence", run.id, ticket.external_id)
             return
-
-        _publish_phase(run.id, ticket.external_id, PHASE_GENERATING, "Generating test cases...")
-
-        max_cases = int(settings_store.load_settings().get("maxCasesPerTicket", 8) or 8)
-        # Continue numbering from existing provider test cases (match convention).
-        offset = provider_case_offset(db, ticket)
-
-        cases = run_json(
-            build_generation_prompt(ticket, analysis, max_cases=max_cases, context=context),
-            skill=TEST_CASE_GENERATOR,
-            label=f"Generate cases: {ticket.external_id}",
-        )
-        if not isinstance(cases, list):
-            raise ClaudeError("Claude generation response was not a JSON array")
-        cases = cases[:max_cases]  # enforce the per-ticket cap
 
         case_count = 0
         for i, raw_case in enumerate(cases, start=1):

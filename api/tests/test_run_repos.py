@@ -142,7 +142,9 @@ def test_pipeline_stores_validated_repo_from_suggestion(client, db_session, seed
         "risks": [], "edgeCases": [], "missingInformation": [],
         "suggestedScope": "scope", "suggestedRepo": "surency-api",
     }
-    responses = iter([analysis, []])
+    responses = iter(
+        [{"analysis": analysis, "cases": []}, {"verdict": "approve", "coverageGaps": [], "additionalCases": []}]
+    )
     monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
 
     ai_service.run_generation_pipeline(run.id, blocking=True)
@@ -164,7 +166,9 @@ def test_pipeline_falls_back_to_default_repo_on_bad_suggestion(
         "risks": [], "edgeCases": [], "missingInformation": [],
         "suggestedScope": "scope", "suggestedRepo": "nonexistent-repo",
     }
-    responses = iter([analysis, []])
+    responses = iter(
+        [{"analysis": analysis, "cases": []}, {"verdict": "approve", "coverageGaps": [], "additionalCases": []}]
+    )
     monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
 
     ai_service.run_generation_pipeline(run.id, blocking=True)

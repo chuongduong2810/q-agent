@@ -40,8 +40,9 @@ def _canned_run_json(*_args, **kwargs):
     if skill == TEST_CASE_REVIEWER:
         return {"verdict": "approve", "coverageGaps": [], "additionalCases": []}
     if skill == TEST_CASE_GENERATOR:
-        return CANNED_CASES
-    return CANNED_ANALYSIS  # requirement-analyst (or any other analysis-shaped call)
+        # The analyze+generate stages are merged into one call (#174).
+        return {"analysis": CANNED_ANALYSIS, "cases": CANNED_CASES}
+    return CANNED_ANALYSIS  # any other analysis-shaped call
 
 
 def _patch_pipeline_blocking(monkeypatch):

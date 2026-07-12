@@ -159,97 +159,70 @@ def render_project_context(context: dict[str, Any] | None, *, include_secrets: b
     return "\n".join(lines)
 
 
-def build_analysis_prompt(ticket: Ticket, context: dict[str, Any] | None = None) -> str:
-    """Prompt asking Claude to analyze a ticket's requirements.
-
-    Returns a JSON object with businessRules, functionalRequirements,
-    validationRules, risks, edgeCases, missingInformation, suggestedScope.
-    ``context`` is the resolved Project Knowledge Base so the analysis reuses real
-    domain terms, workflows and entities instead of reinterpreting them.
-    """
-    project_block = render_project_context(context)
-    project_section = f"{project_block}\n\n" if project_block else ""
-
+def _repo_section(context: dict[str, Any] | None) -> str:
+    """Render the 'pick the target repo' instruction block, or "" when the
+    project has no repositories. Shared by the analysis and combined prompts."""
     repo_options = (context or {}).get("repoOptions") or []
-    if repo_options:
-        repo_lines = "\n".join(
-            f"- {opt.get('name', '')}"
-            + (f" (hint: {opt['hint']})" if opt.get("hint") else "")
-            for opt in repo_options
-            if opt.get("name")
-        )
-        repo_section = (
-            "The project has these repositories. Decide which single one this work "
-            "item most likely targets and set \"suggestedRepo\" to that repo NAME "
-            "exactly as written below (or \"\" if you are unsure):\n"
-            f"{repo_lines}\n\n"
-        )
-    else:
-        repo_section = ""
-
+    if not repo_options:
+        return ""
+    repo_lines = "\n".join(
+        f"- {opt.get('name', '')}" + (f" (hint: {opt['hint']})" if opt.get("hint") else "")
+        for opt in repo_options
+        if opt.get("name")
+    )
     return (
-        "You are a senior QA analyst. Analyze the following work item and extract "
-        "the information a QA engineer needs before writing manual test cases.\n\n"
-        f"{project_section}"
-        f"{repo_section}"
-        f"{_ticket_context(ticket)}\n\n"
-        "Identify: business rules implied by the requirements, functional "
-        "requirements, validation rules (input constraints, formats, boundaries), "
-        "risks (things likely to break or be misunderstood), edge cases worth "
-        "testing, any missing information that should be clarified with the "
-        "author, a one-sentence suggested test scope, and the single most likely "
-        "target repository name (suggestedRepo).\n\n"
-        f"Respond with ONLY a JSON object of this exact shape:\n{ANALYSIS_JSON_SHAPE}"
+        "The project has these repositories. Decide which single one this work "
+        "item most likely targets and set \"suggestedRepo\" to that repo NAME "
+        "exactly as written below (or \"\" if you are unsure):\n"
+        f"{repo_lines}\n\n"
     )
 
 
-def build_generation_prompt(
-    ticket: Ticket, analysis: dict, max_cases: int = 8, context: dict[str, Any] | None = None
+def build_combined_prompt(
+    ticket: Ticket, max_cases: int = 8, context: dict[str, Any] | None = None
 ) -> str:
-    """Prompt asking Claude to generate the baseline happy-path test cases.
+    """One-call prompt that both analyzes the work item AND writes the baseline
+    happy-path cases (#174), returning ``{"analysis": {...}, "cases": [...]}``.
 
-    This is the FIRST of a two-stage design (see the ``test-case-generator``
-    skill v2): it produces a small, review-friendly set covering the PRIMARY
-    successful flow of each acceptance criterion. Edge, negative, boundary,
-    permission and error-handling coverage is deliberately deferred to the
-    ``test-case-reviewer`` stage, so this prompt must NOT ask for it (that
-    contradiction is exactly what made coverage depth nondeterministic).
-
-    Returns a JSON array of case objects (title, precondition, steps, priority,
-    testType, automation, platform). ``max_cases`` caps how many are generated.
-    ``context`` is the resolved Project Knowledge Base so preconditions and steps
-    reference real screens, routes and account roles.
+    Merges the analysis and generation stages into a single Claude call to cut
+    per-ticket CLI/overhead cost. The caller composes BOTH the requirement-analyst
+    and test-case-generator skills as the system prompt so neither stage loses its
+    methodology; this prompt carries the explicit output contract for both.
     """
     project_block = render_project_context(context)
     project_section = f"{project_block}\n\n" if project_block else ""
+    repo_section = _repo_section(context)
     return (
-        "You are a senior QA engineer. Using the ticket and the prior requirement "
-        "analysis below, write a lightweight, review-friendly set of ADO-style "
-        "manual test cases that prove the feature works end-to-end.\n\n"
-        "Cover ONLY the primary successful flow (happy path) — aim for one "
-        "successful scenario per acceptance criterion, merging near-duplicate "
-        "journeys. Do NOT generate negative, invalid-input, boundary, permission, "
-        "empty-state or error-handling cases: those are added later in a separate "
-        "review stage, so leaving them out here is correct, not incomplete.\n\n"
-        f"Generate AT MOST {max_cases} test cases — prioritise the highest-value "
-        "happy-path coverage if you would otherwise exceed that.\n\n"
+        "You are a senior QA analyst and engineer. In a SINGLE response, do two "
+        "things for the work item below.\n\n"
         f"{project_section}"
+        f"{repo_section}"
         f"{_ticket_context(ticket)}\n\n"
-        f"Prior analysis (JSON):\n{analysis}\n\n"
-        "Each test case must have: a clear title; a one-line objective (what the "
-        "case proves); a precondition; any test data it needs as testData "
-        "[{field, value}] pairs; a list of steps where each step has an action "
-        "(a) and expected result (e); linkedAc — the acceptance criteria this "
-        "case covers, quoted or identified from the ticket; a priority "
-        "(High/Medium/Low); a testType (typically 'Functional' for these "
-        "primary-flow cases); an automation type "
-        "(Playwright/Selenium/Cypress/Manual); and a platform (e.g. Web).\n\n"
-        "Automation type: DEFAULT to 'Playwright' for web UI and functional cases "
-        "that a browser can drive (navigation, forms, validation, CRUD, permissions). "
-        "Only use 'Manual' when a case genuinely cannot be automated reliably — e.g. "
-        "exploratory testing, subjective visual judgement, external email/SMS delivery, "
-        "or time/scheduler-dependent behavior. Do not mark a whole feature Manual by default.\n\n"
-        f"Respond with ONLY a JSON array of this exact shape:\n{CASES_JSON_SHAPE}"
+        "STEP 1 — Analyze. Identify: business rules implied by the requirements, "
+        "functional requirements, validation rules (input constraints, formats, "
+        "boundaries), risks, edge cases worth testing, any missing information to "
+        "clarify with the author, a one-sentence suggested test scope, and the "
+        "single most likely target repository name (suggestedRepo).\n\n"
+        "STEP 2 — Generate happy-path cases from that analysis. Write a "
+        "lightweight, review-friendly set of ADO-style manual test cases covering "
+        "ONLY the primary successful flow (happy path) — aim for one successful "
+        "scenario per acceptance criterion, merging near-duplicate journeys. Do "
+        "NOT generate negative, invalid-input, boundary, permission, empty-state "
+        "or error-handling cases: those are added later in a separate review "
+        f"stage. Generate AT MOST {max_cases} cases.\n\n"
+        "Each case must have: a clear title; a one-line objective; a precondition; "
+        "any test data as testData [{field, value}]; steps where each has an "
+        "action (a) and expected result (e); linkedAc (the acceptance criteria it "
+        "covers); a priority (High/Medium/Low); a testType (typically "
+        "'Functional'); an automation type (Playwright/Selenium/Cypress/Manual); "
+        "and a platform (e.g. Web). DEFAULT automation to 'Playwright' for web UI "
+        "flows a browser can drive; use 'Manual' only when a case genuinely cannot "
+        "be automated reliably.\n\n"
+        "Respond with ONLY a single JSON object of this exact shape:\n"
+        "{\n"
+        f"  \"analysis\": {ANALYSIS_JSON_SHAPE},\n"
+        f"  \"cases\": {CASES_JSON_SHAPE}\n"
+        "}"
     )
 
 
@@ -263,7 +236,7 @@ def build_review_prompt(
     """Prompt for the second stage: review the happy-path set and fill coverage gaps.
 
     The ``test-case-generator`` stage intentionally produces only the primary
-    successful flow per acceptance criterion (see :func:`build_generation_prompt`).
+    successful flow per acceptance criterion (see :func:`build_combined_prompt`).
     This stage asks the reviewer to audit that set against the requirement
     analysis and then GENERATE the deferred coverage — negative, invalid-input,
     boundary, permission, empty-state and error-handling cases — that fill the
@@ -309,10 +282,9 @@ def build_case_regenerate_prompt(
 
     ``context`` is the resolved Project Knowledge Base — passed so the rewrite
     reuses real routes, roles and selectors instead of inventing them (#183),
-    matching :func:`build_generation_prompt`.
+    matching :func:`build_combined_prompt`.
 
-    Returns a JSON object with the same shape as one entry from
-    ``build_generation_prompt``'s array.
+    Returns a JSON object matching :data:`CASE_JSON_SHAPE`.
     """
     project_block = render_project_context(context)
     project_section = f"{project_block}\n\n" if project_block else ""
