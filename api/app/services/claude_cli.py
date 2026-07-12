@@ -72,6 +72,90 @@ def _compose_system(system: str | None, skill: str | None, include_template: boo
     return f"{skill_text}\n\n{system}" if system else skill_text
 
 
+_USAGE_TOKEN_KEYS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_read_input_tokens",
+    "cache_creation_input_tokens",
+)
+
+# Set on the first call to `_record_usage` in this process (see
+# `_log_envelope_shape_once`) — a one-time diagnostic so operators can confirm the
+# real envelope shape without logging on every call.
+_envelope_shape_logged = False
+
+
+def _log_envelope_shape_once(envelope: dict) -> None:
+    """Log the envelope's top-level (and ``usage``/``modelUsage``) keys once per
+    process (#171), so operators can confirm what the installed CLI actually
+    returns without spamming the log on every call. Logs keys only — never the
+    prompt/response text. Best-effort: never raises.
+    """
+    global _envelope_shape_logged
+    if _envelope_shape_logged:
+        return
+    _envelope_shape_logged = True
+    try:
+        usage = envelope.get("usage")
+        model_usage = envelope.get("modelUsage")
+        logger.info(
+            "Claude CLI envelope shape (once/process): top_keys={} usage_keys={} "
+            "modelUsage_models={}",
+            sorted(envelope.keys()),
+            sorted(usage.keys()) if isinstance(usage, dict) else usage,
+            sorted(model_usage.keys()) if isinstance(model_usage, dict) else model_usage,
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostic only, must never raise
+        logger.warning("Claude envelope shape log skipped: {}", exc)
+
+
+def _usage_from_model_usage(model_usage: Any) -> dict[str, int] | None:
+    """Sum token counts across a newer-CLI ``modelUsage`` envelope into the legacy
+    ``usage`` shape (#171).
+
+    Some Claude CLI versions nest per-call token usage under a top-level
+    ``modelUsage`` dict keyed by model id (each value using camelCase keys, e.g.
+    ``inputTokens``) instead of a single top-level ``usage`` dict. Returns the
+    summed totals in the legacy snake_case shape, or ``None`` if ``model_usage``
+    isn't a non-empty dict of per-model stats.
+    """
+    if not isinstance(model_usage, dict) or not model_usage:
+        return None
+    totals = {key: 0 for key in _USAGE_TOKEN_KEYS}
+    found = False
+    for stats in model_usage.values():
+        if not isinstance(stats, dict):
+            continue
+        totals["input_tokens"] += int(stats.get("inputTokens") or stats.get("input_tokens") or 0)
+        totals["output_tokens"] += int(stats.get("outputTokens") or stats.get("output_tokens") or 0)
+        totals["cache_read_input_tokens"] += int(
+            stats.get("cacheReadInputTokens") or stats.get("cache_read_input_tokens") or 0
+        )
+        totals["cache_creation_input_tokens"] += int(
+            stats.get("cacheCreationInputTokens") or stats.get("cache_creation_input_tokens") or 0
+        )
+        found = True
+    return totals if found else None
+
+
+def _cost_from_model_usage(model_usage: Any) -> float | None:
+    """Sum per-model ``costUSD``/``cost_usd`` across a ``modelUsage`` envelope
+    (#171), for CLI versions that omit the top-level ``total_cost_usd``. Returns
+    ``None`` if there's nothing to sum."""
+    if not isinstance(model_usage, dict) or not model_usage:
+        return None
+    total = 0.0
+    found = False
+    for stats in model_usage.values():
+        if not isinstance(stats, dict):
+            continue
+        cost = stats.get("costUSD", stats.get("cost_usd"))
+        if isinstance(cost, (int, float)):
+            total += float(cost)
+            found = True
+    return total if found else None
+
+
 def _record_usage(
     envelope: dict | None, *, model: str, action: str, wall_ms: int, owner_id: int | None
 ) -> None:
@@ -79,16 +163,27 @@ def _record_usage(
 
     Parses the CLI's JSON result envelope for ``total_cost_usd``, ``usage`` token
     counts and ``duration_ms`` (falling back to the measured wall-clock time), and
-    hands them to :func:`ai_usage_service.record`. ``owner_id`` stamps the row for
-    per-user cost attribution (#95) — the same user whose credentials the call
-    ran under (see :func:`_resolve_claude_env`). Wrapped so a logging failure can
-    never break the Claude call it observes.
+    hands them to :func:`ai_usage_service.record`. If the top-level ``usage``
+    dict is missing or all-zero, falls back to summing ``modelUsage`` (#171) — a
+    shape some newer Claude CLI versions use instead. ``owner_id`` stamps the row
+    for per-user cost attribution (#95) — the same user whose credentials the
+    call ran under (see :func:`_resolve_claude_env`). Wrapped so a logging
+    failure can never break the Claude call it observes.
     """
     try:
         from app.services import ai_usage_service
 
         env = envelope or {}
+        if env:
+            _log_envelope_shape_once(env)
         usage = env.get("usage") or {}
+        if not isinstance(usage, dict) or not any(usage.get(key) for key in _USAGE_TOKEN_KEYS):
+            fallback = _usage_from_model_usage(env.get("modelUsage"))
+            if fallback:
+                usage = fallback
+        cost = env.get("total_cost_usd")
+        if not isinstance(cost, (int, float)) or cost == 0:
+            cost = _cost_from_model_usage(env.get("modelUsage")) or cost or 0.0
         duration = env.get("duration_ms")
         ai_usage_service.record(
             model=model,
@@ -96,7 +191,7 @@ def _record_usage(
             output_tokens=usage.get("output_tokens", 0),
             cache_read=usage.get("cache_read_input_tokens", 0),
             cache_write=usage.get("cache_creation_input_tokens", 0),
-            cost_usd=env.get("total_cost_usd", 0.0),
+            cost_usd=cost,
             duration_ms=int(duration) if isinstance(duration, (int, float)) else wall_ms,
             action=action,
             owner_id=owner_id,
