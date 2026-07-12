@@ -1,48 +1,12 @@
-import {
-  ArrowLeft,
-  BarChart3,
-  Check,
-  ChevronsUpDown,
-  LayoutDashboard,
-  Settings,
-  SquareStack,
-  Ticket,
-} from "lucide-react";
-import { useRef, useState, type ComponentType } from "react";
+import { ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
+import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
+import { GLOBAL_MINI, PIPELINE } from "@/components/shell/navConfig";
 import { runColor, runRateLabel } from "@/components/dashboard/runStatus";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import { useRun } from "@/hooks/queries";
-
-/** Pipeline stages as the run's navigation. `stage` is the 1-based index in the
- * global pipeline (see `runStatusToStage`) used for done/current styling; `seg`
- * is the run sub-route this step opens (null = non-navigable phase marker). */
-const PIPELINE: { label: string; stage: number; seg: string | null }[] = [
-  { label: "Sync & Select", stage: 2, seg: null },
-  { label: "Analyze", stage: 3, seg: null },
-  { label: "Review", stage: 4, seg: "review" },
-  { label: "Link", stage: 5, seg: "sync" },
-  { label: "Automation", stage: 6, seg: "automation" },
-  { label: "Execution", stage: 7, seg: "execution" },
-  { label: "Evidence", stage: 8, seg: "evidence" },
-  { label: "Publish", stage: 9, seg: "comment" },
-];
-
-interface MiniItem {
-  path: string;
-  label: string;
-  icon: ComponentType<{ size?: number; strokeWidth?: number }>;
-}
-
-const GLOBAL_MINI: MiniItem[] = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/tickets", label: "Tickets", icon: Ticket },
-  { path: "/runs", label: "Runs", icon: SquareStack },
-  { path: "/reports", label: "Reports", icon: BarChart3 },
-  { path: "/settings", label: "Settings", icon: Settings },
-];
 
 /**
  * Workspace-mode sidebar shown while inside a run (`/runs/:runId/*`). The whole

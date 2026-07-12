@@ -2,34 +2,66 @@ import { motion } from "framer-motion";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
+import { MobileTopBar } from "@/components/shell/MobileTopBar";
+import { MobileStepperRail } from "@/components/shell/MobileStepperRail";
+import { MobileDrawer } from "@/components/shell/MobileDrawer";
 import { CursorLight } from "@/components/effects/CursorLight";
 import { ClickRipples } from "@/components/effects/ClickRipples";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { useRunRouteId } from "@/hooks/useRunRouteId";
 
-/** The persistent frame: sidebar + top bar + a scrollable content region. */
-export function AppLayout() {
+/**
+ * One keyed fade-in per route. No AnimatePresence/exit + `mode="wait"`: that ran
+ * exit-then-enter (felt delayed) and let the incoming page paint at full opacity
+ * for a frame before `initial` applied (a flash, then a second fade). A plain
+ * keyed motion.div applies `initial` inline on first paint, so the page fades in
+ * once, immediately.
+ */
+function RouteContent() {
   const location = useLocation();
+  return (
+    <motion.div
+      key={location.pathname}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: "easeOut" }}
+      className="h-full"
+    >
+      <Outlet />
+    </motion.div>
+  );
+}
+
+/**
+ * The persistent frame. On desktop (`md` and up): sidebar + top bar + scrollable
+ * content. Below `md` the two sidebars collapse into a slide-in drawer and the
+ * desktop chrome is replaced by the compact mobile top bar (+ an in-run stepper
+ * rail), all inside a single 480px-capped column. See MOBILE_SPEC §2.
+ */
+export function AppLayout() {
+  const isMobile = useIsMobile();
+  const runId = useRunRouteId();
+
+  if (isMobile) {
+    return (
+      <div className="relative z-[2] mx-auto flex h-[100dvh] w-full max-w-[480px] flex-col gap-2 p-2">
+        <MobileTopBar />
+        {runId != null && <MobileStepperRail runId={runId} />}
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-[16px]">
+          <RouteContent />
+        </main>
+        <MobileDrawer />
+      </div>
+    );
+  }
+
   return (
     <div className="relative z-[2] flex h-screen w-screen gap-3.5 p-3.5">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col gap-3.5">
         <TopBar />
         <main className="min-h-0 flex-1 overflow-y-auto rounded-[20px]">
-          {/*
-           * One keyed fade-in per route. No AnimatePresence/exit + `mode="wait"`:
-           * that ran exit-then-enter (felt delayed) and let the incoming page
-           * paint at full opacity for a frame before `initial` applied (a flash,
-           * then a second fade). A plain keyed motion.div applies `initial`
-           * inline on first paint, so the page fades in once, immediately.
-           */}
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: "easeOut" }}
-            className="h-full"
-          >
-            <Outlet />
-          </motion.div>
+          <RouteContent />
         </main>
       </div>
       <CursorLight />

@@ -37,6 +37,11 @@ interface UIState {
   togglePalette: () => void;
   setPaletteQuery: (q: string) => void;
 
+  // mobile navigation drawer (replaces both sidebars below the `md` breakpoint)
+  drawerOpen: boolean;
+  openDrawer: () => void;
+  closeDrawer: () => void;
+
   // tickets page
   selected: Record<string, boolean>;
   ticketSearch: string;
@@ -131,6 +136,10 @@ export const useUI = create<UIState>((set) => ({
   closePalette: () => set({ paletteOpen: false }),
   togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen, paletteQuery: "" })),
   setPaletteQuery: (q) => set({ paletteQuery: q }),
+
+  drawerOpen: false,
+  openDrawer: () => set({ drawerOpen: true }),
+  closeDrawer: () => set({ drawerOpen: false }),
 
   selected: {},
   ticketSearch: "",
