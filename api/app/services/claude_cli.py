@@ -511,8 +511,24 @@ def verify_credentials(config_dir: str | Path) -> tuple[str, str]:
     return ("error", (err or out or "Unknown error")[:200])
 
 
+# Cache of the last is_available() probe: (monotonic_ts, result). The /ai/stats
+# endpoint is polled by the UI and each call otherwise spawns `claude --version`
+# with a 15s timeout; the CLI's presence changes rarely, so a short TTL removes a
+# subprocess-per-poll (#180).
+_IS_AVAILABLE_TTL_S = 60.0
+_is_available_cache: tuple[float, bool] | None = None
+
+
 def is_available() -> bool:
-    """Best-effort check that the CLI is present (does not verify auth)."""
+    """Best-effort check that the CLI is present (does not verify auth).
+
+    Cached for ``_IS_AVAILABLE_TTL_S`` so polling ``/ai/stats`` doesn't spawn a
+    subprocess on every request (#180).
+    """
+    global _is_available_cache
+    now = time.monotonic()
+    if _is_available_cache is not None and now - _is_available_cache[0] < _IS_AVAILABLE_TTL_S:
+        return _is_available_cache[1]
     try:
         proc = subprocess.run(  # noqa: S603
             [settings.claude_bin, "--version"],
@@ -520,6 +536,8 @@ def is_available() -> bool:
             text=True,
             timeout=15,
         )
-        return proc.returncode == 0
+        result = proc.returncode == 0
     except (FileNotFoundError, subprocess.SubprocessError):
-        return False
+        result = False
+    _is_available_cache = (now, result)
+    return result
