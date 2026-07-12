@@ -103,13 +103,13 @@ def _usage_config_dir() -> Path | None:
     return None
 
 
-def _run_cli_usage() -> dict[str, Any] | None:
-    """Drive `claude` to emit its `/usage` view and parse the session/week %.
+def _scrape_usage(cfg: Path | None) -> dict[str, Any] | None:
+    """Spawn `claude` under ``cfg``, pipe `/usage`, and parse the session/week %.
 
-    Pipes `/usage` to the CLI's stdin (the interactive command), strips ANSI, and
+    ``cfg`` sets ``CLAUDE_CONFIG_DIR`` (None inherits the ambient env). Pipes
+    `/usage` to the CLI's stdin (the interactive command), strips ANSI, and
     regex-parses the two limit lines. Returns None on any failure/parse miss.
     """
-    cfg = _usage_config_dir()
     env = {**os.environ, "CLAUDE_CONFIG_DIR": str(cfg)} if cfg is not None else None
     try:
         proc = subprocess.run(  # noqa: S603
@@ -139,6 +139,29 @@ def _run_cli_usage() -> dict[str, Any] | None:
             "resetLabel": (wm.group(2) or "").strip() if wm else "",
         },
     }
+
+
+def _run_cli_usage() -> dict[str, Any] | None:
+    """Drive `claude` to emit its `/usage` view and parse the session/week %.
+
+    Tries the selected credential's materialized config dir first (so the % maps
+    to the account in effect), then falls back to the machine's default
+    ``~/.claude`` login. The fallback matters because the CLI only renders the
+    interactive `/usage` view under a fully set-up config: a per-credential
+    materialized dir typically renders nothing (it exits with just the session
+    summary), whereas the default login renders it reliably — restoring the
+    behavior that predated the ``CLAUDE_CONFIG_DIR`` override (#157). Returns
+    None only if neither target produces a parseable result.
+    """
+    seen: set[str] = set()
+    for target in (_usage_config_dir(), app_settings.claude_home):
+        if target is None or str(target) in seen:
+            continue
+        seen.add(str(target))
+        parsed = _scrape_usage(target)
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def _refresh_limits() -> None:
