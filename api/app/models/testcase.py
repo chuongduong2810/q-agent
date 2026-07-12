@@ -11,7 +11,9 @@ from app.db import Base, timestamp_column
 
 APPROVAL_STATUSES = ("pending", "approved", "rejected")
 AUTOMATION_TYPES = ("Playwright", "Selenium", "Cypress", "Manual")
-SOURCES = ("ai", "manual")
+# "ai" = happy-path generator; "ai-review" = reviewer coverage expansion (#173);
+# "manual" = authored by a QA engineer in the app.
+SOURCES = ("ai", "ai-review", "manual")
 # Lifecycle of a generated spec through the placeholder gate + execution/heal loop.
 SPEC_STATUSES = ("draft", "blocked", "running", "passed", "failed", "product_defect")
 

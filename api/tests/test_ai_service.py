@@ -38,6 +38,26 @@ CANNED_CASES = [
     },
 ]
 
+# The second-stage reviewer (#173) audits the happy-path set and returns the
+# deferred edge/negative coverage to append.
+CANNED_REVIEW = {
+    "verdict": "approve-with-changes",
+    "coverageGaps": ["No test for reset request against an unregistered email"],
+    "additionalCases": [
+        {
+            "title": "Reset request for unregistered email shows a neutral message",
+            "precondition": "Email is not registered",
+            "steps": [{"a": "Submit an unknown email", "e": "Neutral confirmation; no account leak"}],
+            "priority": "Medium",
+            "testType": "Negative",
+            "automation": "Playwright",
+            "platform": "Web",
+        }
+    ],
+}
+# A no-op review (used where the test asserts on the generation cap only).
+CANNED_REVIEW_EMPTY = {"verdict": "approve", "coverageGaps": [], "additionalCases": []}
+
 
 def _make_run(db_session, ticket_external_id: str) -> Run:
     run = Run(code="RUN-200", name="Test run", status="processing")
@@ -52,7 +72,7 @@ def _make_run(db_session, ticket_external_id: str) -> Run:
 def test_pipeline_creates_analysis_and_cases(db_session, seed_ticket, monkeypatch):
     run = _make_run(db_session, seed_ticket.external_id)
 
-    responses = iter([CANNED_ANALYSIS, CANNED_CASES])
+    responses = iter([CANNED_ANALYSIS, CANNED_CASES, CANNED_REVIEW])
     monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
 
     ai_service.run_generation_pipeline(run.id, blocking=True)
@@ -63,12 +83,14 @@ def test_pipeline_creates_analysis_and_cases(db_session, seed_ticket, monkeypatc
     run_ticket = db_session.query(RunTicket).filter(RunTicket.run_id == run.id).first()
     assert run_ticket.gen_status == "done"
     assert run_ticket.analysis["suggestedScope"].startswith("Cover reset")
+    # Reviewer verdict + coverage gaps recorded alongside the analysis.
+    assert run_ticket.analysis["review"]["verdict"] == "approve-with-changes"
 
-    cases = db_session.query(TestCase).filter(TestCase.run_id == run.id).all()
-    assert len(cases) == 2
-    codes = sorted(c.code for c in cases)
-    assert codes == ["TC-01", "TC-02"]
-    assert all(c.source == "ai" for c in cases)
+    cases = db_session.query(TestCase).filter(TestCase.run_id == run.id).order_by(TestCase.code).all()
+    assert len(cases) == 3  # 2 happy-path + 1 reviewer-added
+    assert [c.code for c in cases] == ["TC-01", "TC-02", "TC-03"]
+    # Happy-path cases are source "ai"; the reviewer's addition is "ai-review".
+    assert [c.source for c in cases] == ["ai", "ai", "ai-review"]
     assert all(c.approval == "pending" for c in cases)
 
 
@@ -82,13 +104,13 @@ def test_pipeline_caps_and_continues_numbering(db_session, seed_ticket, monkeypa
     monkeypatch.setattr(ai_service, "provider_case_offset", lambda db, ticket: 5)
 
     many = [dict(CANNED_CASES[0]) for _ in range(6)]  # Claude returns 6; cap is 2
-    responses = iter([CANNED_ANALYSIS, many])
+    responses = iter([CANNED_ANALYSIS, many, CANNED_REVIEW_EMPTY])
     monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
 
     ai_service.run_generation_pipeline(run.id, blocking=True)
 
     cases = db_session.query(TestCase).filter(TestCase.run_id == run.id).order_by(TestCase.code).all()
-    assert len(cases) == 2  # capped
+    assert len(cases) == 2  # capped (reviewer added none here)
     assert [c.code for c in cases] == ["TC-06", "TC-07"]  # continued from offset
 
 

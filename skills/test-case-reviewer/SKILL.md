@@ -69,6 +69,12 @@ A review report following `templates/review-report.md`: verdict (Approve / Appro
 Reject), findings table, coverage matrix with gaps, missing-scenario list, approved items, and the
 next step.
 
+> **Q-Agent pipeline mode.** In the automated Q-Agent pipeline the generator emits only the
+> happy-path set on purpose, so here you are explicitly asked to ALSO produce the deferred
+> coverage: after listing the gaps, generate the additional negative, invalid-input, boundary,
+> permission, empty-state and error-handling test cases that fill them (without duplicating the
+> happy-path cases). The calling prompt pins the exact JSON shape to return.
+
 ## Quality Rules
 
 - Cite the specific **Test Case ID** and **Acceptance Criterion** for every finding.

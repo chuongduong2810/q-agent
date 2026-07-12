@@ -32,11 +32,12 @@ from app.services import (
 )
 from app.services.claude_cli import ClaudeError, run_json
 from app.services.run_status import set_run_status
-from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR
+from app.services.skills import REQUIREMENT_ANALYST, TEST_CASE_GENERATOR, TEST_CASE_REVIEWER
 from app.services.prompts import (
     build_analysis_prompt,
     build_case_regenerate_prompt,
     build_generation_prompt,
+    build_review_prompt,
 )
 from app.ws import hub
 
@@ -44,6 +45,7 @@ PHASE_READING = "reading"
 PHASE_UNDERSTANDING_AC = "understanding acceptance criteria"
 PHASE_BUSINESS_RULES = "identifying business rules"
 PHASE_GENERATING = "generating test cases"
+PHASE_REVIEWING = "reviewing coverage"
 
 
 def _publish_phase(run_id: int, ticket_external_id: str, phase: str, message: str) -> None:
@@ -113,6 +115,94 @@ def _validated_repo_guess(analysis: dict, context: dict) -> str:
         return suggested
     default_name = next((opt["name"] for opt in options if opt.get("default")), "")
     return default_name or context.get("repo", "") or ""
+
+
+def _review_and_expand(
+    db: Session,
+    run: Run,
+    ticket: Ticket,
+    run_ticket: RunTicket,
+    analysis: dict,
+    context: dict,
+    *,
+    existing_cases: list,
+    start_offset: int,
+    max_cases: int,
+) -> int:
+    """Second-stage coverage expansion (#173).
+
+    Asks the ``test-case-reviewer`` skill to audit the happy-path set and
+    generate the deferred edge/negative/boundary/permission cases. Persists them
+    as ``source='ai-review'`` TestCase rows continuing the TC-NN numbering, and
+    records the verdict + coverage gaps on ``run_ticket.analysis['review']``.
+
+    Best-effort: never raises. The happy-path cases are already committed, so any
+    failure here (Claude error, bad JSON) is logged and skipped — the ticket
+    still completes with its happy-path coverage.
+
+    Args:
+        existing_cases: The happy-path cases just generated (given to the reviewer
+            so it doesn't duplicate them).
+        start_offset: The TC-NN number to continue from (last happy-path number).
+        max_cases: Cap on how many additional cases to add.
+
+    Returns:
+        The number of additional cases persisted.
+    """
+    _publish_phase(
+        run.id, ticket.external_id, PHASE_REVIEWING, "Reviewing coverage and adding edge cases..."
+    )
+    try:
+        review = run_json(
+            build_review_prompt(ticket, analysis, existing_cases, max_cases=max_cases, context=context),
+            skill=TEST_CASE_REVIEWER,
+            label=f"Review cases: {ticket.external_id}",
+        )
+    except Exception as exc:  # noqa: BLE001 - review expansion is additive + best-effort
+        logger.warning("Test-case review skipped for {}: {}", ticket.external_id, exc)
+        return 0
+    if not isinstance(review, dict):
+        logger.warning("Test-case review response for {} was not a JSON object", ticket.external_id)
+        return 0
+
+    additional = review.get("additionalCases") or []
+    if not isinstance(additional, list):
+        additional = []
+    additional = additional[:max_cases]  # cap the expansion like generation
+
+    added = 0
+    for i, raw_case in enumerate(additional, start=1):
+        if not isinstance(raw_case, dict):
+            continue
+        steps = raw_case.get("steps") or []
+        steps = [{"a": s.get("a", ""), "e": s.get("e", "")} for s in steps if isinstance(s, dict)]
+        db.add(
+            TestCase(
+                run_id=run.id,
+                ticket_external_id=ticket.external_id,
+                code=f"TC-{start_offset + i:02d}",
+                title=raw_case.get("title", ""),
+                precondition=raw_case.get("precondition", ""),
+                steps=steps,
+                priority=raw_case.get("priority", "Medium"),
+                test_type=raw_case.get("testType", "Functional"),
+                automation=raw_case.get("automation", "Playwright"),
+                platform=raw_case.get("platform", "Web"),
+                source="ai-review",
+            )
+        )
+        added += 1
+
+    # Record the verdict + coverage gaps alongside the analysis (reassign the
+    # dict so SQLAlchemy tracks the JSON change). No migration needed — a
+    # dedicated coverage-matrix column is #177.
+    verdict = str(review.get("verdict", "") or "")
+    gaps = review.get("coverageGaps") or []
+    run_ticket.analysis = {**(run_ticket.analysis or {}), "review": {"verdict": verdict, "coverageGaps": gaps}}
+    db.add(run_ticket)
+    db.commit()
+    logger.info("Test-case review for {}: verdict={!r}, +{} cases", ticket.external_id, verdict, added)
+    return added
 
 
 def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
@@ -212,6 +302,19 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             case_count += 1
         db.commit()
 
+        # Stage 3 (two-stage design, #173): the reviewer audits the happy-path
+        # set and generates the deferred edge/negative/boundary/permission
+        # coverage. Best-effort — the happy-path cases are already committed, so
+        # a reviewer failure logs and continues rather than failing the ticket.
+        review_count = 0
+        if not run_control.is_cancelled(run.id, db):
+            review_count = _review_and_expand(
+                db, run, ticket, run_ticket, analysis, context,
+                existing_cases=cases,
+                start_offset=offset + case_count,
+                max_cases=max_cases,
+            )
+
         run_ticket.gen_status = "done"
         db.add(run_ticket)
         db.commit()
@@ -219,7 +322,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         hub.publish(
             str(run.id),
             "analysis.ticketDone",
-            {"ticket": ticket.external_id, "caseCount": case_count},
+            {"ticket": ticket.external_id, "caseCount": case_count + review_count},
         )
     except ClaudeError as exc:
         # A run cancel kills the in-flight Claude CLI (run_control.kill_processes),
