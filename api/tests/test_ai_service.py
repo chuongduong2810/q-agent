@@ -72,7 +72,7 @@ def _make_run(db_session, ticket_external_id: str) -> Run:
 def test_pipeline_creates_analysis_and_cases(db_session, seed_ticket, monkeypatch):
     run = _make_run(db_session, seed_ticket.external_id)
 
-    responses = iter([CANNED_ANALYSIS, CANNED_CASES, CANNED_REVIEW])
+    responses = iter([{"analysis": CANNED_ANALYSIS, "cases": CANNED_CASES}, CANNED_REVIEW])
     monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
 
     ai_service.run_generation_pipeline(run.id, blocking=True)
@@ -104,7 +104,7 @@ def test_pipeline_caps_and_continues_numbering(db_session, seed_ticket, monkeypa
     monkeypatch.setattr(ai_service, "provider_case_offset", lambda db, ticket: 5)
 
     many = [dict(CANNED_CASES[0]) for _ in range(6)]  # Claude returns 6; cap is 2
-    responses = iter([CANNED_ANALYSIS, many, CANNED_REVIEW_EMPTY])
+    responses = iter([{"analysis": CANNED_ANALYSIS, "cases": many}, CANNED_REVIEW_EMPTY])
     monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
 
     ai_service.run_generation_pipeline(run.id, blocking=True)
@@ -131,7 +131,7 @@ def test_pipeline_persists_new_contract_fields(db_session, seed_ticket, monkeypa
             "platform": "Web",
         }
     ]
-    responses = iter([CANNED_ANALYSIS, rich, CANNED_REVIEW_EMPTY])
+    responses = iter([{"analysis": CANNED_ANALYSIS, "cases": rich}, CANNED_REVIEW_EMPTY])
     monkeypatch.setattr(ai_service, "run_json", lambda *a, **k: next(responses))
 
     ai_service.run_generation_pipeline(run.id, blocking=True)
