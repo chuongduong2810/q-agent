@@ -75,3 +75,84 @@ def test_build_surfaces_claude_error(client, monkeypatch):
     row = client.get("/projects/X/knowledge").json()
     assert row["status"] == "error"
     assert "cli missing" in row["lastError"]
+
+
+def _seed_knowledge_row(db_session, *, key, project_key, repo="", selector="#old-login"):
+    """A minimal indexed ProjectKnowledge row with one selector entry (#182)."""
+    from app.models.knowledge import ProjectKnowledge
+
+    row = ProjectKnowledge(
+        key=key,
+        project_key=project_key,
+        name=project_key,
+        repo=repo,
+        status="indexed",
+        confidence=90,
+        knowledge={
+            "selectors": [{"screen": "Login", "element": "Submit", "selector": selector}],
+        },
+        owner_id=None,
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def test_propose_selector_fix_updates_matching_kb_entry(db_session):
+    """A self-heal's corrected selector is written back into the KB entry that
+    carried the old (broken) value — #182 heal->KB feedback."""
+    from app.models.knowledge import ProjectKnowledge, compose_key
+
+    _seed_knowledge_row(
+        db_session, key=compose_key("Surency Platform", "org/web"),
+        project_key="Surency Platform", repo="org/web", selector="#old-login",
+    )
+
+    updated = knowledge_service.propose_selector_fix(
+        "Surency Platform", "org/web", "#old-login", "#new-login", None
+    )
+    assert updated is True
+
+    row = (
+        db_session.query(ProjectKnowledge)
+        .filter(ProjectKnowledge.key == compose_key("Surency Platform", "org/web"))
+        .first()
+    )
+    db_session.refresh(row)
+    assert row.knowledge["selectors"][0]["selector"] == "#new-login"
+    # The unrelated fields on that same entry are preserved.
+    assert row.knowledge["selectors"][0]["screen"] == "Login"
+
+
+def test_propose_selector_fix_falls_back_to_project_level_row(db_session):
+    """No per-repo row -> falls back to the legacy project-level row (repo='')."""
+    from app.models.knowledge import ProjectKnowledge
+
+    _seed_knowledge_row(
+        db_session, key="Surency Platform", project_key="Surency Platform",
+        repo="", selector="#old-login",
+    )
+
+    updated = knowledge_service.propose_selector_fix(
+        "Surency Platform", "org/web", "#old-login", "#new-login", None
+    )
+    assert updated is True
+    row = db_session.query(ProjectKnowledge).filter(ProjectKnowledge.key == "Surency Platform").first()
+    db_session.refresh(row)
+    assert row.knowledge["selectors"][0]["selector"] == "#new-login"
+
+
+def test_propose_selector_fix_noop_when_no_matching_selector(db_session):
+    _seed_knowledge_row(
+        db_session, key="Surency Platform", project_key="Surency Platform",
+        selector="#unrelated",
+    )
+    updated = knowledge_service.propose_selector_fix(
+        "Surency Platform", "", "#old-login", "#new-login", None
+    )
+    assert updated is False
+
+
+def test_propose_selector_fix_noop_when_no_project_key_or_kb_row():
+    assert knowledge_service.propose_selector_fix("", "", "#a", "#b", None) is False
+    assert knowledge_service.propose_selector_fix("Ghost Project", "", "#a", "#b", None) is False

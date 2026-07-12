@@ -109,6 +109,20 @@ def build_case_context(db: Session, case: TestCase, env: str = "") -> dict[str, 
     return project_config_service.context_for_ticket(db, ticket, env=env, repo=repo)
 
 
+def _case_rank_query(case: TestCase) -> str:
+    """Build the relevance-ranking query text for a case: title + step text.
+
+    Passed as ``render_project_context``'s ``rank_query`` (#182) so the KB's
+    routes/selectors are ranked by relevance to what THIS case actually needs
+    before being truncated, instead of an arbitrary blind slice.
+    """
+    parts = [case.title or ""]
+    for step in case.steps or []:
+        parts.append(step.get("a", ""))
+        parts.append(step.get("e", ""))
+    return " ".join(parts)
+
+
 def _build_prompt(
     case: TestCase,
     context: dict[str, Any] | None = None,
@@ -133,7 +147,9 @@ def _build_prompt(
     )
     # include_secrets=True: the user chose to bake literal credentials/URLs into
     # generated specs so they run unmodified.
-    project_block = render_project_context(context, include_secrets=True)
+    project_block = render_project_context(
+        context, include_secrets=True, rank_query=_case_rank_query(case)
+    )
     if project_block:
         grounding = (
             f"{project_block}\n\n"
@@ -191,7 +207,9 @@ def _build_fix_prompt(
         f"  {i + 1}. Action: {step.get('a', '')} | Expected: {step.get('e', '')}"
         for i, step in enumerate(case.steps or [])
     )
-    project_block = render_project_context(context, include_secrets=True)
+    project_block = render_project_context(
+        context, include_secrets=True, rank_query=_case_rank_query(case)
+    )
     grounding = f"{project_block}\n\n" if project_block else ""
     output_block = f"\n\nPlaywright output (tail):\n{run_output.strip()[-2000:]}" if run_output.strip() else ""
     return (
