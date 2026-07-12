@@ -45,6 +45,22 @@ CASE_JSON_SHAPE = """{
   "platform": string
 }"""
 
+REVIEW_JSON_SHAPE = """{
+  "verdict": "approve" | "approve-with-changes" | "reject",
+  "coverageGaps": string[],
+  "additionalCases": [
+    {
+      "title": string,
+      "precondition": string,
+      "steps": [ { "a": string, "e": string } ],
+      "priority": "High" | "Medium" | "Low",
+      "testType": string,
+      "automation": "Playwright" | "Selenium" | "Cypress" | "Manual",
+      "platform": string
+    }
+  ]
+}"""
+
 
 def _ticket_context(ticket: Ticket) -> str:
     """Render the ticket fields Claude needs: title, description, acceptance criteria."""
@@ -222,6 +238,54 @@ def build_generation_prompt(
         "exploratory testing, subjective visual judgement, external email/SMS delivery, "
         "or time/scheduler-dependent behavior. Do not mark a whole feature Manual by default.\n\n"
         f"Respond with ONLY a JSON array of this exact shape:\n{CASES_JSON_SHAPE}"
+    )
+
+
+def build_review_prompt(
+    ticket: Ticket,
+    analysis: dict,
+    existing_cases: list[dict],
+    max_cases: int = 8,
+    context: dict[str, Any] | None = None,
+) -> str:
+    """Prompt for the second stage: review the happy-path set and fill coverage gaps.
+
+    The ``test-case-generator`` stage intentionally produces only the primary
+    successful flow per acceptance criterion (see :func:`build_generation_prompt`).
+    This stage asks the reviewer to audit that set against the requirement
+    analysis and then GENERATE the deferred coverage — negative, invalid-input,
+    boundary, permission, empty-state and error-handling cases — that fill the
+    gaps, without duplicating the existing happy-path cases.
+
+    Returns a JSON object with ``verdict``, ``coverageGaps`` (ACs/business rules
+    not yet covered) and ``additionalCases`` (new cases in the standard case
+    shape). ``max_cases`` caps how many additional cases to add.
+    """
+    project_block = render_project_context(context)
+    project_section = f"{project_block}\n\n" if project_block else ""
+    return (
+        "You are a senior QA reviewer. The happy-path test cases below were "
+        "generated to cover the PRIMARY successful flow of each acceptance "
+        "criterion only; edge, negative, boundary, permission, empty-state and "
+        "error-handling coverage was deliberately deferred to you.\n\n"
+        "Review the existing cases against the ticket and the prior requirement "
+        "analysis, then:\n"
+        "1. List the concrete coverage gaps (acceptance criteria, business rules, "
+        "validation rules, risks and edge cases from the analysis that the "
+        "happy-path set does not yet exercise).\n"
+        f"2. GENERATE AT MOST {max_cases} additional test cases that fill those "
+        "gaps — negative, invalid-input, boundary, permission and error-handling "
+        "scenarios. Do NOT duplicate or restate the existing happy-path cases.\n"
+        "3. Give an overall verdict.\n\n"
+        f"{project_section}"
+        f"{_ticket_context(ticket)}\n\n"
+        f"Prior analysis (JSON):\n{analysis}\n\n"
+        f"Existing happy-path cases (JSON):\n{existing_cases}\n\n"
+        "Each additional case uses the same fields as the existing cases: title, "
+        "precondition, steps ([{a, e}]), priority (High/Medium/Low), testType "
+        "(e.g. Negative, Boundary, Security, Permission), automation "
+        "(Playwright/Selenium/Cypress/Manual), and platform (e.g. Web).\n\n"
+        f"Respond with ONLY a JSON object of this exact shape:\n{REVIEW_JSON_SHAPE}"
     )
 
 

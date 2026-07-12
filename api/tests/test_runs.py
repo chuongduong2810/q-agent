@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.routers import runs as runs_router
 from app.services import ai_service
+from app.services.skills import TEST_CASE_GENERATOR, TEST_CASE_REVIEWER
 
 CANNED_ANALYSIS = {
     "businessRules": ["Reset link must be single-use"],
@@ -28,13 +29,19 @@ CANNED_CASES = [
 ]
 
 
-def _canned_run_json(*_args, **_kwargs):
-    """Alternate between analysis and cases responses across calls."""
-    _canned_run_json.calls += 1
-    return CANNED_ANALYSIS if _canned_run_json.calls % 2 == 1 else CANNED_CASES
+def _canned_run_json(*_args, **kwargs):
+    """Return the right canned response per pipeline stage (keyed on the skill).
 
-
-_canned_run_json.calls = 0
+    Dispatching on ``skill`` (rather than call-count) keeps the mock stable
+    across the three-call-per-ticket pipeline — analyze, generate, then the
+    review coverage-expansion stage (#173) — including on regenerate.
+    """
+    skill = kwargs.get("skill")
+    if skill == TEST_CASE_REVIEWER:
+        return {"verdict": "approve", "coverageGaps": [], "additionalCases": []}
+    if skill == TEST_CASE_GENERATOR:
+        return CANNED_CASES
+    return CANNED_ANALYSIS  # requirement-analyst (or any other analysis-shaped call)
 
 
 def _patch_pipeline_blocking(monkeypatch):
