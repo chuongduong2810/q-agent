@@ -114,6 +114,65 @@ def test_read_stats_missing_home_is_zero(workspace_dir, tmp_path, monkeypatch):
     assert s["breakdown"] == {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
 
 
+def test_run_cli_usage_falls_back_to_default_home(tmp_path, monkeypatch):
+    """When the selected credential's materialized config renders no `/usage`
+    (the regressed case), the scrape falls back to the machine's default
+    ~/.claude login, which does render it."""
+    cfg = tmp_path / "materialized"
+    home = tmp_path / ".claude"
+    monkeypatch.setattr(claude_usage_reader, "_usage_config_dir", lambda: cfg)
+    monkeypatch.setattr(app_settings, "claude_home", home)
+    calls: list = []
+
+    def fake_scrape(target):
+        calls.append(target)
+        if target == cfg:
+            return None  # materialized dir renders nothing
+        return {"session": {"pctUsed": 5, "resetLabel": "x"},
+                "week": {"pctUsed": 7, "resetLabel": "y"}}
+
+    monkeypatch.setattr(claude_usage_reader, "_scrape_usage", fake_scrape)
+
+    parsed = claude_usage_reader._run_cli_usage()
+
+    assert parsed["session"]["pctUsed"] == 5
+    assert parsed["week"]["pctUsed"] == 7
+    assert calls == [cfg, home]  # materialized tried first, then default home
+
+
+def test_run_cli_usage_prefers_materialized(tmp_path, monkeypatch):
+    """A materialized config that DOES render short-circuits — the default home
+    is never scraped, so the % maps to the account in effect."""
+    cfg = tmp_path / "materialized"
+    home = tmp_path / ".claude"
+    monkeypatch.setattr(claude_usage_reader, "_usage_config_dir", lambda: cfg)
+    monkeypatch.setattr(app_settings, "claude_home", home)
+    calls: list = []
+
+    def fake_scrape(target):
+        calls.append(target)
+        return {"session": {"pctUsed": 1, "resetLabel": ""},
+                "week": {"pctUsed": 2, "resetLabel": ""}}
+
+    monkeypatch.setattr(claude_usage_reader, "_scrape_usage", fake_scrape)
+
+    parsed = claude_usage_reader._run_cli_usage()
+
+    assert parsed["session"]["pctUsed"] == 1
+    assert calls == [cfg]  # short-circuited; default home never scraped
+
+
+def test_run_cli_usage_none_when_all_targets_fail(tmp_path, monkeypatch):
+    """No materialized credential + a home that renders nothing yields None
+    (panel then falls back to cost)."""
+    home = tmp_path / ".claude"
+    monkeypatch.setattr(claude_usage_reader, "_usage_config_dir", lambda: None)
+    monkeypatch.setattr(app_settings, "claude_home", home)
+    monkeypatch.setattr(claude_usage_reader, "_scrape_usage", lambda target: None)
+
+    assert claude_usage_reader._run_cli_usage() is None
+
+
 def test_record_still_writes_a_row(workspace_dir):
     """The legacy per-call capture stays in place (harmless) and must not raise."""
     ai_usage_service.record(
