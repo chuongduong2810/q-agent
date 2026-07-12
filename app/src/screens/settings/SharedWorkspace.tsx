@@ -66,8 +66,8 @@ export function SharedWorkspace() {
     );
 
   return (
-    <div className="mx-auto max-w-[940px] py-10">
-      <div className="mb-[22px] flex items-end justify-between gap-4">
+    <div className="mx-auto max-w-[940px] px-4 py-10 md:px-0">
+      <div className="mb-[22px] flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-4">
         <div>
           <div className="mb-[5px] flex items-center gap-2 text-[13px] font-medium text-muted">
             <span className="rounded-full bg-[rgba(139,92,246,.16)] px-[7px] py-[2px] text-[9px] font-bold tracking-[.06em] text-[#c4b5fd]">
@@ -77,7 +77,7 @@ export function SharedWorkspace() {
           </div>
           <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">Shared workspace</h1>
         </div>
-        <Button variant="primary" onClick={() => setCreateOpen(true)}>
+        <Button variant="primary" className="w-full md:w-auto" onClick={() => setCreateOpen(true)}>
           <Plus size={15} strokeWidth={2.4} />
           New shared project
         </Button>

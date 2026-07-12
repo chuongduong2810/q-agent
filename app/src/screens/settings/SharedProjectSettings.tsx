@@ -45,7 +45,7 @@ export function SharedProjectSettings() {
   }
 
   return (
-    <div className="mx-auto max-w-[940px] py-10">
+    <div className="mx-auto max-w-[940px] px-4 py-10 md:px-0">
       <button
         onClick={() => navigate("/settings/shared-workspace")}
         className="mb-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-muted transition-colors hover:text-ink"

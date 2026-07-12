@@ -73,12 +73,13 @@ export function ConnectionRow({
     <div className="overflow-hidden border-t border-white/[0.06] first:border-t-0">
       <div
         onClick={onToggle}
-        className="flex cursor-pointer items-center gap-3 px-[18px] py-[13px] hover:bg-white/[0.03]"
+        className="flex cursor-pointer items-center gap-3 px-[14px] py-[13px] hover:bg-white/[0.03] md:px-[18px]"
       >
         <ChevronRight
           size={15}
           color="#8b8b9e"
           strokeWidth={2.4}
+          className="shrink-0"
           style={{ transition: "transform .2s", transform: expanded ? "rotate(90deg)" : "none" }}
         />
         <div className="min-w-0 flex-1">
@@ -92,7 +93,7 @@ export function ConnectionRow({
           <span className="h-[6px] w-[6px] rounded-full" style={{ background: statusDot }} />
           {connection.connected ? "Connected" : "Not connected"}
         </span>
-        <span className="w-[68px] shrink-0 text-right text-[11px] text-[#7a7a8c]">
+        <span className="hidden w-[68px] shrink-0 text-right text-[11px] text-[#7a7a8c] md:block">
           {relativeTime(connection.lastTestedAt ?? connection.lastSync)}
         </span>
         <button
@@ -108,7 +109,7 @@ export function ConnectionRow({
       </div>
 
       {expanded && (
-        <div className="border-t border-white/[0.06] bg-white/[0.015] px-[18px] py-4">
+        <div className="border-t border-white/[0.06] bg-white/[0.015] px-[14px] py-4 md:px-[18px]">
           <div className="mb-3">
             <div className="mb-1.5 text-[12px] font-semibold text-[#9494a6]">Connection name</div>
             <input
@@ -118,7 +119,7 @@ export function ConnectionRow({
               className="w-full rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-[13px] py-2.5 text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
             />
           </div>
-          <div className="mb-4 grid grid-cols-2 gap-3.5">
+          <div className="mb-4 grid grid-cols-1 gap-3.5 md:grid-cols-2">
             {fields.map((f) => {
               const isMasked = f.secret && connection.secretFields.includes(f.key);
               return (
@@ -135,7 +136,7 @@ export function ConnectionRow({
               );
             })}
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={handleTest}
               disabled={test.isPending}
@@ -151,7 +152,7 @@ export function ConnectionRow({
             >
               {update.isPending ? "Saving…" : "Save connection"}
             </button>
-            <span className="ml-auto text-[11.5px] text-[#7a7a8c]">Credentials encrypted at rest</span>
+            <span className="text-[11.5px] text-[#7a7a8c] md:ml-auto">Credentials encrypted at rest</span>
           </div>
         </div>
       )}

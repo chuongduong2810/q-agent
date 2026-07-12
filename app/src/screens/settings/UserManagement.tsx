@@ -122,9 +122,9 @@ export function UserManagement() {
   ];
 
   return (
-    <div className="mx-auto max-w-[1040px] py-10">
+    <div className="mx-auto max-w-[1040px] px-4 py-10 md:px-0">
       {/* Header */}
-      <div className="mb-[22px] flex items-end justify-between gap-4">
+      <div className="mb-[22px] flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-4">
         <div>
           <div className="mb-[5px] flex items-center gap-2 text-[13px] font-medium text-muted">
             <span className="rounded-full bg-[rgba(139,92,246,.16)] px-[7px] py-[2px] text-[9px] font-bold tracking-[.06em] text-[#c4b5fd]">
@@ -135,11 +135,11 @@ export function UserManagement() {
           <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">User management</h1>
         </div>
         <div className="flex items-center gap-2.5">
-          <Button variant="glass" onClick={() => setCreateOpen(true)}>
+          <Button variant="glass" className="flex-1 md:flex-none" onClick={() => setCreateOpen(true)}>
             <UserIcon size={15} strokeWidth={2.4} />
             Create user
           </Button>
-          <Button variant="primary" onClick={() => setInviteOpen(true)}>
+          <Button variant="primary" className="flex-1 md:flex-none" onClick={() => setInviteOpen(true)}>
             <UserPlus size={15} strokeWidth={2.4} />
             Invite user
           </Button>
@@ -199,7 +199,7 @@ export function UserManagement() {
                 <div
                   key={u.id}
                   className={cn(
-                    "flex items-center gap-3.5 rounded-[14px] border border-white/[0.07] bg-white/[0.035] p-[13px_16px]",
+                    "flex flex-wrap items-center gap-2.5 rounded-[14px] border border-white/[0.07] bg-white/[0.035] p-[13px_16px] sm:flex-nowrap sm:gap-3.5",
                     !u.isActive && "opacity-50",
                   )}
                 >
@@ -228,8 +228,9 @@ export function UserManagement() {
                     </div>
                   </div>
 
-                  {/* Role */}
-                  <div className="hidden w-[104px] shrink-0 sm:block">
+                  {/* Role — always visible (wraps to its own line on very narrow phones
+                      instead of hiding); fixed column from sm+ (unchanged) */}
+                  <div className="shrink-0 sm:w-[104px]">
                     <RoleBadge role={u.role} />
                   </div>
 
@@ -243,8 +244,9 @@ export function UserManagement() {
                     {u.lastActive ? relativeTime(u.lastActive) : "Never"}
                   </div>
 
-                  {/* Status */}
-                  <div className="hidden w-[100px] shrink-0 sm:block">
+                  {/* Status — always visible (wraps alongside Role on very narrow phones
+                      instead of hiding); fixed column from sm+ (unchanged) */}
+                  <div className="shrink-0 sm:w-[100px]">
                     <StatusBadge active={u.isActive} />
                   </div>
 
