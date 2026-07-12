@@ -302,17 +302,26 @@ def build_review_prompt(
     )
 
 
-def build_case_regenerate_prompt(ticket: Ticket, analysis: dict, existing_case: dict) -> str:
+def build_case_regenerate_prompt(
+    ticket: Ticket, analysis: dict, existing_case: dict, context: dict[str, Any] | None = None
+) -> str:
     """Prompt asking Claude to regenerate a single test case, keeping its intent/code.
+
+    ``context`` is the resolved Project Knowledge Base — passed so the rewrite
+    reuses real routes, roles and selectors instead of inventing them (#183),
+    matching :func:`build_generation_prompt`.
 
     Returns a JSON object with the same shape as one entry from
     ``build_generation_prompt``'s array.
     """
+    project_block = render_project_context(context)
+    project_section = f"{project_block}\n\n" if project_block else ""
     return (
         "You are a senior QA engineer. Rewrite/improve the single test case below "
         "for the given ticket, using the prior requirement analysis for context. "
-        "Keep it focused on the same testing intent, but improve clarity, "
-        "correctness, and coverage.\n\n"
+        "Keep it focused on the same testing intent and scope, but improve its "
+        "clarity and correctness.\n\n"
+        f"{project_section}"
         f"{_ticket_context(ticket)}\n\n"
         f"Prior analysis (JSON):\n{analysis}\n\n"
         f"Existing test case (JSON):\n{existing_case}\n\n"

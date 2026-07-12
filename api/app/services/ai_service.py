@@ -447,6 +447,13 @@ def regenerate_case(db: Session, test_case: TestCase) -> TestCase:
     )
     analysis = run_ticket.analysis if run_ticket else {}
 
+    # Resolve the Project Knowledge Base so the rewrite reuses real routes,
+    # roles and selectors instead of inventing them (#183).
+    run = db.query(Run).filter(Run.id == test_case.run_id).first()
+    context = project_config_service.context_for_ticket(
+        db, ticket, env=run.env if run else "Staging"
+    )
+
     existing_case = {
         "title": test_case.title,
         "objective": test_case.objective,
@@ -461,7 +468,8 @@ def regenerate_case(db: Session, test_case: TestCase) -> TestCase:
     }
 
     result = run_json(
-        build_case_regenerate_prompt(ticket, analysis, existing_case), skill=TEST_CASE_GENERATOR
+        build_case_regenerate_prompt(ticket, analysis, existing_case, context),
+        skill=TEST_CASE_GENERATOR,
     )
     if not isinstance(result, dict):
         raise ClaudeError("Claude case-regenerate response was not a JSON object")
