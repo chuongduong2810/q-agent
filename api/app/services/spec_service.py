@@ -40,6 +40,16 @@ _SYSTEM_PROMPT = (
     "after the code block."
 )
 
+# Robustness rules shared by generation and self-heal prompts (#178 promotes
+# these from the fix-only prompt into generation too, so the FIRST spec is
+# already flaky-resistant rather than relying on a heal cycle to fix it).
+_ROBUSTNESS_RULES = (
+    "Prefer robust locators (getByRole/getByLabel/getByTestId) over brittle raw "
+    "CSS/XPath selectors. Use web-first assertions (expect(locator).toBeVisible(), "
+    "toHaveText(...), etc.) that rely on Playwright's built-in auto-waiting. Never "
+    "use page.waitForTimeout(...) or any other arbitrary hard-coded wait."
+)
+
 
 def _render_examples(examples: list[dict] | None) -> str:
     """Render up to 2 proven passing specs as a reference block for the prompt.
@@ -142,12 +152,15 @@ def _build_prompt(
         f"Generate a Playwright TypeScript test spec for this manual test case.\n\n"
         f"{grounding}"
         f"{_render_examples(examples)}"
+        f"Test Case ID: {case.code}\n"
         f"Title: {case.title}\n"
         f"Precondition: {case.precondition or 'None'}\n"
         f"Steps:\n{steps_lines or '  (none provided)'}\n\n"
         f"Use `import {{ test, expect }} from '@playwright/test';` and a single "
-        f"`test('{case.title}', async ({{ page }}) => {{ ... }})` block that "
-        f"encodes the precondition and each step as page actions/assertions."
+        f"`test('{case.code} — {case.title}', async ({{ page }}) => {{ ... }})` block, "
+        f"tagged with the Test Case ID ({case.code}) so results trace back to this case, "
+        f"that encodes the precondition and each step as page actions/assertions. "
+        f"{_ROBUSTNESS_RULES}"
     )
 
 
@@ -275,6 +288,7 @@ def generate_spec_code(
         _build_prompt(case, context, examples),
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
+        include_template=True,
         label=f"Spec: {case.ticket_external_id} {case.code}",
     )
     return _extract_code(raw)
