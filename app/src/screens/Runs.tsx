@@ -77,14 +77,14 @@ export function Runs() {
 
   return (
     <div className="px-1 pb-24 pt-0.5">
-      <div className="mb-5 flex items-end justify-between">
+      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
             Batch QA sessions &middot; run many in parallel
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Runs</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Runs</h1>
         </div>
-        <Button variant="primary" onClick={openCreateRun}>
+        <Button variant="primary" className="w-full md:w-auto" onClick={openCreateRun}>
           <Plus size={15} strokeWidth={2.4} />
           Create Run
         </Button>
@@ -92,7 +92,7 @@ export function Runs() {
 
       {isLoading ? (
         <div className="flex flex-col gap-[10px]">
-          <div className="mb-2 grid grid-cols-4 gap-3">
+          <div className="mb-2 grid grid-cols-2 gap-3 md:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="glass h-[74px] animate-pulse rounded-[16px]" />
             ))}
@@ -116,7 +116,7 @@ export function Runs() {
       ) : (
         <>
           {/* Summary tiles */}
-          <div className="mb-4 grid grid-cols-4 gap-3">
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             {STAT_CARDS.map((c) => (
               <div key={c.key} className="glass rounded-[16px] px-[18px] py-[15px]">
                 <div className="flex items-center gap-2">
@@ -131,7 +131,7 @@ export function Runs() {
           </div>
 
           {/* Status filter tabs */}
-          <div className="mb-4 flex flex-wrap gap-2">
+          <div className="scrollbar-none mb-4 flex gap-2 overflow-x-auto md:flex-wrap">
             {tabs.map((t) => {
               const active = runFilter === t.key;
               return (
@@ -139,7 +139,7 @@ export function Runs() {
                   key={t.key}
                   type="button"
                   onClick={() => setRunFilter(t.key)}
-                  className={`flex items-center gap-1.5 rounded-[10px] px-3 py-[7px] text-[13px] font-semibold transition-colors ${
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-3 py-[7px] text-[13px] font-semibold transition-colors ${
                     active
                       ? "bg-white/[0.1] text-ink"
                       : "text-ink-dim hover:bg-white/[0.05] hover:text-ink-soft"

@@ -151,7 +151,7 @@ export function RepoKnowledgeDetail({
         </div>
       )}
 
-      <div className="mb-3.5 grid grid-cols-3 gap-3.5">
+      <div className="mb-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-3">
         <GlassCard className="p-[18px]">
           <div className="mb-3 text-[12.5px] font-semibold text-[#9494a6]">Base URL</div>
           <div className="break-all font-mono text-[13px] font-bold">{kn.base_url || "—"}</div>
@@ -180,7 +180,7 @@ export function RepoKnowledgeDetail({
         </GlassCard>
       </div>
 
-      <div className="mb-3.5 grid grid-cols-[1.3fr_1fr] gap-3.5">
+      <div className="mb-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-[1.3fr_1fr]">
         <GlassCard className="p-5">
           <div className="mb-3 text-[13px] font-bold">Technology stack</div>
           <div className="mb-[18px] flex flex-wrap gap-2">

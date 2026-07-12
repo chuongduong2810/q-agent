@@ -107,7 +107,7 @@ export function ProjectSettingsForm({
           Bind this project to a work-item source (where its tickets come from) and a repository
           source (where its code lives) — chosen independently. Manage connections in Settings.
         </p>
-        <div className="grid max-w-[560px] grid-cols-2 gap-4">
+        <div className="grid max-w-[560px] grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className={labelCls}>Work Item Provider</label>
             <Select
@@ -190,7 +190,7 @@ export function ProjectSettingsForm({
         )}
         <div className="flex flex-col gap-3">
           {accounts.map((acct, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_1fr_1.2fr_auto] items-end gap-2.5">
+            <div key={i} className="grid grid-cols-1 items-end gap-2.5 md:grid-cols-[1fr_1fr_1fr_1.2fr_auto]">
               <div>
                 <label className={labelCls}>Role</label>
                 <input
@@ -266,7 +266,7 @@ export function ProjectSettingsForm({
         )}
         <div className="flex flex-col gap-3">
           {environments.map((env, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1.4fr_1fr_auto] items-end gap-2.5">
+            <div key={i} className="grid grid-cols-1 items-end gap-2.5 md:grid-cols-[1fr_1.4fr_1fr_auto]">
               <div>
                 <label className={labelCls}>Name</label>
                 <input
@@ -324,7 +324,7 @@ export function ProjectSettingsForm({
         </p>
         <div className="flex flex-col gap-2.5">
           {extra.map((row, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1.4fr_auto] items-center gap-2.5">
+            <div key={i} className="grid grid-cols-1 items-center gap-2.5 md:grid-cols-[1fr_1.4fr_auto]">
               <input
                 className={inputCls}
                 placeholder="key"
@@ -350,7 +350,13 @@ export function ProjectSettingsForm({
       </GlassCard>
 
       <div className="flex justify-end">
-        <Button variant="primary" size="lg" onClick={handleSave} disabled={saving}>
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full md:w-auto"
+        >
           {saving ? "Saving…" : "Save settings"}
         </Button>
       </div>

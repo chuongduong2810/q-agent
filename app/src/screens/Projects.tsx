@@ -89,7 +89,7 @@ export function Projects() {
             Across {connectedCount} connected provider{connectedCount === 1 ? "" : "s"} &middot;
             Q&#8209;Agent learns each project before it tests
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Projects</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Projects</h1>
         </div>
         <Button variant="glass" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
           {refresh.isPending ? <Spinner size={14} /> : <RefreshCw size={15} strokeWidth={2.2} />}
@@ -100,7 +100,7 @@ export function Projects() {
       <SharedProjectsCatalog />
 
       {isLoading || refresh.isPending ? (
-        <div className="grid grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
           {[0, 1, 2].map((i) => (
             <div key={i} className="glass h-[240px] animate-pulse rounded-[20px]" />
           ))}
@@ -122,7 +122,7 @@ export function Projects() {
           }
         />
       ) : (
-        <div className="grid grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
           {projects.map((p, i) => (
             <ProjectCard
               key={p.id}
