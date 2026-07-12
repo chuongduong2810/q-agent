@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from sqlalchemy.orm import Session
 
@@ -368,6 +369,50 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
         )
 
 
+def _resolve_worker_count() -> int:
+    """How many tickets to analyze+generate concurrently (#179).
+
+    Reads the ``aiPipelineWorkers`` setting; when unset, defaults to a small pool
+    on Postgres and stays sequential (1) on SQLite — SQLite's single-writer model
+    makes concurrent writers contend even with WAL, so parallelism is opt-in
+    there. Always clamped to [1, 4] to stay within one user's Claude rate window.
+    """
+    from app.services import settings_store
+
+    configured = settings_store.load_settings().get("aiPipelineWorkers")
+    if configured:
+        try:
+            return max(1, min(4, int(configured)))
+        except (TypeError, ValueError):
+            pass
+    return 1 if db_module.engine.dialect.name == "sqlite" else 3
+
+
+def _process_ticket_worker(run_id: int, run_ticket_id: int, ticket_external_id: str) -> None:
+    """Process one RunTicket in an isolated session + run context (parallel path).
+
+    Each :class:`ThreadPoolExecutor` worker needs its OWN session (SQLAlchemy
+    sessions are not thread-safe) and must set the ambient run/ticket context
+    *inside* the worker thread (ContextVars don't cross threads — see
+    :mod:`run_context`). Never raises: :func:`_process_run_ticket` already records
+    per-ticket errors on the row; anything unexpected here is logged.
+    """
+    db = db_module.SessionLocal()
+    try:
+        with run_context.run_scope(run_id), run_context.ticket_scope(ticket_external_id):
+            run = db.query(Run).filter(Run.id == run_id).first()
+            run_ticket = db.query(RunTicket).filter(RunTicket.id == run_ticket_id).first()
+            if run is None or run_ticket is None:
+                return
+            if run_control.is_cancelled(run_id, db):
+                return
+            _process_run_ticket(db, run, run_ticket)
+    except Exception as exc:  # noqa: BLE001 - defensive; per-ticket errors handled within
+        logger.error("AI pipeline worker error run={} ticket={}: {}", run_id, ticket_external_id, exc)
+    finally:
+        db.close()
+
+
 def _run_pipeline(run_id: int) -> None:
     """The actual pipeline body; opens its own session. Safe to call from any thread."""
     # Attribute this thread's Claude spend to the run (see run_context).
@@ -386,14 +431,37 @@ def _run_pipeline(run_id: int) -> None:
                 .order_by(RunTicket.position)
                 .all()
             )
-            for run_ticket in run_tickets:
+            workers = _resolve_worker_count()
+            if workers <= 1:
+                for run_ticket in run_tickets:
+                    if run_control.is_cancelled(run.id, db):
+                        logger.info("Run {} cancelled — stopping AI pipeline", run.code)
+                        return
+                    # Attribute this ticket's Claude spend to it so the per-run
+                    # cost card can group by ticket (see ai_usage_service).
+                    with run_context.ticket_scope(run_ticket.ticket_external_id):
+                        _process_run_ticket(db, run, run_ticket)
+            else:
+                # Bounded parallelism: file-disjoint tickets (each writes only its
+                # own rows) processed by a small pool, each worker isolated (own
+                # session + context). In-flight Claude calls are still killed on
+                # cancel via run_control.register_process.
+                logger.info(
+                    "AI pipeline: {} tickets across {} workers (run {})",
+                    len(run_tickets), workers, run.code,
+                )
+                targets = [(rt.id, rt.ticket_external_id) for rt in run_tickets]
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futures = [
+                        pool.submit(_process_ticket_worker, run.id, rid, ext)
+                        for rid, ext in targets
+                    ]
+                    for future in as_completed(futures):
+                        future.result()  # workers swallow their own errors; surface any escapee
+                db.expire_all()  # workers committed on their own sessions — refresh ours
                 if run_control.is_cancelled(run.id, db):
-                    logger.info("Run {} cancelled — stopping AI pipeline", run.code)
+                    logger.info("Run {} cancelled during parallel generation", run.code)
                     return
-                # Attribute this ticket's analyze+generate Claude spend to it, so
-                # the per-run cost card can group by ticket (see ai_usage_service).
-                with run_context.ticket_scope(run_ticket.ticket_external_id):
-                    _process_run_ticket(db, run, run_ticket)
 
             if not set_run_status(db, run, "review"):
                 return  # already terminal (e.g. cancelled) — don't overwrite it
