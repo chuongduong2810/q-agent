@@ -180,3 +180,26 @@ def test_settings_default_and_update(client):
 
     resp3 = client.get("/settings")
     assert resp3.json()["parallel"] == 8
+
+
+def test_settings_skill_models_and_workers_roundtrip(client):
+    """skillModels + aiPipelineWorkers are accepted by the API and persisted (#203)."""
+    # Defaults are present and empty/auto.
+    body = client.get("/settings").json()
+    assert body["skillModels"] == {}
+    assert body["aiPipelineWorkers"] == 0
+
+    resp = client.put(
+        "/settings",
+        json={"skillModels": {"execution-analyzer": "claude-opus-4-8"}, "aiPipelineWorkers": 2},
+    )
+    assert resp.status_code == 200
+    updated = resp.json()
+    assert updated["skillModels"] == {"execution-analyzer": "claude-opus-4-8"}
+    assert updated["aiPipelineWorkers"] == 2
+    assert updated["claudeModel"] == "claude-sonnet-5"  # untouched
+
+    # Persisted across a fresh GET.
+    reloaded = client.get("/settings").json()
+    assert reloaded["skillModels"] == {"execution-analyzer": "claude-opus-4-8"}
+    assert reloaded["aiPipelineWorkers"] == 2

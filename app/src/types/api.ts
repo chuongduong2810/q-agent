@@ -721,6 +721,12 @@ export interface SettingsOut {
   autoAnnotate: boolean;
   neuralBackground: boolean;
   claudeModel: string;
+  /** Per-action model overrides keyed by skill name (#175). Absent keys inherit
+   * the built-in default / global model. */
+  skillModels: Record<string, string>;
+  /** Ticket concurrency for analyze+generate (#179). 0 = auto (3 on Postgres,
+   * 1 on SQLite). */
+  aiPipelineWorkers: number;
   weeklyTokenBudget: number;
   /** Default execution target for new runs — the server, or a paired Local
    * Agent on the user's machine. Configured on the Settings screen. */
