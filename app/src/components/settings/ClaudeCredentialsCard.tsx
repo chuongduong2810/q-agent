@@ -68,7 +68,7 @@ function TestCredentialButton() {
         })
       }
       disabled={test.isPending}
-      className="flex items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50"
+      className="flex w-full items-center justify-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50 sm:w-auto"
     >
       {test.isPending ? <Spinner size={14} /> : <ShieldCheck size={14} strokeWidth={2} />}
       {test.isPending ? "Testing…" : "Test credential"}
@@ -275,7 +275,7 @@ function SharedAccountCard({ meta }: { meta: ClaudeCredentialsMeta | null | unde
         <Field label="SCOPES" value={<ScopeChips scopes={meta?.scopes} />} />
         <Field label="MAINTAINED BY" value="Workspace admin" valueClassName="text-[#c4b5fd]" />
       </div>
-      <div className="mt-4 flex flex-wrap gap-[10px] border-t border-white/[0.06] pt-[14px]">
+      <div className="mt-4 flex flex-col gap-[10px] border-t border-white/[0.06] pt-[14px] sm:flex-row sm:flex-wrap">
         <TestCredentialButton />
       </div>
       <div className="mt-3 flex items-center gap-2 text-[11.5px] text-[#7a7a8c]">
@@ -329,11 +329,11 @@ function PersonalAccountCard({
         />
       </div>
       <AccessTokenRow />
-      <div className="mt-4 flex flex-wrap gap-[10px] border-t border-white/[0.06] pt-[14px]">
+      <div className="mt-4 flex flex-col gap-[10px] border-t border-white/[0.06] pt-[14px] sm:flex-row sm:flex-wrap">
         <TestCredentialButton />
         <FileDropLabel
           onFile={onReplace}
-          className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1]"
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] sm:w-auto"
           dragClassName="border-[rgba(34,211,238,.5)] bg-[rgba(34,211,238,.1)]"
         >
           <UploadCloud size={14} strokeWidth={2} />
@@ -343,7 +343,7 @@ function PersonalAccountCard({
           type="button"
           onClick={onRemove}
           disabled={removing}
-          className="flex items-center gap-2 rounded-[11px] border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.1)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#fb7185] transition-colors hover:bg-[rgba(244,63,94,.18)] disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-[11px] border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.1)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#fb7185] transition-colors hover:bg-[rgba(244,63,94,.18)] disabled:opacity-50 sm:w-auto"
         >
           <Trash2 size={14} strokeWidth={2} />
           {removing ? "Removing…" : "Remove & use shared"}

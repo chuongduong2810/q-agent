@@ -46,14 +46,14 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02]">
-      <div className="flex items-center gap-[13px] px-[22px] py-[16px]">
+      <div className="flex flex-wrap items-center gap-[13px] px-[16px] py-[14px] md:flex-nowrap md:px-[22px] md:py-[16px]">
         <div
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-[17px] font-black"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[17px] font-black"
           style={{ background: meta.color, color: meta.glyphColor }}
         >
           {meta.glyph}
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <div className="text-[15px] font-bold">{meta.name}</div>
           <div className="text-[11.5px] text-muted">
             {group.connectionCount} connection{group.connectionCount === 1 ? "" : "s"} ·{" "}
@@ -63,7 +63,7 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
         <button
           onClick={handleAdd}
           disabled={create.isPending}
-          className="flex items-center gap-1.5 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.16)] px-3 py-2 text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.26)] disabled:opacity-60"
+          className="flex w-full shrink-0 items-center justify-center gap-1.5 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.16)] px-3 py-2 text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.26)] disabled:opacity-60 md:w-auto"
         >
           <Plus size={14} strokeWidth={2.4} /> Add connection
         </button>

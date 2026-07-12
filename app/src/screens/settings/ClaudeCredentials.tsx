@@ -130,7 +130,7 @@ export function ClaudeCredentials() {
   }
 
   return (
-    <div className="mx-auto max-w-[940px] py-10">
+    <div className="mx-auto max-w-[940px] px-4 py-10 md:px-0">
       <div className="mb-[22px]">
         <div className="mb-[5px] flex items-center gap-2 text-[13px] font-medium text-muted">
           <span className="rounded-full bg-[rgba(139,92,246,.16)] px-[7px] py-[2px] text-[9px] font-bold tracking-[.06em] text-[#c4b5fd]">
@@ -164,12 +164,12 @@ export function ClaudeCredentials() {
       </div>
 
       {status?.hasShared ? (
-        <div className="mb-4 overflow-hidden rounded-[18px] border border-white/[0.07] bg-white/[0.035] p-[18px]">
-          <div className="flex items-center gap-[13px]">
+        <div className="mb-4 overflow-hidden rounded-[18px] border border-white/[0.07] bg-white/[0.035] p-[14px] md:p-[18px]">
+          <div className="flex flex-wrap items-center gap-[13px]">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-[rgba(217,119,87,.3)] bg-[rgba(217,119,87,.16)]">
               <ClaudeLogo size={22} />
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-[140px]">
               <div className="flex items-center gap-2">
                 <span className="text-[15.5px] font-extrabold tracking-[-0.01em]">
                   Shared Claude account
@@ -255,10 +255,10 @@ export function ClaudeCredentials() {
 
           <AccessTokenRow accent="#c4b5fd" />
 
-          <div className="mt-[14px] flex flex-wrap gap-[10px]">
+          <div className="mt-[14px] flex flex-col gap-[10px] sm:flex-row sm:flex-wrap">
             <FileDropLabel
               onFile={handleFile}
-              className="flex cursor-pointer items-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.14)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.22)]"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.14)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.22)] sm:w-auto"
               dragClassName="border-[rgba(139,92,246,.7)] bg-[rgba(139,92,246,.28)]"
             >
               <UploadCloud size={14} strokeWidth={2} />
@@ -268,7 +268,7 @@ export function ClaudeCredentials() {
               type="button"
               onClick={runTest}
               disabled={test.isPending}
-              className="flex items-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50 sm:w-auto"
             >
               {test.isPending ? <Spinner size={14} /> : <ShieldCheck size={14} strokeWidth={2} />}
               {test.isPending ? "Testing…" : "Test credential"}

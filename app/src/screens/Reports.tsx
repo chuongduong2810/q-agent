@@ -60,17 +60,17 @@ export function Reports() {
 
   return (
     <div className="px-1 pb-10 pt-0.5">
-      <div className="mb-[22px] flex items-end justify-between">
+      <div className="mb-[22px] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-muted">Last 7 days · across all runs</div>
           <h1 className="m-0 text-[28px] font-black tracking-tight">Reports</h1>
         </div>
-        <Button onClick={() => toast("Report exported")}>
+        <Button className="w-full md:w-auto" onClick={() => toast("Report exported")}>
           <Download size={15} /> Export
         </Button>
       </div>
 
-      <div className="mb-3.5 grid grid-cols-[.9fr_1.5fr_.9fr] gap-3.5">
+      <div className="mb-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-[.9fr_1.5fr_.9fr]">
         <GlassCard className="flex flex-col items-center justify-center gap-3.5 p-5">
           <div className="relative h-[150px] w-[150px]">
             <svg width="150" height="150" viewBox="0 0 150 150">
@@ -161,7 +161,7 @@ export function Reports() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
         <GlassCard className="p-5">
           <div className="mb-4 text-[15px] font-bold">Recent runs</div>
           {runsLoading ? (

@@ -135,7 +135,7 @@ export function AuditLog() {
 
   return (
     <div className="animate-fade-in-up px-1 pb-10 pt-0.5">
-      <div className="mb-[18px] flex items-end justify-between">
+      <div className="mb-[18px] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-[#8b8b9e]">
             Every app event, user action and AI operation &middot; retained 90 days
@@ -145,14 +145,14 @@ export function AuditLog() {
         <div className="flex items-center gap-2">
           <button
             onClick={exportCsv}
-            className="flex items-center gap-[7px] rounded-xl border border-white/[0.09] bg-white/[0.05] px-[15px] py-2.5 text-[13px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
+            className="flex flex-1 items-center justify-center gap-[7px] rounded-xl border border-white/[0.09] bg-white/[0.05] px-[15px] py-2.5 text-[13px] font-semibold text-[#dcdce4] hover:bg-white/[0.1] md:flex-none"
           >
             <Download size={15} /> Export CSV
           </button>
           <button
             onClick={clearAll}
             disabled={clearEvents.isPending || rows.length === 0}
-            className="flex items-center gap-[7px] rounded-xl border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.13)] px-[15px] py-2.5 text-[13px] font-semibold text-[#fb7185] hover:bg-[rgba(244,63,94,.2)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex flex-1 items-center justify-center gap-[7px] rounded-xl border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.13)] px-[15px] py-2.5 text-[13px] font-semibold text-[#fb7185] hover:bg-[rgba(244,63,94,.2)] disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
           >
             <Trash2 size={15} /> {clearEvents.isPending ? "Clearing…" : "Clear log"}
           </button>
@@ -164,7 +164,7 @@ export function AuditLog() {
           <button
             key={v}
             onClick={() => setView(v)}
-            className="rounded-[11px] px-4 py-2 text-[13px] font-semibold"
+            className="flex-1 rounded-[11px] px-4 py-2 text-[13px] font-semibold md:flex-none"
             style={
               view === v
                 ? {
@@ -182,15 +182,15 @@ export function AuditLog() {
 
       {view === "activity" ? (
         <>
-          <div className="mb-4 grid grid-cols-4 gap-3.5">
+          <div className="mb-4 grid grid-cols-2 gap-3.5 md:grid-cols-4">
             <StatCard label="Events today" value={String(stats?.eventsToday ?? 0)} color="#a78bfa" />
             <StatCard label="AI actions" value={String(stats?.aiActions ?? 0)} color="#67e8f9" />
             <StatCard label="User actions" value={String(stats?.userActions ?? 0)} color="#6ee7b7" />
             <StatCard label="Failed / warnings" value={String(stats?.failures ?? 0)} color="#fb7185" />
           </div>
 
-          <div style={panel} className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-2xl px-3.5 py-3">
-            <div className="flex h-9 min-w-[200px] max-w-[300px] flex-1 items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3">
+          <div style={panel} className="mb-3.5 flex flex-col gap-2.5 rounded-2xl px-3.5 py-3 md:flex-row md:flex-wrap md:items-center">
+            <div className="flex h-9 w-full items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3 md:min-w-[200px] md:max-w-[300px] md:flex-1">
               <Search size={14} className="text-[#7a7a8c]" />
               <input
                 value={search}
@@ -199,12 +199,12 @@ export function AuditLog() {
                 className="flex-1 bg-transparent text-[13px] text-ink outline-none"
               />
             </div>
-            <div className="flex flex-wrap gap-[7px]">
+            <div className="scrollbar-none flex gap-[7px] overflow-x-auto md:flex-wrap md:overflow-visible">
               {ACTOR_CHIPS.map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => setActor(id)}
-                  className="rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
+                  className="shrink-0 whitespace-nowrap rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
                   style={chipStyle(actor === id, "cyan")}
                 >
                   {label}
@@ -213,12 +213,12 @@ export function AuditLog() {
             </div>
           </div>
 
-          <div className="mb-4 flex flex-wrap gap-[7px]">
+          <div className="scrollbar-none mb-4 flex gap-[7px] overflow-x-auto md:flex-wrap md:overflow-visible">
             {CAT_CHIPS.map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setCategory(id)}
-                className="whitespace-nowrap rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
+                className="shrink-0 whitespace-nowrap rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
                 style={chipStyle(category === id, "violet")}
               >
                 {label}
@@ -226,7 +226,8 @@ export function AuditLog() {
             ))}
           </div>
 
-          <div style={panel} className="overflow-hidden rounded-[18px]">
+          {/* Desktop: table. Mobile: vertical timeline of stacked entries (see below). */}
+          <div style={panel} className="hidden overflow-hidden rounded-[18px] md:block">
             <div
               className="grid gap-3 border-b border-white/[0.06] bg-white/[0.04] px-[18px] py-[11px] text-[10px] font-bold tracking-[0.06em] text-[#7a7a8c]"
               style={{ gridTemplateColumns: "150px 1fr 130px 108px 26px" }}
@@ -320,13 +321,101 @@ export function AuditLog() {
               </div>
             )}
           </div>
+
+          {/* Mobile timeline — a rail of glowing category-coloured dots joined by a line,
+              one card per event (tap to expand the same detail grid as desktop). */}
+          <div className="md:hidden">
+            {rows.map((e, i) => {
+              const cat = CAT[e.category] ?? ["Other", "#c3c3d0", "rgba(255,255,255,.08)"];
+              const st = STATUS[e.status] ?? STATUS.success;
+              const [ac, acBg] = ACTOR[e.actorType] ?? ACTOR.system;
+              const isAi = e.actorType === "ai";
+              const [day, timePart] = e.ts.includes("T") ? e.ts.split("T") : e.ts.split(" ");
+              const time = (timePart || "").slice(0, 5);
+              const open = expanded === e.id;
+              return (
+                <div key={e.id} className="relative pb-3 pl-5 last:pb-0">
+                  {i < rows.length - 1 && (
+                    <span className="absolute left-[3px] top-[14px] bottom-0 w-[2px] bg-white/[0.08]" />
+                  )}
+                  <span
+                    className="absolute left-0 top-[6px] h-[8px] w-[8px] rounded-full"
+                    style={{ background: cat[1], boxShadow: `0 0 6px ${cat[1]}` }}
+                  />
+                  <div
+                    style={panel}
+                    onClick={() => setExpanded(open ? null : e.id)}
+                    className="cursor-pointer rounded-[14px] px-3.5 py-3"
+                  >
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span
+                        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                        style={{ background: cat[2], color: cat[1] }}
+                      >
+                        {cat[0]}
+                      </span>
+                      <span className="font-mono text-[10.5px] text-[#7a7a8c]">
+                        {day} {time}
+                      </span>
+                      <ChevronRight
+                        size={14}
+                        className="ml-auto shrink-0 text-[#8b8b9e] transition-transform"
+                        style={open ? { transform: "rotate(90deg)" } : undefined}
+                      />
+                    </div>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-[8.5px] font-bold"
+                        style={{ background: acBg, color: isAi ? "#fff" : ac }}
+                      >
+                        {isAi ? (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z" />
+                          </svg>
+                        ) : (
+                          initials(e.actor)
+                        )}
+                      </span>
+                      <span className="truncate text-[12.5px] font-semibold">{e.actor}</span>
+                      <span
+                        className="ml-auto shrink-0 rounded-full px-2 py-[2px] text-[10px] font-bold"
+                        style={{ background: st[1], color: st[0] }}
+                      >
+                        {st[2]}
+                      </span>
+                    </div>
+                    <div className="truncate text-[13px] font-semibold">{e.action}</div>
+                    <div className="truncate text-[11.5px] text-[#8b8b9e]">{e.target}</div>
+                    {open && (
+                      <div className="animate-fade-in-up mt-3 grid grid-cols-1 gap-y-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+                        <Field label="EVENT ID" value={e.id} mono color="#67e8f9" />
+                        <Field label="TIMESTAMP" value={e.ts.replace("T", " ").slice(0, 19)} mono />
+                        <Field label="TARGET" value={e.target} />
+                        <Field label="IP ADDRESS" value={e.ip} mono />
+                        <div>
+                          <div className="mb-[3px] text-[10.5px] text-[#7a7a8c]">DETAILS</div>
+                          <div className="text-[12.5px] leading-relaxed text-[#c3c3d0]">{e.meta}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {rows.length === 0 && (
+              <div style={panel} className="flex flex-col items-center rounded-[18px] px-8 py-12 text-center">
+                <div className="mb-1 text-[14px] font-semibold">No events match your filters</div>
+                <div className="text-[12.5px] text-[#8b8b9e]">Try a different category, actor, or search term.</div>
+              </div>
+            )}
+          </div>
           {rows.length > 0 && (
             <div className="mt-3.5 text-center text-[12px] text-[#7a7a8c]">Showing {rows.length} events</div>
           )}
         </>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-4 gap-3.5">
+          <div className="mb-4 grid grid-cols-2 gap-3.5 md:grid-cols-4">
             <StatCard label="Log volume · 24h" value={(logStats?.logVolume ?? 0).toLocaleString()} color="#67e8f9" />
             <StatCard
               label="Services healthy"
@@ -337,8 +426,8 @@ export function AuditLog() {
             <StatCard label="Errors · 1h" value={String(logStats?.errors ?? 0)} color="#fb7185" />
           </div>
 
-          <div style={panel} className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-2xl px-3.5 py-3">
-            <div className="flex h-9 min-w-[200px] max-w-[300px] flex-1 items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3">
+          <div style={panel} className="mb-3.5 flex flex-col gap-2.5 rounded-2xl px-3.5 py-3 md:flex-row md:flex-wrap md:items-center">
+            <div className="flex h-9 w-full items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3 md:min-w-[200px] md:max-w-[300px] md:flex-1">
               <Search size={14} className="text-[#7a7a8c]" />
               <input
                 value={search}
@@ -347,12 +436,12 @@ export function AuditLog() {
                 className="flex-1 bg-transparent text-[13px] text-ink outline-none"
               />
             </div>
-            <div className="flex flex-wrap gap-[7px]">
+            <div className="scrollbar-none flex gap-[7px] overflow-x-auto md:flex-wrap md:overflow-visible">
               {LEVEL_CHIPS.map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => setLevel(id)}
-                  className="rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
+                  className="shrink-0 whitespace-nowrap rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
                   style={chipStyle(level === id, "violet")}
                 >
                   {label}
@@ -361,7 +450,7 @@ export function AuditLog() {
             </div>
             <button
               onClick={() => setLiveTail((v) => !v)}
-              className="flex items-center gap-2 rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
+              className="flex w-full items-center justify-center gap-2 rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold md:w-auto"
               style={
                 liveTail
                   ? { background: "rgba(16,185,129,.16)", color: "#6ee7b7", boxShadow: "inset 0 0 0 1px rgba(16,185,129,.3)" }
@@ -376,12 +465,12 @@ export function AuditLog() {
             </button>
           </div>
 
-          <div className="mb-4 flex flex-wrap gap-[7px]">
+          <div className="scrollbar-none mb-4 flex gap-[7px] overflow-x-auto md:flex-wrap md:overflow-visible">
             {[["all", "All services"], ...services.map((s) => [s, s] as [string, string])].map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setService(id)}
-                className="whitespace-nowrap rounded-[9px] px-3 py-1.5 font-mono text-[11.5px] font-semibold"
+                className="shrink-0 whitespace-nowrap rounded-[9px] px-3 py-1.5 font-mono text-[11.5px] font-semibold"
                 style={chipStyle(service === id, "cyan")}
               >
                 {label}
@@ -394,35 +483,55 @@ export function AuditLog() {
             style={{ background: "rgba(8,8,13,.72)", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)" }}
           >
             <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-[11px]">
-              <span className="h-[11px] w-[11px] rounded-full" style={{ background: "#f43f5e" }} />
-              <span className="h-[11px] w-[11px] rounded-full" style={{ background: "#fbbf24" }} />
-              <span className="h-[11px] w-[11px] rounded-full" style={{ background: "#10b981" }} />
-              <span className="ml-2 font-mono text-[12px] text-[#8b8b9e]">q-agent · kubectl logs -f --all-services</span>
-              <span className="ml-auto font-mono text-[11px] text-[#7a7a8c]">{logRows.length} lines</span>
+              <span className="h-[11px] w-[11px] shrink-0 rounded-full" style={{ background: "#f43f5e" }} />
+              <span className="h-[11px] w-[11px] shrink-0 rounded-full" style={{ background: "#fbbf24" }} />
+              <span className="h-[11px] w-[11px] shrink-0 rounded-full" style={{ background: "#10b981" }} />
+              <span className="ml-2 truncate font-mono text-[12px] text-[#8b8b9e]">q-agent · kubectl logs -f --all-services</span>
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-[#7a7a8c]">{logRows.length} lines</span>
             </div>
             <div className="max-h-[520px] overflow-y-auto font-mono text-[12px]">
+              {/* Desktop: fixed-column terminal row. Mobile: stacked compact line (see below). */}
               {logRows.map((l, i) => {
                 const lv = LEVEL[l.level] ?? LEVEL.info;
                 const msColor =
                   l.durationMs == null ? "#6c6c7e" : l.durationMs > 1500 ? "#fb7185" : l.durationMs > 500 ? "#fbbf24" : "#8b8b9e";
                 return (
-                  <div
-                    key={`${l.trace}-${i}`}
-                    className="grid animate-fade-in-up items-baseline gap-3 border-b border-white/[0.035] px-4 py-2 leading-normal hover:bg-white/[0.03]"
-                    style={{ gridTemplateColumns: "104px 62px 128px 1fr 62px" }}
-                  >
-                    <span className="text-[#6c6c7e]">{l.ts}</span>
-                    <span
-                      className="rounded-md py-0.5 text-center text-[10px] font-bold tracking-[0.04em]"
-                      style={{ color: lv[1], background: lv[2] }}
+                  <div key={`${l.trace}-${i}`} className="border-b border-white/[0.035] hover:bg-white/[0.03]">
+                    <div
+                      className="hidden animate-fade-in-up items-baseline gap-3 px-4 py-2 leading-normal md:grid"
+                      style={{ gridTemplateColumns: "104px 62px 128px 1fr 62px" }}
                     >
-                      {lv[0]}
-                    </span>
-                    <span className="text-[#93c5fd]">{l.service}</span>
-                    <span className="truncate text-[#c7c7d4]">{l.message}</span>
-                    <span className="text-right" style={{ color: msColor }}>
-                      {l.durationMs == null ? "—" : `${l.durationMs}ms`}
-                    </span>
+                      <span className="text-[#6c6c7e]">{l.ts}</span>
+                      <span
+                        className="rounded-md py-0.5 text-center text-[10px] font-bold tracking-[0.04em]"
+                        style={{ color: lv[1], background: lv[2] }}
+                      >
+                        {lv[0]}
+                      </span>
+                      <span className="text-[#93c5fd]">{l.service}</span>
+                      <span className="truncate text-[#c7c7d4]">{l.message}</span>
+                      <span className="text-right" style={{ color: msColor }}>
+                        {l.durationMs == null ? "—" : `${l.durationMs}ms`}
+                      </span>
+                    </div>
+                    <div className="animate-fade-in-up px-4 py-2 leading-normal md:hidden">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-[0.04em]"
+                          style={{ color: lv[1], background: lv[2] }}
+                        >
+                          {lv[0]}
+                        </span>
+                        <span className="shrink-0 truncate text-[#93c5fd]">{l.service}</span>
+                        <span className="ml-auto shrink-0" style={{ color: msColor }}>
+                          {l.durationMs == null ? "—" : `${l.durationMs}ms`}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="truncate text-[#c7c7d4]">{l.message}</span>
+                      </div>
+                      <div className="mt-1 text-[#6c6c7e]">{l.ts}</div>
+                    </div>
                   </div>
                 );
               })}

@@ -108,13 +108,13 @@ export function Settings() {
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PROFILE</div>
       <GlassCard className="mb-[26px] p-[22px]">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="text-[12px] text-muted">
             Your name, email, password, and two-factor auth live on your account profile.
           </div>
           <Link
             to="/profile"
-            className="shrink-0 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[10px] text-[13px] font-semibold text-ink transition-colors hover:bg-white/[0.1]"
+            className="w-full shrink-0 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[10px] text-center text-[13px] font-semibold text-ink transition-colors hover:bg-white/[0.1] md:w-auto"
           >
             Manage profile
           </Link>
@@ -129,14 +129,14 @@ export function Settings() {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
+            <div className="flex flex-col gap-2.5 border-b border-white/[0.06] py-[13px] md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-[14px] font-semibold">Execution target</div>
                 <div className="text-[12px] text-muted">
                   Where runs execute — the server, or a paired Local Agent on your machine
                 </div>
               </div>
-              <div className="w-[170px]">
+              <div className="w-full md:w-[170px]">
                 <Select
                   value={draft.executionTarget}
                   onChange={(v) => v && set({ executionTarget: v as ExecutionTarget })}
@@ -149,7 +149,7 @@ export function Settings() {
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
+            <div className="flex flex-col gap-2.5 border-b border-white/[0.06] py-[13px] md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-[14px] font-semibold">Parallel workers</div>
                 <div className="text-[12px] text-muted">
@@ -163,12 +163,12 @@ export function Settings() {
                   max={8}
                   value={draft.parallel}
                   onChange={(e) => set({ parallel: Number(e.target.value) })}
-                  className="w-[150px] accent-[#8b5cf6]"
+                  className="w-full accent-[#8b5cf6] md:w-[150px]"
                 />
                 <span className="w-5 text-center font-mono text-[14px] font-bold">{draft.parallel}</span>
               </div>
             </div>
-            <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
+            <div className="flex flex-col gap-2.5 border-b border-white/[0.06] py-[13px] md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-[14px] font-semibold">Max test cases per ticket</div>
                 <div className="text-[12px] text-muted">
@@ -182,7 +182,7 @@ export function Settings() {
                   max={20}
                   value={draft.maxCasesPerTicket}
                   onChange={(e) => set({ maxCasesPerTicket: Number(e.target.value) })}
-                  className="w-[150px] accent-[#8b5cf6]"
+                  className="w-full accent-[#8b5cf6] md:w-[150px]"
                 />
                 <span className="w-5 text-center font-mono text-[14px] font-bold">
                   {draft.maxCasesPerTicket}
@@ -305,14 +305,14 @@ export function Settings() {
             </span>
             <div className="flex flex-col divide-y divide-white/[0.06]">
               {TUNABLE_SKILLS.map((skill) => (
-                <div key={skill.id} className="flex items-center justify-between gap-4 py-2.5">
+                <div key={skill.id} className="flex flex-col gap-2 py-2.5 md:flex-row md:items-center md:justify-between md:gap-4">
                   <div className="min-w-0">
                     <div className="text-[13px] text-ink">{skill.label}</div>
                     <div className="text-[11px] text-muted">
                       Default: {skill.haikuDefault ? "Haiku 4.5" : "Claude model above"}
                     </div>
                   </div>
-                  <div className="w-[220px] shrink-0">
+                  <div className="w-full md:w-[220px] md:shrink-0">
                     <Select
                       value={draft.skillModels[skill.id] ?? ""}
                       onChange={(v) => setSkillModel(skill.id, v ?? null)}
