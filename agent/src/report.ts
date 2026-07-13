@@ -35,6 +35,10 @@ const ATTACHMENT_KIND_MAP: Record<string, string> = {
   screenshot: "screenshot",
   video: "video",
   trace: "trace",
+  // DOM captured by the injected fixtures (see playwrightConfig.fixturesTs):
+  // raw page HTML + a distilled interactable-element inventory.
+  "qagent-dom-raw": "dom",
+  "qagent-dom-distilled": "dom-distilled",
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
