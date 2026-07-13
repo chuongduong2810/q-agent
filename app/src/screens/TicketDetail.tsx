@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
+import DOMPurify from "dompurify";
 import { ArrowLeft, CheckSquare, ExternalLink, FileText, GitBranch, RefreshCw } from "lucide-react";
 import { Pill, StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
@@ -12,6 +13,27 @@ const CASE_STATUS_COLOR: Record<string, [string, string]> = {
   Open: ["#67e8f9", "rgba(34,211,238,.13)"],
   "To Do": ["#fbbf24", "rgba(251,191,36,.13)"],
 };
+
+// Force every sanitized anchor to open in a new tab. Registered once at module
+// scope; DOMPurify hooks are global but this is the only place we sanitize.
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A" && node.getAttribute("href")) {
+    node.setAttribute("target", "_blank");
+    node.setAttribute("rel", "noreferrer");
+  }
+});
+
+/** Read-only render of the original provider acceptance-criteria HTML, sanitized
+ * with DOMPurify. Used as the fallback when the criteria don't split cleanly
+ * into a numbered list (#225). */
+function AcceptanceCriteriaHtml({ html }: { html: string }) {
+  return (
+    <div
+      className="text-[13px] leading-[1.6] text-[#b4b4c2] [&_a]:text-violet [&_a]:underline [&_h1]:mb-2 [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:font-bold [&_li]:mb-1 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_strong]:font-semibold [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-white/10 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-white/10 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
+    />
+  );
+}
 
 /** Test cases created in the provider and linked back to this work item. */
 function LinkedTestCases({ externalId }: { externalId: string }) {
@@ -197,18 +219,27 @@ export function TicketDetail() {
             </div>
 
             <div className="mb-[10px] text-[11px] font-semibold tracking-[0.08em] text-faint">
-              ACCEPTANCE CRITERIA &middot; {detail.acceptanceCriteria.length}
+              ACCEPTANCE CRITERIA
+              {detail.acceptanceCriteria.length >= 2 && <> &middot; {detail.acceptanceCriteria.length}</>}
             </div>
-            <div className="flex flex-col gap-2">
-              {detail.acceptanceCriteria.map((text, i) => (
-                <div key={i} className="flex gap-[10px] text-[13px] leading-[1.55] text-[#b4b4c2]">
-                  <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[rgba(139,92,246,.14)] font-mono text-[11px] font-bold text-violet">
-                    {i + 1}
-                  </span>
-                  <span>{text}</span>
-                </div>
-              ))}
-            </div>
+            {detail.acceptanceCriteria.length >= 2 ? (
+              <div className="flex flex-col gap-2">
+                {detail.acceptanceCriteria.map((text, i) => (
+                  <div key={i} className="flex gap-[10px] text-[13px] leading-[1.55] text-[#b4b4c2]">
+                    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-[rgba(139,92,246,.14)] font-mono text-[11px] font-bold text-violet">
+                      {i + 1}
+                    </span>
+                    <span>{text}</span>
+                  </div>
+                ))}
+              </div>
+            ) : detail.acceptanceCriteriaHtml ? (
+              <AcceptanceCriteriaHtml html={detail.acceptanceCriteriaHtml} />
+            ) : detail.acceptanceCriteria.length === 1 ? (
+              <p className="m-0 text-[13px] leading-[1.6] text-[#b4b4c2]">{detail.acceptanceCriteria[0]}</p>
+            ) : (
+              <p className="m-0 text-[13px] text-ink-dim">No acceptance criteria.</p>
+            )}
           </div>
 
           <LinkedTestCases externalId={detail.externalId} />
@@ -285,9 +316,22 @@ export function TicketDetail() {
                   <div key={i} className="flex items-center gap-[10px] rounded-[11px] bg-white/[0.03] p-[9px]">
                     <GitBranch size={15} color={pr.color} strokeWidth={2} />
                     <div className="min-w-0 flex-1">
-                      <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-semibold">
-                        {pr.title}
-                      </div>
+                      {pr.url ? (
+                        <a
+                          href={pr.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 overflow-hidden text-[12px] font-semibold text-violet hover:underline"
+                          title="Open pull request"
+                        >
+                          <span className="truncate">{pr.title}</span>
+                          <ExternalLink size={12} strokeWidth={2.2} className="shrink-0" />
+                        </a>
+                      ) : (
+                        <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-semibold">
+                          {pr.title}
+                        </div>
+                      )}
                       <div className="font-mono text-[11px] text-[#7a7a8c]">
                         {pr.repo} #{pr.num}
                       </div>

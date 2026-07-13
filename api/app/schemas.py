@@ -315,6 +315,7 @@ class PullRequestOut(ApiModel):
     title: str
     status: str
     color: str = "#a78bfa"
+    url: str = ""
 
 
 class CommentOut(ApiModel):
@@ -360,6 +361,7 @@ class TicketDetailOut(TicketOut):
     description: str = ""
     note: str = ""
     acceptance_criteria: list[str] = Field(default_factory=list)
+    acceptance_criteria_html: str = ""
     comments: list[CommentOut] = Field(default_factory=list)
     attachments: list[AttachmentOut] = Field(default_factory=list)
     linked_prs: list[PullRequestOut] = Field(default_factory=list)

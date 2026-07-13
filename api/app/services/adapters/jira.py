@@ -337,6 +337,7 @@ class JiraAdapter(ProviderAdapter):
             note="",
             labels=fields.get("labels", []) or [],
             acceptance_criteria=acceptance_criteria,
+            acceptance_criteria_html="",
             comments=comments,
             attachments=attachments,
             linked_prs=[],

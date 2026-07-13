@@ -232,6 +232,7 @@ class GitHubAdapter(ProviderAdapter):
             note="",
             labels=labels,
             acceptance_criteria=[],
+            acceptance_criteria_html="",
             comments=comments,
             attachments=[],
             linked_prs=[],
