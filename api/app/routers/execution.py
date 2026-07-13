@@ -148,12 +148,28 @@ def run_single_spec(
         raise HTTPException(status_code=404, detail="Test case not found")
     if case.approval != "approved" or case.automation == "Manual":
         raise HTTPException(status_code=400, detail="Case is not an approved, automatable test")
-    if case.spec and case.spec.status in ("blocked", "product_defect"):
+    # A product defect is a triaged APP bug routed to the report — never re-run it
+    # (running would just re-observe the same defect). A *blocked* spec, however,
+    # can be run on explicit demand ("run anyway" / Self-heal attempt): it's a
+    # manual override, so the gate stays authoritative for normal/bulk runs while
+    # letting a human try to unblock one spec.
+    if case.spec and case.spec.status == "product_defect":
         raise HTTPException(
             status_code=400,
-            detail="Spec is blocked or a product defect — resolve the block or route the defect to the report; it is not runnable",
+            detail="Spec is a product defect — routed to the report, not re-run.",
         )
     run = get_owned_or_404(db, Run, case.run_id, user)
+    # A blocked spec was never written to disk (it's excluded from the runnable
+    # set), so materialize its current code so the runner has a file to execute.
+    if case.spec and case.spec.status == "blocked" and (case.spec.code or "").strip():
+        from app.services import spec_service
+
+        case.spec.path = str(
+            spec_service.write_spec_file(
+                run.code, case.ticket_external_id, case.code, case.spec.code, run.owner_id
+            )
+        )
+        db.commit()
     target = _resolve_target(body)
     if target == "local-agent":
         _require_paired_device(db, run.owner_id)

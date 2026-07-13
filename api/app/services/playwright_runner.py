@@ -1027,6 +1027,13 @@ def heal_spec(case_id: int) -> None:
             else []
         )
 
+        # Materialize the current spec to disk so attempt 1 runs the real code.
+        # A blocked spec has never been written to the run's spec dir (it's kept
+        # out of the runnable set), so without this a self-heal on a blocked spec
+        # would find no file to run — writing it lets the heal loop attempt an
+        # unblock. Harmless for already-runnable specs (their file matches).
+        (spec_dir / filename).write_text(spec.code or "", encoding="utf-8")
+
         # A heal pass is now underway — reflect it on the spec lifecycle.
         spec.status = "running"
         db.commit()
