@@ -32,9 +32,11 @@ from app.services import (
     failure_classifier,
     placeholder_gate,
     playwright_runner,
+    run_context,
     spec_examples,
     spec_service,
 )
+from app.services.claude_cli import ClaudeError
 from app.services.playwright_runner import _resolve_project_for_run
 
 
@@ -88,7 +90,29 @@ def plan_fix(
 
     The agent applies a ``fixed`` result (write the code, re-run) and stops on any
     terminal action, then calls :func:`finalize_agent_heal`.
+
+    Runs under the run's ambient context (:func:`run_context.set_run`) so the Claude
+    CLI resolves the **run owner's** credentials — this endpoint is called on a
+    request thread with no ambient run, so without this Claude falls back to the
+    (logged-out) shared credential and fails with "Not logged in".
     """
+    previous_run = run_context.get_run()
+    run_context.set_run(run.id)
+    try:
+        return _plan_fix(db, case, run, current_code, error, output, dom_snapshot)
+    finally:
+        run_context.set_run(previous_run)
+
+
+def _plan_fix(
+    db,
+    case: TestCase,
+    run: Run,
+    current_code: str,
+    error: str,
+    output: str,
+    dom_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
     context, known, examples = _resolve_grounding(db, case, run)
 
     classification = failure_classifier.classify_failure(case, current_code, error, output, context)
@@ -99,9 +123,14 @@ def plan_fix(
             "reason": classification.get("reason", ""),
         }
 
-    fixed = spec_service.generate_fixed_spec_code(
-        case, current_code, error, output, context, examples, dom_snapshot
-    )
+    try:
+        fixed = spec_service.generate_fixed_spec_code(
+            case, current_code, error, output, context, examples, dom_snapshot
+        )
+    except ClaudeError as exc:
+        # Return a clean terminal action (not a 500) so the agent records a failed
+        # attempt and stops the loop instead of throwing on the HTTP call.
+        return {"action": "rejected", "reason": f"Heal fix generation failed: {exc}"}
 
     # Anti-cheat: a fix that removes/weakens assertions only "passes" by checking
     # less — reject it and keep the previous spec.

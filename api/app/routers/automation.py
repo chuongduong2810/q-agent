@@ -630,9 +630,24 @@ def heal_case_spec(
 def heal_case_spec_status(
     case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
 ) -> dict:
-    """Whether a self-heal pass is running for this case (survives navigation)."""
+    """Whether a self-heal pass is running for this case (survives navigation).
+
+    Covers both the in-process server heal (``playwright_runner._healing``) and an
+    agent-executed heal — a queued/running Execution flagged ``heal_case_id`` — so
+    the "Healing…" button state is correct the moment a local-agent heal is queued,
+    not only once the agent starts streaming ``heal.progress``.
+    """
     _get_case_and_run_or_404(db, case_id, user)
-    return playwright_runner.heal_state(case_id)
+    state = playwright_runner.heal_state(case_id)
+    if not state["healing"]:
+        agent_heal = (
+            db.query(Execution.id)
+            .filter(Execution.heal_case_id == case_id, Execution.status.in_(("queued", "running")))
+            .first()
+        )
+        if agent_heal is not None:
+            state = {"healing": True, "attempt": 0, "maxAttempts": settings.heal_max_attempts}
+    return state
 
 
 @router.get("/cases/{case_id}/spec/heal/report")
