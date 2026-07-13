@@ -20,6 +20,7 @@ export default function App() {
   const closePalette = useUI((s) => s.closePalette);
   const closeCreateRun = useUI((s) => s.closeCreateRun);
   const closeDrawer = useUI((s) => s.closeDrawer);
+  const closeChat = useUI((s) => s.closeChat);
 
   // Global keyboard: ⌘K / Ctrl-K toggles the palette; Escape closes overlays.
   useEffect(() => {
@@ -32,11 +33,12 @@ export default function App() {
         closePalette();
         closeCreateRun();
         closeDrawer();
+        closeChat();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePalette, closePalette, closeCreateRun, closeDrawer]);
+  }, [togglePalette, closePalette, closeCreateRun, closeDrawer, closeChat]);
 
   return (
     <QueryProvider>

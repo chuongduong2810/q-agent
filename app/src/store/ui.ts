@@ -42,6 +42,12 @@ interface UIState {
   openDrawer: () => void;
   closeDrawer: () => void;
 
+  // AI chat panel (Automation screen — edit the selected spec conversationally)
+  chatOpen: boolean;
+  openChat: () => void;
+  closeChat: () => void;
+  toggleChat: () => void;
+
   // tickets page
   selected: Record<string, boolean>;
   ticketSearch: string;
@@ -140,6 +146,11 @@ export const useUI = create<UIState>((set) => ({
   drawerOpen: false,
   openDrawer: () => set({ drawerOpen: true }),
   closeDrawer: () => set({ drawerOpen: false }),
+
+  chatOpen: false,
+  openChat: () => set({ chatOpen: true }),
+  closeChat: () => set({ chatOpen: false }),
+  toggleChat: () => set((s) => ({ chatOpen: !s.chatOpen })),
 
   selected: {},
   ticketSearch: "",

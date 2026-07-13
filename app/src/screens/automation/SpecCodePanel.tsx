@@ -1,4 +1,4 @@
-import { Download, Pencil, Play, Save, Wand2, X } from "lucide-react";
+import { Download, Pencil, Play, Save, Sparkles, Wand2, X } from "lucide-react";
 import type { AutomationSpecOut } from "@/types/api";
 import { Pill } from "@/components/ui/badges";
 import { GateRejectedNote } from "./banners";
@@ -46,6 +46,7 @@ export function SpecCodePanel({
   onRunSpec,
   onStartHeal,
   onStartExecution,
+  onOpenChat,
 }: {
   selectedSpec: AutomationSpecOut | null;
   editing: boolean;
@@ -80,6 +81,7 @@ export function SpecCodePanel({
   onRunSpec: () => void;
   onStartHeal: () => void;
   onStartExecution: () => void;
+  onOpenChat: () => void;
 }) {
   return (
     <div
@@ -192,6 +194,14 @@ export function SpecCodePanel({
                   <Wand2 size={13} />
                 )}
                 {healingThisCase ? "Healing…" : "Self-heal"}
+              </button>
+              <button
+                onClick={onOpenChat}
+                disabled={generating || specRegenerating}
+                title="Edit this spec with Q-Agent (AI chat)"
+                className="flex items-center gap-1.5 rounded-[9px] border border-violet-400/25 bg-violet-400/10 px-[11px] py-1.5 text-[11.5px] font-semibold text-violet-300 hover:bg-violet-400/20 disabled:opacity-60"
+              >
+                <Sparkles size={13} /> Edit with Q-Agent
               </button>
               <button
                 onClick={onCopy}
