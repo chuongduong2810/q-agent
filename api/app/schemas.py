@@ -618,6 +618,20 @@ class AutomationSpecRegenerate(ApiModel):
     comment: str | None = None
 
 
+class SpecChatRequest(ApiModel):
+    """A reviewer's chat instruction to edit the selected spec (AI chat panel).
+
+    Claude really edits the spec (see ``spec_service.generate_chat_edit``); the
+    edited code is re-gated and persisted like a manual edit. ``model`` optionally
+    selects the Claude model; ``messageId`` lets the client correlate the async
+    WS reply/error back to the placeholder message it optimistically rendered.
+    """
+
+    message: str
+    model: str | None = None
+    messageId: str | None = None
+
+
 # ---------------------------------------------------------------- Execution
 class EvidenceOut(ApiModel):
     id: int

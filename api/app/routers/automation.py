@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import threading
+from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -29,7 +30,7 @@ from app.models.run import Run, RunTicket
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
 from app.models.user import User
-from app.schemas import AutomationSpecRegenerate, AutomationSpecUpdate
+from app.schemas import AutomationSpecRegenerate, AutomationSpecUpdate, SpecChatRequest
 from app.services import (
     audit_service,
     placeholder_gate,
@@ -57,6 +58,10 @@ _generating: set[int] = set()
 # Case ids with an in-flight single-case regeneration (background thread) — guards
 # against double-triggering the same case's regenerate.
 _regenerating_cases: set[int] = set()
+
+# Case ids with an in-flight AI-chat spec edit (background thread) — guards against
+# double-triggering while Claude edits the same spec.
+_chatting_cases: set[int] = set()
 
 
 def is_generating(run_id: int) -> bool:
@@ -558,6 +563,121 @@ def regenerate_case_spec(
             daemon=True,
         ).start()
     return {"started": True, "caseId": case_id}
+
+
+def _run_spec_chat(run_id: int, case_id: int, message: str, message_id: str) -> None:
+    """Background worker: apply a reviewer's chat instruction to a spec via Claude.
+
+    Mirrors ``_run_single_regeneration`` (off-request so slow Claude calls can't
+    hit the proxy timeout) and persists the edit exactly like ``update_case_spec``
+    (re-gate + write_spec_file, else blocked). Publishes ``automation.chat.reply``
+    (with the pre-edit ``prevCode`` so the client can Undo + diff) or
+    ``automation.chat.error`` — both carry ``messageId`` so the client correlates
+    the async result to the placeholder message it rendered on send.
+    """
+    run_context.set_run(run_id)
+    db = db_module.SessionLocal()
+    try:
+        run = db.get(Run, run_id)
+        case = db.get(TestCase, case_id)
+        if run is None or case is None:
+            return
+        spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case_id).first()
+        if spec is None:
+            hub.publish(
+                str(run_id), "automation.chat.error",
+                {"caseId": case_id, "messageId": message_id, "error": "This case has no spec to edit."},
+            )
+            return
+        prev_code = spec.code or ""
+        try:
+            explanation, new_code = spec_service.generate_chat_edit(db, run, case, prev_code, message)
+            # Persist + re-gate exactly like a manual edit (update_case_spec).
+            spec.code = new_code
+            context = spec_service.build_case_context(db, case, env=run.env)
+            known = {
+                "routes": context.get("routes", []),
+                "selectors": context.get("selectors", []),
+                "base_url": context.get("baseUrl", ""),
+            }
+            gate = placeholder_gate.gate_spec(new_code, known)
+            outcome = gate["outcome"]
+            if outcome == "passed" and not spec_service.playwright_list_ok(new_code, run.owner_id):
+                outcome = "rejected"
+                gate = {
+                    "outcome": "rejected",
+                    "findings": ["playwright --list parse failure"],
+                    "reason": "Playwright could not parse/collect the edited spec.",
+                    "unblock_action": "Fix the spec so it parses cleanly under Playwright.",
+                }
+            spec.gate_report = json.dumps(gate)
+            if outcome == "passed":
+                spec.path = str(
+                    spec_service.write_spec_file(
+                        run.code, case.ticket_external_id, case.code, new_code, run.owner_id
+                    )
+                )
+                spec.status = "draft"
+                spec.block_reason = ""
+            else:
+                prefix = "Rejected: " if outcome == "rejected" else ""
+                spec.status = "blocked"
+                spec.block_reason = f'{prefix}{gate["reason"]} {gate["unblock_action"]}'.strip()
+            db.commit()
+            db.refresh(spec)
+            audit_service.record(
+                category="ai", actor_type="ai", action="Edited spec via chat",
+                target=f"{case.ticket_external_id} · {case.code}", meta=message[:500],
+            )
+            hub.publish(
+                str(run_id), "automation.chat.reply",
+                {
+                    "caseId": case_id, "messageId": message_id, "text": explanation,
+                    "prevCode": prev_code, "spec": _spec_out(spec),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 - surface to the client, never crash the thread
+            db.rollback()
+            logger.error("Spec chat edit failed for case {}: {}", case_id, exc)
+            hub.publish(
+                str(run_id), "automation.chat.error",
+                {"caseId": case_id, "messageId": message_id, "error": str(exc)},
+            )
+    finally:
+        _chatting_cases.discard(case_id)
+        db.close()
+        run_context.clear()
+
+
+@router.post("/cases/{case_id}/spec/chat")
+def chat_edit_spec(
+    case_id: int,
+    payload: SpecChatRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> dict:
+    """Edit the case's spec via a reviewer chat instruction (Claude, off-request).
+
+    Kicks off a background thread that edits + re-gates the spec and streams the
+    result over the run WS as ``automation.chat.reply`` / ``automation.chat.error``
+    (both echo ``messageId``). Returns immediately with the ``messageId`` the client
+    uses to correlate that async result. 404 if the case has no spec; 400 if the
+    message is empty.
+    """
+    case, run = _get_case_and_run_or_404(db, case_id, user)
+    spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case_id).first()
+    if spec is None:
+        raise HTTPException(status_code=404, detail="Generate a spec for this case first")
+    message = (payload.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+    message_id = payload.messageId or uuid4().hex
+    if case_id not in _chatting_cases:
+        _chatting_cases.add(case_id)
+        threading.Thread(
+            target=_run_spec_chat, args=(run.id, case_id, message, message_id), daemon=True
+        ).start()
+    return {"started": True, "caseId": case_id, "messageId": message_id}
 
 
 @router.post("/cases/{case_id}/spec/heal")
