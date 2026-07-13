@@ -426,8 +426,14 @@ export const api = {
     get<AutomationStatus>(`/runs/${runId}/automation/status`),
   listSpecs: (runId: number | string) => get<AutomationSpecOut[]>(`/runs/${runId}/automation`),
   getSpec: (caseId: number) => get<AutomationSpecOut>(`/cases/${caseId}/spec`),
+  // Fire-and-forget: regeneration runs off-request on the server (it makes
+  // multiple Claude calls and would otherwise exceed the proxy timeout). The
+  // result is streamed over the run WS as `spec.regenerated`.
   regenerateSpec: (caseId: number, comment?: string) =>
-    post<AutomationSpecOut>(`/cases/${caseId}/spec/regenerate`, comment ? { comment } : undefined),
+    post<{ started: boolean; caseId: number }>(
+      `/cases/${caseId}/spec/regenerate`,
+      comment ? { comment } : undefined,
+    ),
   updateSpec: (caseId: number, code: string) => patch<AutomationSpecOut>(`/cases/${caseId}/spec`, { code }),
   healSpec: (caseId: number) =>
     post<{ started: boolean; maxAttempts: number }>(`/cases/${caseId}/spec/heal`),

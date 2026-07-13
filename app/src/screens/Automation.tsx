@@ -25,7 +25,8 @@ import {
   useUpdateSpec,
 } from "@/hooks/queries";
 import { queryKeys } from "@/lib/queryKeys";
-import type { HealReport } from "@/types/api";
+import { useRunEvents } from "@/hooks/useRunEvents";
+import type { AutomationSpecOut, HealReport } from "@/types/api";
 import { normalizeSpecStatus, parseGateReport } from "./automation/specStatus";
 import { useAutomationEvents } from "./automation/useAutomationEvents";
 import { useThinkingSteps } from "./automation/useThinkingSteps";
@@ -94,6 +95,12 @@ export function Automation() {
   const [versionByCase, setVersionByCase] = useState<Record<number, number>>({});
   // Bumped by the RegenSummary "Feedback" button to force-open the note composer.
   const [feedbackSignal, setFeedbackSignal] = useState(0);
+  // Regeneration runs off-request (background thread → `spec.regenerated` WS
+  // event) so it can't hit the proxy timeout. Track which cases are in flight
+  // (drives the "Regenerating…" state), and the pre-regen code per case so the
+  // event handler can diff old vs new when the result lands.
+  const [regeneratingCases, setRegeneratingCases] = useState<Set<number>>(new Set());
+  const [prevCodeByCase, setPrevCodeByCase] = useState<Record<number, string>>({});
   // Generation runs in the background on the server; the POST returns
   // immediately. Derive the running state from the persisted server status so it
   // survives navigation and blocks re-triggering.
@@ -208,7 +215,38 @@ export function Automation() {
   }, [selectedSpec?.testCaseId, selectedSpec?.filename]);
 
   // True while this spec's per-file regenerate mutation is in flight.
-  const specRegenerating = regenerateSpec.isPending;
+  const specRegenerating =
+    selectedSpec != null && regeneratingCases.has(selectedSpec.testCaseId);
+
+  // The background regeneration streams its result here. Drop the case from the
+  // in-flight set, refresh the spec so the panel shows the new code, and — when
+  // the code actually changed and didn't come back blocked — compute the inline
+  // diff banner vs the code captured before the regenerate started.
+  useRunEvents((evt) => {
+    if (evt.event !== "spec.regenerated") return;
+    const p = evt.payload as { caseId: number; spec?: AutomationSpecOut; error?: string };
+    setRegeneratingCases((prev) => {
+      const next = new Set(prev);
+      next.delete(p.caseId);
+      return next;
+    });
+    if (p.error) {
+      toast.error(p.error);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+    const prevCode = prevCodeByCase[p.caseId];
+    const spec = p.spec;
+    if (prevCode == null || spec == null) return;
+    if (spec.code === prevCode || spec.status === "blocked") return;
+    const { changed, count, removed } = diffLines(prevCode, spec.code);
+    const nextLines = spec.code.split("\n");
+    const added = [...changed].map((i) => nextLines[i] ?? "");
+    const tags = deriveTags(added, removed);
+    const nextVersion = (versionByCase[p.caseId] ?? 1) + 1;
+    setVersionByCase((prev) => ({ ...prev, [p.caseId]: nextVersion }));
+    setRegenResult({ caseId: p.caseId, prevCode, changed, count, tags, version: nextVersion });
+  });
 
   // Self-heal state for the selected spec. Poll the server so "Healing…"
   // survives navigating away/back; OR it with the mutation's pending flag and
@@ -310,21 +348,25 @@ export function Automation() {
   const handleRegenerate = (comment?: string) => {
     if (!selectedSpec) return;
     const caseId = selectedSpec.testCaseId;
-    const prevCode = selectedSpec.code;
+    // Capture the pre-regen code so the `spec.regenerated` WS handler can diff
+    // old vs new when the background worker finishes. Mark the case in-flight;
+    // clear any stale diff banner while it regenerates.
+    setPrevCodeByCase((prev) => ({ ...prev, [caseId]: selectedSpec.code }));
+    setRegenResult((prev) => (prev?.caseId === caseId ? null : prev));
+    setRegeneratingCases((prev) => new Set(prev).add(caseId));
     regenerateSpec.mutate(
       { caseId, comment },
       {
-        onSuccess: (data) => {
-          if (data.code === prevCode || data.status === "blocked") return;
-          const { changed, count, removed } = diffLines(prevCode, data.code);
-          const nextLines = data.code.split("\n");
-          const added = [...changed].map((i) => nextLines[i] ?? "");
-          const tags = deriveTags(added, removed);
-          const nextVersion = (versionByCase[caseId] ?? 1) + 1;
-          setVersionByCase((prev) => ({ ...prev, [caseId]: nextVersion }));
-          setRegenResult({ caseId, prevCode, changed, count, tags, version: nextVersion });
+        // Fire-and-forget: success just means the job started; the result
+        // arrives over the run WS. Only a failure to *start* is handled here.
+        onError: (e) => {
+          setRegeneratingCases((prev) => {
+            const next = new Set(prev);
+            next.delete(caseId);
+            return next;
+          });
+          toast.error(e instanceof Error ? e.message : "Failed to start regeneration");
         },
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to regenerate spec"),
       },
     );
   };

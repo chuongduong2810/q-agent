@@ -690,14 +690,15 @@ export const useGenerateAutomation = (runId: number | string) => {
   });
 };
 
-export const useRegenerateSpec = (runId: number | string) => {
-  const qc = useQueryClient();
-  return useMutation({
+/** Kick off an async spec regeneration. Resolves as soon as the background job
+ * is accepted; the finished spec arrives over the run WS as `spec.regenerated`
+ * (the Automation screen refreshes + diffs on that event), so there is nothing
+ * to invalidate here. `runId` is accepted for call-site symmetry. */
+export const useRegenerateSpec = (_runId: number | string) =>
+  useMutation({
     mutationFn: ({ caseId, comment }: { caseId: number; comment?: string }) =>
       api.regenerateSpec(caseId, comment),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.specs(runId) }),
   });
-};
 
 export const useUpdateSpec = (runId: number | string) => {
   const qc = useQueryClient();
