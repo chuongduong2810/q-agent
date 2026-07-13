@@ -434,6 +434,16 @@ export const api = {
       `/cases/${caseId}/spec/regenerate`,
       comment ? { comment } : undefined,
     ),
+  // Fire-and-forget like `regenerateSpec`: Claude edits the selected spec off
+  // -request on the server; the reply + edited spec arrive over the run WS as
+  // `automation.chat.reply` (or `automation.chat.error`). `messageId` correlates
+  // the WS reply back to the pending client-side message.
+  sendSpecChat: (caseId: number, message: string, model?: string, messageId?: string) =>
+    post<{ started: boolean; caseId: number }>(`/cases/${caseId}/spec/chat`, {
+      message,
+      model,
+      messageId,
+    }),
   updateSpec: (caseId: number, code: string) => patch<AutomationSpecOut>(`/cases/${caseId}/spec`, { code }),
   healSpec: (caseId: number) =>
     post<{ started: boolean; maxAttempts: number }>(`/cases/${caseId}/spec/heal`),

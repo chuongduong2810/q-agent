@@ -700,6 +700,26 @@ export const useRegenerateSpec = (_runId: number | string) =>
       api.regenerateSpec(caseId, comment),
   });
 
+/** Send a chat instruction to edit the selected spec. Fire-and-forget like
+ * `useRegenerateSpec`: the edited spec + reply text arrive over the run WS as
+ * `automation.chat.reply` (the `automation.` prefix already refreshes the specs
+ * cache), so there is nothing to invalidate here. `runId` is accepted for
+ * call-site symmetry. */
+export const useSendSpecChat = (_runId: number | string) =>
+  useMutation({
+    mutationFn: ({
+      caseId,
+      message,
+      model,
+      messageId,
+    }: {
+      caseId: number;
+      message: string;
+      model?: string;
+      messageId?: string;
+    }) => api.sendSpecChat(caseId, message, model, messageId),
+  });
+
 export const useUpdateSpec = (runId: number | string) => {
   const qc = useQueryClient();
   return useMutation({

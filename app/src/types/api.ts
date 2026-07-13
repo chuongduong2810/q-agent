@@ -561,6 +561,26 @@ export interface AutomationSpecOut {
   gateReport: string;
 }
 
+/** Payload of the `automation.chat.reply` run-WS event: the successful result
+ * of a chat-driven spec edit. `text` is Claude's prose explanation, `prevCode`
+ * the code before the edit (for Undo), and `spec` the re-gated updated spec. */
+export interface ChatReplyPayload {
+  caseId: number;
+  messageId: string;
+  text: string;
+  prevCode: string;
+  spec: AutomationSpecOut;
+}
+
+/** Payload of the `automation.chat.error` run-WS event: a chat-edit that failed
+ * (Claude error, gate failure, etc.). `messageId` correlates it to the pending
+ * client-side message. */
+export interface ChatErrorPayload {
+  caseId: number;
+  messageId: string;
+  error: string;
+}
+
 export interface HealAttempt {
   attempt: number;
   status: "pass" | "fail";

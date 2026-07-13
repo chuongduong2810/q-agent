@@ -8,6 +8,7 @@ import { ProviderGroup } from "@/components/settings/ProviderGroup";
 import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMeta";
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
+import { AI_MODEL_OPTIONS } from "@/lib/models";
 import type { ExecutionTarget, ProviderGroupOut, ProviderKind, SettingsOut } from "@/types/api";
 
 /** A never-configured provider: the backend catalog omits it (fresh machine),
@@ -20,13 +21,6 @@ const emptyGroup = (kind: ProviderKind): ProviderGroupOut => ({
   connectedCount: 0,
   connections: [],
 });
-
-/** The Claude models offered in the per-action override dropdowns. */
-const AI_MODEL_OPTIONS = [
-  { value: "claude-opus-4-8", label: "Opus 4.8 — highest quality" },
-  { value: "claude-sonnet-5", label: "Sonnet 5 — balanced" },
-  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — fastest" },
-];
 
 /** AI actions that accept a per-skill model override — mirrors the backend
  * skills that are actually invoked with `skill=` (see api skills.SKILLS +
