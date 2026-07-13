@@ -39,6 +39,8 @@ import { ProductDefectBanner, BlockedBanner } from "./automation/banners";
 import { SpecCodePanel } from "./automation/SpecCodePanel";
 import { HealTimeline } from "./automation/HealTimeline";
 import { diffLines } from "./automation/lineDiff";
+import { SpecChatPanel } from "./automation/chat/SpecChatPanel";
+import { useUI } from "@/store/ui";
 import { RegenSummary, deriveTags } from "./automation/RegenSummary";
 
 export function Automation() {
@@ -58,6 +60,7 @@ export function Automation() {
   const { data: execution } = useExecution(runId);
   const setTicketRepo = useSetRunTicketRepo(runId);
   const healSpec = useHealSpec(runId);
+  const openChat = useUI((s) => s.openChat);
   const runSpec = useRunSpec(runId);
   const qc = useQueryClient();
 
@@ -476,6 +479,9 @@ export function Automation() {
         <HealProgressBanner healProgress={healProgress} />
       )}
 
+      {/* AI chat panel — edit the selected spec conversationally (portals to body). */}
+      <SpecChatPanel runId={runId} spec={selectedSpec} />
+
       {!thinking && specs && specs.length === 0 && (
         <NoAutomationEmptyState
           automatableCount={automatableCount}
@@ -565,6 +571,7 @@ export function Automation() {
             onRunSpec={runThisSpec}
             onStartHeal={startHeal}
             onStartExecution={startExecutionAndView}
+            onOpenChat={openChat}
           />
           {healReport && <HealTimeline report={healReport} />}
           </div>
