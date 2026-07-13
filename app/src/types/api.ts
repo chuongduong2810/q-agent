@@ -265,6 +265,8 @@ export interface PullRequestOut {
   title: string;
   status: string;
   color: string;
+  /** Web URL to open the PR in the provider (empty when unknown). */
+  url: string;
 }
 export interface CommentOut {
   who: string;
@@ -325,6 +327,9 @@ export interface TicketDetailOut extends TicketOut {
   description: string;
   note: string;
   acceptanceCriteria: string[];
+  /** Original provider AC as rich HTML — rendered read-only (sanitized) when the
+   * criteria don't split cleanly into a numbered list (#225). */
+  acceptanceCriteriaHtml: string;
   comments: CommentOut[];
   attachments: AttachmentOut[];
   linkedPrs: PullRequestOut[];

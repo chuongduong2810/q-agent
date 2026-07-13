@@ -41,6 +41,9 @@ class Ticket(Base):
 
     labels: Mapped[list] = mapped_column(JSON, default=list)
     acceptance_criteria: Mapped[list] = mapped_column(JSON, default=list)  # list[str]
+    # Original provider AC as rich HTML — rendered read-only when the criteria
+    # don't split cleanly into a numbered list (#225).
+    acceptance_criteria_html: Mapped[str] = mapped_column(Text, default="", server_default="")
     comments: Mapped[list] = mapped_column(JSON, default=list)
     attachments: Mapped[list] = mapped_column(JSON, default=list)
     linked_prs: Mapped[list] = mapped_column(JSON, default=list)

@@ -21,8 +21,8 @@ class NormalizedTicket(dict):
     Expected keys (all optional except external_id/title):
       external_id, provider_kind, title, work_item_type, status, priority,
       assignee, sprint, area_path, epic, description, note, labels(list[str]),
-      acceptance_criteria(list[str]), comments(list[dict]),
-      attachments(list[dict]), linked_prs(list[dict]).
+      acceptance_criteria(list[str]), acceptance_criteria_html(str),
+      comments(list[dict]), attachments(list[dict]), linked_prs(list[dict]).
     """
 
 

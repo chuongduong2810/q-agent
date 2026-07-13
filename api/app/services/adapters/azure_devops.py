@@ -15,7 +15,7 @@ import base64
 import json
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import httpx
 
@@ -450,6 +450,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
             note="",
             labels=labels,
             acceptance_criteria=_split_ac(_strip_html(ac_html)),
+            acceptance_criteria_html=ac_html or "",
             comments=comments,
             attachments=attachments,
             linked_prs=linked_prs,
@@ -488,8 +489,7 @@ class AzureDevOpsAdapter(ProviderAdapter):
             )
         return result
 
-    @staticmethod
-    def _parse_relations(relations: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def _parse_relations(self, relations: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         attachments: list[dict[str, Any]] = []
         linked_prs: list[dict[str, Any]] = []
         for rel in relations:
@@ -499,8 +499,39 @@ class AzureDevOpsAdapter(ProviderAdapter):
             if rel_type == "AttachedFile":
                 attachments.append({"name": attrs.get("name", url.rsplit("/", 1)[-1]), "size": ""})
             elif "PullRequest" in rel_type or "ArtifactLink" in rel_type and "PullRequest" in url:
-                linked_prs.append({"repo": "", "num": url.rsplit("/", 1)[-1], "title": "", "status": ""})
+                linked_prs.append(self._parse_pr_artifact(url))
         return attachments, linked_prs
+
+    def _parse_pr_artifact(self, url: str) -> dict[str, Any]:
+        """Turn an ADO pull-request artifact link into a friendly, clickable PR entry.
+
+        The relation ``url`` is a vstfs artifact of the shape
+        ``vstfs:///Git/PullRequestId/{projectId}%2F{repoId}%2F{prId}``. We take the
+        segment after ``PullRequestId/``, URL-decode it and split on ``/`` to recover
+        ``[projectId, repoId, prId]`` — ``prId`` is the real PR number. From those we
+        build the PR's web URL (GUIDs resolve fine in ADO web URLs). This is purely
+        string parsing — no extra per-PR API call during bulk sync.
+
+        :param url: the relation's vstfs artifact url.
+        :returns: ``{repo, num, title, status, url}``. ``repo`` stays empty (the repo
+            name isn't in the artifact) and ``status`` is unknown without a lookup.
+            Falls back to the old raw-segment behavior if the artifact doesn't match
+            the expected shape (never crashes on unexpected input).
+        """
+        marker = "PullRequestId/"
+        idx = url.find(marker)
+        if idx != -1:
+            parts = unquote(url[idx + len(marker):]).split("/")
+            if len(parts) == 3 and all(parts):
+                project_id, repo_id, pr_id = parts
+                return {
+                    "repo": "",
+                    "num": pr_id,
+                    "title": f"PR !{pr_id}",
+                    "status": "",
+                    "url": f"{self.org_url}/{project_id}/_git/{repo_id}/pullrequest/{pr_id}",
+                }
+        return {"repo": "", "num": url.rsplit("/", 1)[-1], "title": "", "status": "", "url": ""}
 
     # -- Write ------------------------------------------------------------
     def publish_comment(

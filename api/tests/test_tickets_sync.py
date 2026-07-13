@@ -136,6 +136,65 @@ def test_get_ticket_detail(client):
     assert detail["comments"][0]["text"] == "LGTM"
 
 
+@respx.mock
+def test_get_ticket_detail_ac_html_and_linked_pr(client):
+    """A synced ADO ticket exposes the original AC as HTML, and a PR artifact
+    relation resolves to a real numeric ``num`` plus a clickable web ``url`` (#225)."""
+    connection_id = _configure_ado(client)
+    respx.post("https://dev.azure.com/myorg/MyProj/_apis/wit/wiql").mock(
+        return_value=httpx.Response(200, json={"workItems": [{"id": 303}]})
+    )
+    respx.get("https://dev.azure.com/myorg/_apis/wit/workitems").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "value": [
+                    {
+                        "id": 303,
+                        "fields": {
+                            "System.Title": "Rich AC ticket",
+                            "System.WorkItemType": "User Story",
+                            "System.State": "Ready for QA",
+                            "Microsoft.VSTS.Common.Priority": 2,
+                            "System.AssignedTo": {"displayName": "Maya Kaur"},
+                            "System.IterationPath": "MyProj\\Sprint 12",
+                            "System.Description": "<p>Body</p>",
+                            "System.Tags": "",
+                            # A single rich blob that does not split into >=2 clean criteria.
+                            "Microsoft.VSTS.Common.AcceptanceCriteria": (
+                                "<div><b>Given</b> a user, <b>then</b> allow login</div>"
+                            ),
+                        },
+                        "relations": [
+                            {
+                                "rel": "ArtifactLink",
+                                "url": "vstfs:///Git/PullRequestId/proj-guid%2Frepo-guid%2F42",
+                                "attributes": {"name": "Pull Request"},
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://dev.azure.com/myorg/_apis/wit/workItems/303/comments").mock(
+        return_value=httpx.Response(200, json={"comments": []})
+    )
+
+    client.post(
+        "/tickets/sync",
+        json={"connectionId": connection_id, "mode": "sprint", "sprint": "Sprint 12"},
+    )
+
+    detail = client.get("/tickets/303").json()
+    assert "Given" in detail["acceptanceCriteriaHtml"]
+    assert len(detail["linkedPrs"]) == 1
+    pr = detail["linkedPrs"][0]
+    assert pr["num"] == "42"
+    assert pr["title"] == "PR !42"
+    assert pr["url"] == "https://dev.azure.com/myorg/proj-guid/_git/repo-guid/pullrequest/42"
+
+
 def test_get_ticket_detail_not_found(client):
     resp = client.get("/tickets/does-not-exist")
     assert resp.status_code == 404

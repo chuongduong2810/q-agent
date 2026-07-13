@@ -231,6 +231,7 @@ def sync_tickets(
         ticket.note = item.get("note", "")
         ticket.labels = item.get("labels", [])
         ticket.acceptance_criteria = item.get("acceptance_criteria", [])
+        ticket.acceptance_criteria_html = item.get("acceptance_criteria_html", "")
         ticket.comments = item.get("comments", [])
         ticket.attachments = item.get("attachments", [])
         ticket.linked_prs = item.get("linked_prs", [])
