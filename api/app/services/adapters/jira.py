@@ -201,6 +201,7 @@ class JiraAdapter(ProviderAdapter):
         work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,  # Jira returns comments inline; flag unused
+        project: str | None = None,
     ) -> list[NormalizedTicket]:
         jql = self._build_jql(
             mode=mode,
@@ -209,6 +210,7 @@ class JiraAdapter(ProviderAdapter):
             states=states,
             work_item_types=work_item_types,
             ticket_ids=ticket_ids,
+            project=project,
         )
         with self._client() as client:
             resp = client.post(
@@ -246,14 +248,16 @@ class JiraAdapter(ProviderAdapter):
         states: list[str] | None = None,
         work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
+        project: str | None = None,
     ) -> str:
         if mode == "selected" and ticket_ids:
             keys = ",".join(ticket_ids)
             return f"key in ({keys})"
 
         conditions = []
-        if self.project:
-            conditions.append(f"project = {self.project}")
+        proj = project or self.project
+        if proj:
+            conditions.append(f"project = {proj}")
         if mode == "sprint" and (sprint_path or sprint):
             # sprint_path is the numeric sprint id (preferred); else match by name.
             if sprint_path and str(sprint_path).isdigit():

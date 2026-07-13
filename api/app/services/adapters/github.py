@@ -115,6 +115,7 @@ class GitHubAdapter(ProviderAdapter):
         work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,
+        project: str | None = None,  # no ADO/Jira-style project concept; unused
     ) -> list[NormalizedTicket]:
         if not self.org or not self.repo:
             raise ProviderError("GitHub org/repo is not configured")

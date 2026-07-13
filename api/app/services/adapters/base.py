@@ -57,12 +57,17 @@ class ProviderAdapter(ABC):
         work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,
+        project: str | None = None,
     ) -> list[NormalizedTicket]:
         """Fetch and normalize tickets for the given selection mode.
 
         ``sprint`` is the human name; ``sprint_path`` is the provider-native
         identifier from :meth:`list_sprints` (ADO iteration path / Jira sprint id)
         and is preferred when present.
+
+        ``project`` overrides the connection's configured default project when
+        provided (Sync dialog Project dropdown); providers without a project
+        concept ignore it.
 
         ``include_comments`` is False for bulk sync (comments would require one
         extra request per ticket — an N+1 that makes sync crawl); comments are

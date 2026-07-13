@@ -195,6 +195,7 @@ def sync_tickets(
             states=body.states,
             work_item_types=body.work_item_types,
             ticket_ids=body.ticket_ids,
+            project=body.project,
         )
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

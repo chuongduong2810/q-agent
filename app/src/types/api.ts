@@ -339,11 +339,22 @@ export interface SprintOut {
   state?: string | null;
 }
 
+/** A project available under a work-item connection's org
+ * (`GET /connections/{id}/projects`) — populates the Sync dialog Project dropdown. */
+export interface ConnectionProjectOut {
+  externalId: string;
+  name: string;
+  state: string;
+}
+
 export interface SyncRequest {
   /** The work-item connection to sync from (ADR 0006). Falls back on the
    * backend to the project binding, then first-of-kind. */
   connectionId?: number;
   providerKind?: ProviderKind;
+  /** Project override — sync from this project instead of the connection's
+   * configured default. */
+  project?: string | null;
   mode?: string;
   sprint?: string | null;
   sprintPath?: string | null;

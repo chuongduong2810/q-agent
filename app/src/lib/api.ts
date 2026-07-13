@@ -36,6 +36,7 @@ import type {
   InviteUserResponse,
   AvailableReposOut,
   ConnectionOut,
+  ConnectionProjectOut,
   ConnectionUpdate,
   KnowledgeBuildRequest,
   ProjectConfigOut,
@@ -294,6 +295,8 @@ export const api = {
     put<ConnectionOut>(`/connections/${id}`, body),
   deleteConnection: (id: number) => del<void>(`/connections/${id}`),
   testConnection: (id: number) => post<TestConnectionResult>(`/connections/${id}/test`),
+  connectionProjects: (id: number) =>
+    get<ConnectionProjectOut[]>(`/connections/${id}/projects`),
   connectionSprints: (id: number) => get<SprintOut[]>(`/connections/${id}/sprints`),
   connectionWorkItemMetadata: (id: number) =>
     get<WorkItemMetadataOut>(`/connections/${id}/work-item-metadata`),

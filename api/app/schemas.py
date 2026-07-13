@@ -78,6 +78,19 @@ class ProjectOut(ApiModel):
     meta: dict = Field(default_factory=dict)
 
 
+class ConnectionProjectOut(ApiModel):
+    """A single project available under a work-item connection's org.
+
+    Populates the Sync dialog's Project dropdown — the org's projects for the
+    chosen connection, so a sync can target a project other than the connection's
+    configured default.
+    """
+
+    external_id: str
+    name: str
+    state: str = ""
+
+
 class KnowledgeBody(ApiModel):
     """The learned knowledge base contents (what project-bootstrap produces).
 
@@ -366,6 +379,9 @@ class SyncRequest(ApiModel):
     # connection of ``provider_kind`` when omitted.
     connection_id: int | None = None
     provider_kind: str | None = None
+    # Optional project override — when set, the adapter fetches from this project
+    # instead of the connection's configured default (Sync dialog Project dropdown).
+    project: str | None = None
     mode: str = "sprint"  # sprint | assigned | selected | all
     sprint: str | None = None
     sprint_path: str | None = None

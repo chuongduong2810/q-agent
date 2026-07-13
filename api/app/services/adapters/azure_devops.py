@@ -289,8 +289,9 @@ class AzureDevOpsAdapter(ProviderAdapter):
         work_item_types: list[str] | None = None,
         ticket_ids: list[str] | None = None,
         include_comments: bool = False,
+        project: str | None = None,
     ) -> list[NormalizedTicket]:
-        project = self.project
+        project = project or self.project
         if not project:
             raise ProviderError("Azure DevOps project is not configured")
 
