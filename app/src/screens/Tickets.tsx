@@ -231,11 +231,14 @@ export function Tickets() {
       </div>
 
       <div className="glass mb-4 flex flex-col gap-[10px] rounded-2xl p-[12px_14px]">
-        {/* Row 1 — connection · search · view pills, actions pinned right */}
-        <div className="flex flex-wrap items-center gap-[9px]">
+        {/* Row 1 — connection · search · view pills, actions pinned right. On
+            mobile the row stacks (flex-col) into groups; the pills + actions
+            group uses `md:contents` so on desktop they flatten back into the
+            single wrapping row (unchanged) with the actions pinned right. */}
+        <div className="flex flex-col gap-[9px] md:flex-row md:flex-wrap md:items-center">
           <ConnectionSelect groups={connectionGroups} value={connectionId} onChange={setTicketConnectionId} />
 
-          <div className="flex h-9 max-w-[320px] min-w-[180px] flex-1 items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3">
+          <div className="flex h-9 w-full items-center gap-2 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3 md:max-w-[320px] md:min-w-[180px] md:flex-1">
             <Search size={14} color="#7a7a8c" strokeWidth={2} />
             <input
               value={ticketSearch}
@@ -245,38 +248,41 @@ export function Tickets() {
             />
           </div>
 
-          {FILTERS.filter((f) => f.id !== "mine" || !!userName).map((f) => {
-            const active = ticketFilter === f.id;
-            return (
-              <button
-                key={f.id}
-                onClick={() => setTicketFilter(f.id)}
-                className="cursor-pointer rounded-[11px] px-[13px] py-2 text-[12.5px] font-semibold transition-colors"
-                style={
-                  active
-                    ? { background: "linear-gradient(135deg,#8b5cf6,#6366f1)", border: "1px solid transparent", color: "#fff" }
-                    : { background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.09)", color: "#dcdce4" }
-                }
-              >
-                {f.label}
-              </button>
-            );
-          })}
+          <div className="flex items-center gap-[9px] md:contents">
+            {FILTERS.filter((f) => f.id !== "mine" || !!userName).map((f) => {
+              const active = ticketFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setTicketFilter(f.id)}
+                  className="cursor-pointer rounded-[11px] px-[13px] py-2 text-[12.5px] font-semibold transition-colors"
+                  style={
+                    active
+                      ? { background: "linear-gradient(135deg,#8b5cf6,#6366f1)", border: "1px solid transparent", color: "#fff" }
+                      : { background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.09)", color: "#dcdce4" }
+                  }
+                >
+                  {f.label}
+                </button>
+              );
+            })}
 
-          <div className="ml-auto flex items-center gap-[9px]">
-            <Button variant="glass" onClick={() => setSyncOpen(true)}>
-              <RefreshCw size={13} />
-              Sync
-            </Button>
-            <Button variant="primary" className="hidden md:inline-flex" onClick={openCreateRun}>
-              <Plus size={14} strokeWidth={2.3} />
-              Create Run {selCount > 0 && `(${selCount})`}
-            </Button>
+            <div className="ml-auto flex items-center gap-[9px]">
+              <Button variant="glass" onClick={() => setSyncOpen(true)}>
+                <RefreshCw size={13} />
+                Sync
+              </Button>
+              <Button variant="primary" className="hidden md:inline-flex" onClick={openCreateRun}>
+                <Plus size={14} strokeWidth={2.3} />
+                Create Run {selCount > 0 && `(${selCount})`}
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Row 2 — attribute filters */}
-        <div className="flex flex-wrap items-center gap-[9px] border-t border-white/[0.06] pt-[10px]">
+        {/* Row 2 — attribute filters. A single horizontal-scroll rail on mobile
+            (chips never shrink); wraps normally from `md` up. */}
+        <div className="flex items-center gap-[9px] overflow-x-auto border-t border-white/[0.06] pt-[10px] scrollbar-none [&>*]:shrink-0 md:flex-wrap">
           <Select
             value={selectedSprint?.path ?? null}
             options={sprintOptions}
