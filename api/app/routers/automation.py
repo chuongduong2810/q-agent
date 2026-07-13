@@ -190,7 +190,14 @@ def _generate_one(
     filename = spec_service.spec_filename(case.ticket_external_id, case.code)
 
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
-    has_previous_good = bool(spec is not None and (spec.code or "").strip())
+    # "Good" means a genuinely runnable prior spec worth protecting from a rejected
+    # regeneration — NOT merely "has code". A previously *blocked* spec is not good:
+    # freezing it would discard every new attempt, so a rejected regen on a blocked
+    # spec should replace it (visible iteration + a diff to review), while a passing
+    # spec is still kept when a regen comes back rejected.
+    has_previous_good = bool(
+        spec is not None and (spec.code or "").strip() and spec.status != "blocked"
+    )
     if spec is None:
         spec = AutomationSpec(test_case_id=case.id)
         db.add(spec)

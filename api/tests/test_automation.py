@@ -318,6 +318,39 @@ def test_edit_unblocks_spec_when_placeholders_removed(client, db_session, monkey
     assert reblocked["blockReason"]
 
 
+def test_rejected_regen_replaces_a_blocked_spec_instead_of_freezing_it(client, db_session, monkeypatch):
+    """A rejected regeneration REPLACES an already-blocked spec's code (so new
+    attempts and their diff are visible) rather than freezing the old one. A
+    genuinely good (non-blocked) spec would instead be kept on rejection."""
+    from app.services import claude_cli
+    from app.routers import automation as automation_router
+
+    v1 = (
+        "import { test } from '@playwright/test';\n\n"
+        "test('login', async ({ page }) => { await page.goto('TODO-v1'); });\n"
+    )
+    v2 = (
+        "import { test } from '@playwright/test';\n\n"
+        "test('login', async ({ page }) => { await page.goto('TODO-v2-different'); });\n"
+    )
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: v1)
+    run, case = _seed_run_and_case(db_session)
+    _seed_spec(db_session, run, case)
+    first = client.get(f"/cases/{case.id}/spec").json()
+    assert first["status"] == "blocked"
+    assert "TODO-v1" in first["code"]
+
+    # A second, still-rejected attempt must overwrite the blocked code.
+    monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: v2)
+    db_session.commit()
+    automation_router._run_single_regeneration(run.id, case.id, None)
+    db_session.expire_all()
+    second = client.get(f"/cases/{case.id}/spec").json()
+    assert second["status"] == "blocked"
+    assert "TODO-v2-different" in second["code"]
+    assert "TODO-v1" not in second["code"]
+
+
 def test_generate_missing_run_returns_404(client, db_session):
     resp = client.post("/runs/9999/automation/generate")
     assert resp.status_code == 404
