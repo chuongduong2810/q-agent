@@ -1,6 +1,7 @@
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Pill } from "@/components/ui/badges";
 import { PRODUCT_DEFECT_HUE } from "./specStatus";
+import { RegenerateWithNote } from "./RegenerateWithNote";
 
 /** Terminal "product defect" banner — fuchsia, distinct from a script failure. */
 export function ProductDefectBanner() {
@@ -38,7 +39,7 @@ export function BlockedBanner({
   regenerating,
 }: {
   reason: string;
-  onRegenerate: () => void;
+  onRegenerate: (comment?: string) => void;
   regenerating: boolean;
 }) {
   return (
@@ -55,23 +56,13 @@ export function BlockedBanner({
       <p className="m-0 mb-3 text-xs leading-relaxed text-ink-soft">
         {reason || "This spec is blocked and cannot run. Resolve the underlying issue first."}
       </p>
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onRegenerate}
-          disabled={regenerating}
-          title="Regenerate this spec once the block is resolved"
-          className="flex items-center gap-1.5 rounded-[9px] border border-amber-400/40 bg-amber-400/15 px-[11px] py-1.5 text-[11.5px] font-semibold text-amber-200 hover:bg-amber-400/25 disabled:opacity-60"
-        >
-          {regenerating ? (
-            <span
-              className="h-[13px] w-[13px] rounded-full border-2"
-              style={{ borderColor: "rgba(251,191,36,.35)", borderTopColor: "#fbbf24", animation: "spin .8s linear infinite" }}
-            />
-          ) : (
-            <RotateCcw size={13} />
-          )}
-          {regenerating ? "Regenerating…" : "Regenerate to retry"}
-        </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <RegenerateWithNote
+          label="Regenerate to retry"
+          variant="amber"
+          regenerating={regenerating}
+          onRegenerate={onRegenerate}
+        />
         <span className="text-[11px] text-muted">Re-run project bootstrap, then regenerate to unblock.</span>
       </div>
     </div>

@@ -127,6 +127,7 @@ def _build_prompt(
     case: TestCase,
     context: dict[str, Any] | None = None,
     examples: list[dict] | None = None,
+    reviewer_comment: str | None = None,
 ) -> str:
     """Render the Claude prompt for a single test case.
 
@@ -136,6 +137,11 @@ def _build_prompt(
             routes, auth) used to emit a runnable spec with no placeholders.
         examples: Optional few-shot reference specs (proven, already-passing) shown
             so the model matches this project's conventions.
+        reviewer_comment: Optional free-text note from a human reviewer steering
+            this regeneration. When present it is injected as a high-priority
+            guidance block right after the grounding — the caller's gate still
+            enforces quality, so the note cannot license placeholders or weaker
+            assertions.
 
     Returns:
         A prompt string describing the case's title, precondition, and steps,
@@ -164,9 +170,20 @@ def _build_prompt(
             "If a concrete URL or selector isn't known, use reasonable placeholders "
             "and TODO comments rather than inventing unrelated behavior.\n\n"
         )
+    reviewer_block = (
+        (
+            "Reviewer guidance — a human reviewer requested this regeneration with "
+            "these instructions. Prioritise them, but do NOT use placeholders/invented "
+            "values or weaken assertions to satisfy them:\n"
+            f"{reviewer_comment[:2000]}\n\n"
+        )
+        if reviewer_comment
+        else ""
+    )
     return (
         f"Generate a Playwright TypeScript test spec for this manual test case.\n\n"
         f"{grounding}"
+        f"{reviewer_block}"
         f"{_render_examples(examples)}"
         f"Test Case ID: {case.code}\n"
         f"Title: {case.title}\n"
@@ -286,6 +303,7 @@ def generate_spec_code(
     case: TestCase,
     context: dict[str, Any] | None = None,
     examples: list[dict] | None = None,
+    reviewer_comment: str | None = None,
 ) -> str:
     """Ask Claude to generate Playwright TypeScript source for a test case.
 
@@ -295,6 +313,8 @@ def generate_spec_code(
             so the generated spec runs with little to no manual modification.
         examples: Optional few-shot reference specs (proven, already-passing) shown
             so the generated spec matches this project's conventions.
+        reviewer_comment: Optional free-text reviewer note steering a per-case
+            regeneration; forwarded into the prompt as guidance (gate unchanged).
 
     Returns:
         The generated TypeScript spec source code.
@@ -303,7 +323,7 @@ def generate_spec_code(
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
     raw = claude_cli.run_prompt(
-        _build_prompt(case, context, examples),
+        _build_prompt(case, context, examples, reviewer_comment),
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
         include_template=True,

@@ -418,7 +418,8 @@ export const api = {
     get<AutomationStatus>(`/runs/${runId}/automation/status`),
   listSpecs: (runId: number | string) => get<AutomationSpecOut[]>(`/runs/${runId}/automation`),
   getSpec: (caseId: number) => get<AutomationSpecOut>(`/cases/${caseId}/spec`),
-  regenerateSpec: (caseId: number) => post<AutomationSpecOut>(`/cases/${caseId}/spec/regenerate`),
+  regenerateSpec: (caseId: number, comment?: string) =>
+    post<AutomationSpecOut>(`/cases/${caseId}/spec/regenerate`, comment ? { comment } : undefined),
   updateSpec: (caseId: number, code: string) => patch<AutomationSpecOut>(`/cases/${caseId}/spec`, { code }),
   healSpec: (caseId: number) =>
     post<{ started: boolean; maxAttempts: number }>(`/cases/${caseId}/spec/heal`),

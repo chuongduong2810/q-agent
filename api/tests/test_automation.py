@@ -173,6 +173,41 @@ def test_get_case_spec_and_regenerate(client, db_session, monkeypatch):
     assert resp2.json()["id"] == body["id"]
 
 
+def test_regenerate_with_comment_injects_reviewer_guidance(client, db_session, monkeypatch):
+    """A reviewer comment on regenerate is injected into the generation prompt as a
+    'Reviewer guidance' block; omitting the comment leaves the prompt without it."""
+    from app.services import claude_cli
+
+    captured: list[str] = []
+
+    def fake_run_prompt(prompt, *a, **k):
+        captured.append(prompt)
+        return CANNED_SPEC
+
+    monkeypatch.setattr(claude_cli, "run_prompt", fake_run_prompt)
+
+    run, case = _seed_run_and_case(db_session)
+
+    # run_prompt is shared by generation and the automation-reviewer pass — pick
+    # out the generation prompt (the only one that generates a spec).
+    def _gen_prompt() -> str:
+        return next(p for p in captured if p.startswith("Generate a Playwright"))
+
+    resp = client.post(
+        f"/cases/{case.id}/spec/regenerate",
+        json={"comment": "use the real /employers route"},
+    )
+    assert resp.status_code == 200
+    assert "Reviewer guidance" in _gen_prompt()
+    assert "use the real /employers route" in _gen_prompt()
+
+    # Omitting the comment produces the prompt WITHOUT the reviewer-guidance block.
+    captured.clear()
+    resp2 = client.post(f"/cases/{case.id}/spec/regenerate")
+    assert resp2.status_code == 200
+    assert "Reviewer guidance" not in _gen_prompt()
+
+
 def test_update_case_spec_persists_and_rewrites_file(client, db_session, monkeypatch):
     from app.services import claude_cli
 

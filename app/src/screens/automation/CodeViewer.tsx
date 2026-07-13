@@ -106,17 +106,21 @@ function closerCharFor(line: string): string {
  * @param foldRanges Precomputed foldable regions for this code.
  * @param folded Set of opener line indices that are currently collapsed.
  * @param onToggle Toggles the fold state of the region opening at a line.
+ * @param changedLines Optional 0-based indices of lines added/changed by the last
+ *   regeneration — tinted green with a `+` gutter marker (folding is unaffected).
  */
 export function CodeHighlight({
   code,
   foldRanges,
   folded,
   onToggle,
+  changedLines,
 }: {
   code: string;
   foldRanges: FoldRange[];
   folded: Set<number>;
   onToggle: (start: number) => void;
+  changedLines?: Set<number>;
 }) {
   const lines = code.split("\n");
   const endByStart = useMemo(() => new Map(foldRanges.map((r) => [r.start, r.end])), [foldRanges]);
@@ -142,11 +146,12 @@ export function CodeHighlight({
           const end = endByStart.get(i);
           const isFoldable = end !== undefined;
           const isFolded = isFoldable && folded.has(i);
+          const isChanged = changedLines?.has(i) ?? false;
           return (
-            <div key={i} className="flex">
+            <div key={i} className="flex" style={isChanged ? { background: "rgba(16,185,129,.10)" } : undefined}>
               <span
                 className="sticky left-0 z-10 flex select-none items-center gap-1 pl-4 pr-3"
-                style={{ background: gutterBg }}
+                style={{ background: isChanged ? "#0c1512" : gutterBg }}
               >
                 {isFoldable ? (
                   <button
@@ -157,6 +162,8 @@ export function CodeHighlight({
                   >
                     {isFolded ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                   </button>
+                ) : isChanged ? (
+                  <span className="flex h-[14px] w-[14px] items-center justify-center font-bold text-emerald-400">+</span>
                 ) : (
                   <span className="h-[14px] w-[14px]" />
                 )}
