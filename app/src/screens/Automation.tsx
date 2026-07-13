@@ -284,12 +284,14 @@ export function Automation() {
   // the live WS phase for instant feedback.
   const selectedCaseId = selectedSpec?.testCaseId ?? 0;
   const { data: healStatusData } = useHealStatus(selectedCaseId, !!selectedCaseId);
-  const liveHealingThisCase =
-    healProgress?.caseId === selectedCaseId &&
-    healProgress?.phase !== "passed" &&
-    healProgress?.phase !== "failed";
-  const healingThisCase =
-    healSpec.isPending || !!liveHealingThisCase || (healStatusData?.healing ?? false);
+  // Drive the button from server truth (a queued/running heal, via useHealStatus)
+  // plus the in-flight trigger POST — NOT from live WS progress. Gating on the WS
+  // stream would stick "Healing…" forever if any terminal heal.progress event is
+  // missed (WS blip, backgrounded tab) or for a phase the terminal handler doesn't
+  // clear. healStatus polls every 1.5s while healing and flips off the moment the
+  // heal execution completes, so the button always reconciles. The WS stream still
+  // powers the detailed progress banner below.
+  const healingThisCase = healSpec.isPending || (healStatusData?.healing ?? false);
 
   // "Run" stays in its loading state for the whole background execution, not
   // just the POST: true while the mutation is in flight, or while the latest
@@ -470,7 +472,7 @@ export function Automation() {
 
       {generating && !thinking && <GeneratingBanner genProgress={genProgress} />}
 
-      {healProgress && healProgress.phase !== "passed" && healProgress.phase !== "failed" && (
+      {healProgress && !["passed", "failed", "product_defect"].includes(healProgress.phase) && (
         <HealProgressBanner healProgress={healProgress} />
       )}
 
