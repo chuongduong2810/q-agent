@@ -67,7 +67,7 @@ def apply_result(
     return result
 
 
-def finalize(db: Session, execution: Execution, run: Run, log: str) -> None:
+def finalize(db: Session, execution: Execution, run: Run, log: str, advance_run: bool = True) -> None:
     """Finalize an Execution: stamp the log, mark done, advance the run, notify.
 
     Expects ``execution.passed``/``execution.failed``/``execution.total`` to
@@ -76,6 +76,12 @@ def finalize(db: Session, execution: Execution, run: Run, log: str) -> None:
     to ``"evidence"``, and records the execution audit entry. Shared by the
     server runner's normal completion path and the Local Agent's
     ``POST /agent/jobs/{id}/complete`` endpoint.
+
+    Args:
+        advance_run: When False, the run's lifecycle status is left untouched —
+            used for agent-executed self-heal (#260), which re-runs one case's
+            spec and must not push the whole run into the ``evidence`` stage
+            (matching the server heal loop, which never advances the run).
     """
     execution.log = (log or "")[-20000:]
     execution.progress = 100
@@ -90,7 +96,8 @@ def finalize(db: Session, execution: Execution, run: Run, log: str) -> None:
         {"progress": 100, "passed": execution.passed, "failed": execution.failed, "remaining": 0},
     )
     hub.publish(run_id_str, "exec.done", {"passed": execution.passed, "failed": execution.failed})
-    set_run_status(db, run, "evidence")
+    if advance_run:
+        set_run_status(db, run, "evidence")
 
     audit_service.record(
         category="execution", actor_type="ai", action="Executed test run",

@@ -114,6 +114,27 @@ test("postComplete sends the aggregate body", async () => {
   assert.deepEqual(body, { passed: 3, failed: 1, log: "tail" });
 });
 
+test("postHealFix posts the attempt to /agent/heal/{caseId}/fix and returns the action", async () => {
+  mockFetch(() => Response.json({ action: "fixed", code: "// fixed", diff: "@@" }));
+  const out = await api.postHealFix(cfg, 99, {
+    currentCode: "// old", error: "boom", output: "tail", domDistilled: { path: "/x" }, attempt: 2,
+  });
+  assert.equal(calls[0].url, "http://127.0.0.1:8787/agent/heal/99/fix");
+  assert.equal(calls[0].init.method, "POST");
+  const body = JSON.parse(calls[0].init.body as string);
+  assert.deepEqual(body, { currentCode: "// old", error: "boom", output: "tail", domDistilled: { path: "/x" }, attempt: 2 });
+  assert.equal(out.action, "fixed");
+  assert.equal(out.code, "// fixed");
+});
+
+test("postHealFinalize posts the outcome to /agent/heal/{caseId}/finalize", async () => {
+  mockFetch(() => new Response(null, { status: 200 }));
+  await api.postHealFinalize(cfg, 99, { finalStatus: "pass", finalCode: "// x", attempts: [] });
+  assert.equal(calls[0].url, "http://127.0.0.1:8787/agent/heal/99/finalize");
+  const body = JSON.parse(calls[0].init.body as string);
+  assert.equal(body.finalStatus, "pass");
+});
+
 test("redeemDevice posts code+name with no auth header", async () => {
   mockFetch(() => Response.json({ deviceToken: "abc", deviceId: 7 }));
   const result = await api.redeemDevice("http://127.0.0.1:8787", "PAIR123", "my-laptop");

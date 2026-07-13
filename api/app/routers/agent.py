@@ -353,7 +353,11 @@ def complete_job(
     execution, run = _owned_execution(db, execution_id, user)
     execution.passed = int(body.get("passed") or 0)
     execution.failed = int(body.get("failed") or 0)
-    execution_service.finalize(db, execution, run, body.get("log", ""))
+    # An agent heal execution (heal_case_id set) re-runs a single case and must not
+    # advance the run's lifecycle (matches the server heal loop).
+    execution_service.finalize(
+        db, execution, run, body.get("log", ""), advance_run=execution.heal_case_id is None
+    )
     return {"ok": True}
 
 
