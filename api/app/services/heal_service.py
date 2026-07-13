@@ -40,6 +40,38 @@ from app.services.claude_cli import ClaudeError
 from app.services.playwright_runner import _resolve_project_for_run
 
 
+def _known_with_dom(known: dict, dom_snapshot: dict[str, Any] | None) -> dict:
+    """Augment the gate's ``known`` grounding with the live captured DOM (#265).
+
+    A route/selector observed in the actually-rendered page is real, not
+    hallucinated — so the placeholder gate must not flag a fix that uses it as an
+    "invented reference". This adds the captured pathname (route) and each captured
+    element's identifier(s) — as the exact literal forms the gate extracts from code
+    (bare test id, ``[data-testid="…"]``, ``#id``) — to ``known``. This is what lets
+    a DOM-grounded heal pass the gate (and then enrich the KB on the pass), breaking
+    the chicken-and-egg where DOM-derived refs were rejected as unknown.
+    """
+    if not dom_snapshot:
+        return known
+    routes = list(known.get("routes") or [])
+    selectors = list(known.get("selectors") or [])
+    path = (dom_snapshot.get("path") or "").strip()
+    if path:
+        routes.append({"path": path})
+    for el in dom_snapshot.get("elements") or []:
+        if not isinstance(el, dict):
+            continue
+        test_id = el.get("testId")
+        if test_id:
+            selectors.append({"selector": test_id})
+            selectors.append({"selector": f'[data-testid="{test_id}"]'})
+        el_id = el.get("id")
+        if el_id:
+            selectors.append({"selector": f"#{el_id}"})
+            selectors.append({"selector": el_id})
+    return {**known, "routes": routes, "selectors": selectors}
+
+
 def _resolve_grounding(db, case: TestCase, run: Run) -> tuple[dict, dict, list[dict]]:
     """Resolve the DB-backed grounding a fix needs: (context, known, examples).
 
@@ -140,7 +172,9 @@ def _plan_fix(
             "reason": "Rejected fix: it removed/weakened assertions (anti-cheat).",
         }
 
-    gate = placeholder_gate.gate_spec(fixed, known)
+    # Gate against the KB PLUS the live captured DOM — a fix that uses real,
+    # observed routes/selectors is grounded, not invented (#265).
+    gate = placeholder_gate.gate_spec(fixed, _known_with_dom(known, dom_snapshot))
     if gate["outcome"] == "blocked":
         return {
             "action": "blocked",

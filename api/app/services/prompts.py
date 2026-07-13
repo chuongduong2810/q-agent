@@ -267,6 +267,14 @@ def render_dom_snapshot(dom_snapshot: dict[str, Any] | None, *, max_elements: in
     lines.extend(_fmt(e) for e in ranked)
     if len(elements) > len(ranked):
         lines.append(f"  … ({len(elements) - len(ranked)} more elements omitted)")
+    # These are REAL observed values — use them verbatim. Templated placeholders
+    # (${BASE_URL}, ${EMPLOYER_ID}, …) are treated as invented refs by the gate and
+    # will be rejected, so concrete literals are required, not env-var templates.
+    lines.append(
+        "Ground the fix in these exact values: use the 'Current page' path above as a "
+        "literal string in page.goto(...) and use the exact test ids / selectors listed. "
+        "Do NOT use ${...} template variables or placeholder URLs — write concrete literals."
+    )
     return "\n".join(lines)
 
 

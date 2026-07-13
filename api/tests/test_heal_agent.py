@@ -111,6 +111,44 @@ def test_plan_fix_rejects_assertion_weakening(db_session, monkeypatch, grounding
     assert "assert" in out["reason"].lower()
 
 
+_DOM_GROUNDED_FIX = (
+    "import { test, expect } from '@playwright/test';\n"
+    "test('Login works', async ({ page }) => {\n"
+    "  await page.goto('/employers/abc-123/portal-users');\n"
+    "  await expect(page.getByTestId('user-row')).toBeVisible();\n"
+    "});\n"
+)
+
+
+def test_plan_fix_accepts_refs_present_in_captured_dom(db_session, monkeypatch, grounding):
+    """A fix using a route/selector observed in the live DOM (but absent from the
+    static KB) passes the gate — #265, the DOM-aware grounding that unblocks heal."""
+    run, case, _spec = _seed(db_session)
+    monkeypatch.setattr(
+        heal_service.failure_classifier, "classify_failure",
+        lambda *a, **k: {"failureClass": "test_defect", "suspectedProductDefect": False, "reason": "r"},
+    )
+    monkeypatch.setattr(heal_service.spec_service, "generate_fixed_spec_code", lambda *a, **k: _DOM_GROUNDED_FIX)
+    dom = {"path": "/employers/abc-123/portal-users", "elements": [{"tag": "tr", "testId": "user-row"}]}
+
+    out = heal_service.plan_fix(db_session, case, run, "old", "err", "out", dom)
+    assert out["action"] == "fixed"
+
+
+def test_plan_fix_rejects_refs_not_in_dom_or_kb(db_session, monkeypatch, grounding):
+    """Control: the same fix WITHOUT the captured DOM is still rejected as invented —
+    the gate only trusts what was actually observed, it doesn't blanket-bypass."""
+    run, case, _spec = _seed(db_session)
+    monkeypatch.setattr(
+        heal_service.failure_classifier, "classify_failure",
+        lambda *a, **k: {"failureClass": "test_defect", "suspectedProductDefect": False, "reason": "r"},
+    )
+    monkeypatch.setattr(heal_service.spec_service, "generate_fixed_spec_code", lambda *a, **k: _DOM_GROUNDED_FIX)
+
+    out = heal_service.plan_fix(db_session, case, run, "old", "err", "out", None)
+    assert out["action"] == "rejected"
+
+
 def test_finalize_pass_sets_status_and_feeds_kb(db_session, monkeypatch):
     run, case, spec = _seed(db_session)
     monkeypatch.setattr(heal_service.spec_service, "write_spec_file", lambda *a, **k: "spec.ts")
