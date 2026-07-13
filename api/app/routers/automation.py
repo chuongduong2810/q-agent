@@ -495,10 +495,18 @@ def regenerate_case_spec(
     case, run = _get_case_and_run_or_404(db, case_id, user)
     comment = (body.comment or "").strip() or None
 
+    # Attribute this Claude call to the run's owner so it resolves that user's
+    # credential (own→shared), exactly like the bulk generator (_run_generation).
+    # Without an ambient run, resolve_ambient_owner_id() returns None and the call
+    # silently falls back to the *shared* credential — which 401s when the owner's
+    # own credential is the valid one and the shared is missing/expired (#237).
+    run_context.set_run(run.id)
     try:
         spec = _generate_one(db, run, case, reviewer_comment=comment)
     except ClaudeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        run_context.clear()
     db.commit()
     db.refresh(spec)
     audit_service.record(
