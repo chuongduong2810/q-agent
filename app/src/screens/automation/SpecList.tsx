@@ -48,8 +48,7 @@ export function SpecList({
                 execStatus={resultStatusByCase.get(s.testCaseId)}
                 healing={
                   healProgress?.caseId === s.testCaseId &&
-                  healProgress?.phase !== "passed" &&
-                  healProgress?.phase !== "failed"
+                  !["passed", "failed", "product_defect"].includes(healProgress?.phase ?? "")
                 }
               />
             </button>
@@ -77,8 +76,7 @@ export function SpecList({
                 execStatus={resultStatusByCase.get(s.testCaseId)}
                 healing={
                   healProgress?.caseId === s.testCaseId &&
-                  healProgress?.phase !== "passed" &&
-                  healProgress?.phase !== "failed"
+                  !["passed", "failed", "product_defect"].includes(healProgress?.phase ?? "")
                 }
               />
             </button>

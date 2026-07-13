@@ -20,7 +20,7 @@ export type HealProgress = {
   caseCode: string;
   attempt: number;
   maxAttempts: number;
-  phase: "running" | "fixing" | "passed" | "failed";
+  phase: "running" | "fixing" | "passed" | "failed" | "product_defect";
   message: string;
   error: string;
 };
@@ -81,13 +81,18 @@ export function useAutomationEvents(runId: number, generating: boolean) {
         caseCode: string;
         attempt: number;
         maxAttempts: number;
-        phase: "running" | "fixing" | "passed" | "failed";
+        phase: "running" | "fixing" | "passed" | "failed" | "product_defect";
         message: string;
         error?: string;
       };
       setHealProgress({ ...p, error: p.error ?? "" });
-      if (p.phase === "passed" || p.phase === "failed") {
+      // Every terminal phase must clear + reconcile — otherwise the banner (and,
+      // before, the button) sticks. `product_defect` is terminal too (the heal
+      // routed the case to the report rather than fixing it).
+      if (p.phase === "passed" || p.phase === "failed" || p.phase === "product_defect") {
         if (p.phase === "passed") toast.success(`Self-heal fixed ${p.caseCode}`);
+        else if (p.phase === "product_defect")
+          toast.error(`${p.caseCode}: product defect suspected — routed to the report`);
         else toast.error(`Self-heal gave up on ${p.caseCode}: ${p.message || "still failing"}`);
         // The spec code, latest execution result, and heal trail changed on the server.
         qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
