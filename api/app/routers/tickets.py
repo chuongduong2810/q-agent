@@ -67,8 +67,14 @@ def list_tickets(
     if sprint:
         query = query.filter(Ticket.sprint == sprint)
     if area_path:
-        # UNDER semantics: the selected area path and its children.
-        query = query.filter(Ticket.area_path.like(f"{area_path}%"))
+        # UNDER semantics: the selected area path and its children. Use
+        # startswith(autoescape=True) rather than a raw LIKE: ADO area paths
+        # contain backslashes (e.g. "Surency\\Data Platform") and Postgres LIKE
+        # treats backslash as its default ESCAPE char, so a raw
+        # `LIKE 'Surency\\Data Platform%'` collapses to `SurencyData Platform%`
+        # and matches nothing. autoescape emits `ESCAPE '/'` and escapes %/_ in
+        # the value, keeping backslashes literal.
+        query = query.filter(Ticket.area_path.startswith(area_path, autoescape=True))
     state_list = [s for s in (states or "").split(",") if s]
     if state_list:
         query = query.filter(Ticket.status.in_(state_list))
