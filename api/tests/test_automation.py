@@ -86,6 +86,19 @@ def _seed_run_and_case(db_session, *, automation="Playwright", approval="approve
     return run, case
 
 
+def _seed_spec(db_session, run, case):
+    """Synchronously generate + persist one case's spec on the test session.
+
+    The regenerate endpoint is now fire-and-forget (it runs generation in a
+    background thread so it can't hit the proxy timeout), so tests that just need
+    a spec to exist call ``_generate_one`` directly rather than racing the worker.
+    """
+    from app.routers import automation as automation_router
+
+    automation_router._generate_one(db_session, run, case)
+    db_session.commit()
+
+
 def test_generate_writes_spec_file_and_persists_row(client, db_session, monkeypatch):
     from app.services import claude_cli
 
@@ -162,21 +175,29 @@ def test_get_case_spec_and_regenerate(client, db_session, monkeypatch):
 
     run, case = _seed_run_and_case(db_session)
 
+    # The endpoint is fire-and-forget: it acknowledges and streams the result
+    # over the run WS. The background worker persists the spec (seeded here).
     resp = client.post(f"/cases/{case.id}/spec/regenerate")
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["testCaseId"] == case.id
-    assert body["filename"] == "1428-TC-01.spec.ts"
+    assert resp.json() == {"started": True, "caseId": case.id}
+
+    _seed_spec(db_session, run, case)
 
     resp2 = client.get(f"/cases/{case.id}/spec")
     assert resp2.status_code == 200
-    assert resp2.json()["id"] == body["id"]
+    assert resp2.json()["testCaseId"] == case.id
+    assert resp2.json()["filename"] == "1428-TC-01.spec.ts"
 
 
 def test_regenerate_with_comment_injects_reviewer_guidance(client, db_session, monkeypatch):
     """A reviewer comment on regenerate is injected into the generation prompt as a
-    'Reviewer guidance' block; omitting the comment leaves the prompt without it."""
+    'Reviewer guidance' block; omitting the comment leaves the prompt without it.
+
+    Regeneration runs off-request in a background thread (so it can't hit the
+    proxy timeout), so we drive the worker directly rather than racing the thread.
+    """
     from app.services import claude_cli
+    from app.routers import automation as automation_router
 
     captured: list[str] = []
 
@@ -187,24 +208,30 @@ def test_regenerate_with_comment_injects_reviewer_guidance(client, db_session, m
     monkeypatch.setattr(claude_cli, "run_prompt", fake_run_prompt)
 
     run, case = _seed_run_and_case(db_session)
+    db_session.commit()  # the worker opens its own session — make the seed visible
 
     # run_prompt is shared by generation and the automation-reviewer pass — pick
     # out the generation prompt (the only one that generates a spec).
     def _gen_prompt() -> str:
         return next(p for p in captured if p.startswith("Generate a Playwright"))
 
+    # The endpoint is fire-and-forget: it returns immediately after kicking off
+    # the background worker.
     resp = client.post(
         f"/cases/{case.id}/spec/regenerate",
         json={"comment": "use the real /employers route"},
     )
     assert resp.status_code == 200
+    assert resp.json().get("started") is True
+
+    # Drive the worker synchronously to assert the prompt-injection behavior.
+    automation_router._run_single_regeneration(run.id, case.id, "use the real /employers route")
     assert "Reviewer guidance" in _gen_prompt()
     assert "use the real /employers route" in _gen_prompt()
 
     # Omitting the comment produces the prompt WITHOUT the reviewer-guidance block.
     captured.clear()
-    resp2 = client.post(f"/cases/{case.id}/spec/regenerate")
-    assert resp2.status_code == 200
+    automation_router._run_single_regeneration(run.id, case.id, None)
     assert "Reviewer guidance" not in _gen_prompt()
 
 
@@ -216,7 +243,7 @@ def test_update_case_spec_persists_and_rewrites_file(client, db_session, monkeyp
     run, case = _seed_run_and_case(db_session)
 
     # Seed a spec via regenerate, then edit it.
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
 
     # Carries a real assertion so it isn't caught by the zero-assertion flaky check.
     edited = (
@@ -268,7 +295,7 @@ def test_edit_unblocks_spec_when_placeholders_removed(client, db_session, monkey
     )
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: blocked)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
     got = client.get(f"/cases/{case.id}/spec").json()
     assert got["status"] == "blocked"
     assert got["blockReason"]
@@ -391,7 +418,7 @@ def test_heal_rejected_while_run_executing(client, db_session, monkeypatch):
 
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
 
     # The endpoint reads via the shared db_session, so set status on it directly.
     run.status = "executing"
@@ -405,7 +432,7 @@ def test_heal_passes_first_run_marks_result_pass(client, db_session, monkeypatch
 
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
     _seed_execution_result(db_session, run, case, status="fail")
 
     def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):
@@ -459,7 +486,7 @@ def test_heal_fixes_then_passes_updates_spec(client, db_session, monkeypatch):
 
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
     _seed_execution_result(db_session, run, case, status="fail")
 
     calls = {"invoke": 0, "fix": 0}
@@ -539,7 +566,7 @@ def test_heal_report_captures_attempts_and_diff(client, db_session, monkeypatch)
 
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
     _seed_execution_result(db_session, run, case, status="fail")
 
     calls = {"n": 0}
@@ -586,7 +613,7 @@ def test_heal_report_empty_when_never_healed(client, db_session, monkeypatch):
 
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
     assert client.get(f"/cases/{case.id}/spec/heal/report").json() == {}
 
 
@@ -646,7 +673,7 @@ def test_heal_rejects_assertion_weakening_fix(client, db_session, monkeypatch):
 
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
     original = client.get(f"/cases/{case.id}/spec").json()["code"]  # 3 assertions
     _seed_execution_result(db_session, run, case, status="fail")
 
@@ -702,7 +729,7 @@ def test_heal_stops_on_product_defect_without_regenerating(client, db_session, m
 
     monkeypatch.setattr(claude_cli, "run_prompt", lambda *a, **k: CANNED_SPEC)
     run, case = _seed_run_and_case(db_session)
-    assert client.post(f"/cases/{case.id}/spec/regenerate").status_code == 200
+    _seed_spec(db_session, run, case)
     _seed_execution_result(db_session, run, case, status="fail")
 
     def fake_invoke(spec_dir_arg, workers, timeout_s, spec_file=""):

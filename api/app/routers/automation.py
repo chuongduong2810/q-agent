@@ -51,6 +51,10 @@ router = APIRouter(tags=["automation"])
 # state after navigating away/back, and prevents double-triggering generation.
 _generating: set[int] = set()
 
+# Case ids with an in-flight single-case regeneration (background thread) — guards
+# against double-triggering the same case's regenerate.
+_regenerating_cases: set[int] = set()
+
 
 def is_generating(run_id: int) -> bool:
     return run_id in _generating
@@ -337,6 +341,42 @@ def _run_generation(run_id: int, force: bool = False) -> None:
         run_context.clear()
 
 
+def _run_single_regeneration(run_id: int, case_id: int, reviewer_comment: str | None) -> None:
+    """Background worker: regenerate one case's spec and stream the result over WS.
+
+    Runs off-request (see ``regenerate_case_spec``) so a slow, multi-Claude-call
+    regeneration can't exceed the fronting proxy/tunnel timeout. Sets the run
+    context so the Claude call resolves the run owner's credential (own→shared),
+    then publishes ``spec.regenerated`` with either the fresh ``spec`` payload or
+    an ``error`` string for the client to react to.
+    """
+    run_context.set_run(run_id)
+    db = db_module.SessionLocal()
+    try:
+        run = db.get(Run, run_id)
+        case = db.get(TestCase, case_id)
+        if run is None or case is None:
+            return
+        try:
+            spec = _generate_one(db, run, case, reviewer_comment=reviewer_comment)
+            db.commit()
+            db.refresh(spec)
+            audit_service.record(
+                category="ai", actor_type="ai", action="Regenerated spec",
+                target=f"{case.ticket_external_id} · {case.code}",
+                meta=f"Comment: {reviewer_comment[:500]}" if reviewer_comment else "",
+            )
+            hub.publish(str(run_id), "spec.regenerated", {"caseId": case_id, "spec": _spec_out(spec)})
+        except Exception as exc:  # noqa: BLE001 - surface the failure to the client, never crash the thread
+            db.rollback()
+            logger.error("Spec regeneration failed for case {}: {}", case_id, exc)
+            hub.publish(str(run_id), "spec.regenerated", {"caseId": case_id, "error": str(exc)})
+    finally:
+        _regenerating_cases.discard(case_id)
+        db.close()
+        run_context.clear()
+
+
 @router.post("/runs/{run_id}/automation/generate")
 def generate_automation(
     run_id: int,
@@ -495,31 +535,19 @@ def regenerate_case_spec(
     case, run = _get_case_and_run_or_404(db, case_id, user)
     comment = (body.comment or "").strip() or None
 
-    # Attribute this Claude call to the run's owner so it resolves that user's
-    # credential (own→shared), exactly like the bulk generator (_run_generation).
-    # Without an ambient run, resolve_ambient_owner_id() returns None and the call
-    # silently falls back to the *shared* credential — which 401s when the owner's
-    # own credential is the valid one and the shared is missing/expired (#237).
-    run_context.set_run(run.id)
-    try:
-        spec = _generate_one(db, run, case, reviewer_comment=comment)
-    except ClaudeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    finally:
-        run_context.clear()
-    db.commit()
-    db.refresh(spec)
-    audit_service.record(
-        category="ai", actor_type="ai", action="Regenerated spec",
-        target=f"{case.ticket_external_id} · {case.code}",
-        meta=f"Comment: {comment[:500]}" if comment else "",
-    )
-    hub.publish(
-        str(run.id),
-        "automation.progress",
-        {"file": spec.filename, "message": "Regenerated", "done": 1, "total": 1},
-    )
-    return _spec_out(spec)
+    # Run OFF-REQUEST: a regeneration makes multiple sequential Claude calls
+    # (generate + static review) and routinely runs well over a minute, which
+    # exceeds the fronting proxy/tunnel timeout (Cloudflare → 524) if done inline.
+    # Kick off a background thread and stream the result over the run WS as
+    # `spec.regenerated`; the client shows a "Regenerating…" state until it lands.
+    if case_id not in _regenerating_cases:
+        _regenerating_cases.add(case_id)
+        threading.Thread(
+            target=_run_single_regeneration,
+            args=(run.id, case_id, comment),
+            daemon=True,
+        ).start()
+    return {"started": True, "caseId": case_id}
 
 
 @router.post("/cases/{case_id}/spec/heal")
