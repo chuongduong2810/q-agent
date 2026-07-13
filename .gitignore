@@ -40,6 +40,13 @@ api/workspace/
 
 # designs
 designs/
+# Local design exports / mockup artifacts (not source — kept locally, never committed)
+/design/LocalAgent2/
+/design/Q-Agent_mobile/
+/design/Q-Agent (09072026)/
+/design/Q-Agent (09072026)*.zip
+/design/Q-Agent Mobile.dc.html
+/design/Toast (standalone).html
 # Local Agent installers staged for the /downloads route (built out-of-band, large)
 /downloads/*
 !/downloads/.gitkeep
