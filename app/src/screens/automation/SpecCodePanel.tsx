@@ -154,7 +154,7 @@ export function SpecCodePanel({
                 disabled={generating || specRegenerating || healingThisCase || runningThisSpec || runSuppressed}
                 title={
                   isBlocked
-                    ? "Blocked — resolve the reason first"
+                    ? "Run anyway — this spec is blocked and will likely fail until unblocked"
                     : isProductDefect
                       ? "Product defect — routed to report, not re-run"
                       : "Run only this spec"
@@ -176,7 +176,7 @@ export function SpecCodePanel({
                 disabled={generating || specRegenerating || healingThisCase || runSuppressed}
                 title={
                   isBlocked
-                    ? "Blocked — resolve the reason first"
+                    ? "Self-heal — run it and let Claude try to fix/unblock it (fixes are still gated, so a missing-Knowledge-Base block needs a KB refresh)"
                     : isProductDefect
                       ? "Product defect is terminal — self-heal disabled"
                       : "Run this spec; if it fails, let Claude fix it from the error and retry"

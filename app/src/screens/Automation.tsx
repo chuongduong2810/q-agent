@@ -310,7 +310,10 @@ export function Automation() {
   // Authoritative status for the selected spec, driving which actions are
   // suppressed and which status banner shows in the right panel.
   const selectedStatus = normalizeSpecStatus(selectedSpec?.status);
-  const runSuppressed = selectedStatus === "blocked" || selectedStatus === "product_defect";
+  // Only a product defect is truly non-runnable (triaged app bug → report). A
+  // blocked spec can be Run / Self-healed on demand as a manual override (the
+  // gate stays authoritative for normal/bulk runs).
+  const runSuppressed = selectedStatus === "product_defect";
   const isProductDefect = selectedStatus === "product_defect";
   const isBlocked = selectedStatus === "blocked";
   // Last placeholder-gate outcome for the selected spec: surface a non-destructive
