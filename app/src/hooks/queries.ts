@@ -693,7 +693,8 @@ export const useGenerateAutomation = (runId: number | string) => {
 export const useRegenerateSpec = (runId: number | string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (caseId: number) => api.regenerateSpec(caseId),
+    mutationFn: ({ caseId, comment }: { caseId: number; comment?: string }) =>
+      api.regenerateSpec(caseId, comment),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.specs(runId) }),
   });
 };

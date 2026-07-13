@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import db as db_module
@@ -27,7 +27,7 @@ from app.models.run import Run, RunTicket
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
 from app.models.user import User
-from app.schemas import AutomationSpecUpdate
+from app.schemas import AutomationSpecRegenerate, AutomationSpecUpdate
 from app.services import (
     audit_service,
     placeholder_gate,
@@ -147,7 +147,9 @@ def _review_critical_findings(review: dict) -> list[str]:
     ]
 
 
-def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
+def _generate_one(
+    db: Session, run: Run, case: TestCase, reviewer_comment: str | None = None
+) -> AutomationSpec:
     """Generate (or regenerate) and persist the AutomationSpec for one case.
 
     Generation is grounded with few-shot examples (proven passing specs from the
@@ -169,13 +171,18 @@ def _generate_one(db: Session, run: Run, case: TestCase) -> AutomationSpec:
         db: Active session (caller commits).
         run: The owning Run (provides run.code for the spec path).
         case: The approved, non-Manual TestCase to generate a spec for.
+        reviewer_comment: Optional free-text note (from a per-case regenerate)
+            injected into the generation prompt as reviewer guidance. The gate
+            still runs unchanged, so a comment can never bypass quality gating.
 
     Returns:
         The created or updated AutomationSpec row (not yet committed).
     """
     context = spec_service.build_case_context(db, case, env=run.env)
     examples = _select_examples_for_case(db, case)
-    code = spec_service.generate_spec_code(case, context, examples=examples)
+    code = spec_service.generate_spec_code(
+        case, context, examples=examples, reviewer_comment=reviewer_comment
+    )
     filename = spec_service.spec_filename(case.ticket_external_id, case.code)
 
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
@@ -473,17 +480,32 @@ def update_case_spec(
 
 @router.post("/cases/{case_id}/spec/regenerate")
 def regenerate_case_spec(
-    case_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+    case_id: int,
+    body: AutomationSpecRegenerate = Body(default_factory=AutomationSpecRegenerate),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
 ) -> dict:
-    """Synchronously regenerate the automation spec for a single test case."""
+    """Synchronously regenerate the automation spec for a single test case.
+
+    An optional free-text ``comment`` steers this one regeneration (audit-only;
+    not persisted on the spec row): it is injected into the generation prompt as
+    reviewer guidance, but the placeholder / invented-reference gate still runs
+    unchanged — a comment can never bypass quality gating.
+    """
     case, run = _get_case_and_run_or_404(db, case_id, user)
+    comment = (body.comment or "").strip() or None
 
     try:
-        spec = _generate_one(db, run, case)
+        spec = _generate_one(db, run, case, reviewer_comment=comment)
     except ClaudeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     db.commit()
     db.refresh(spec)
+    audit_service.record(
+        category="ai", actor_type="ai", action="Regenerated spec",
+        target=f"{case.ticket_external_id} · {case.code}",
+        meta=f"Comment: {comment[:500]}" if comment else "",
+    )
     hub.publish(
         str(run.id),
         "automation.progress",

@@ -1,7 +1,9 @@
-import { Download, Pencil, Play, RotateCcw, Save, Wand2, X } from "lucide-react";
+import { Download, Pencil, Play, Save, Wand2, X } from "lucide-react";
 import type { AutomationSpecOut } from "@/types/api";
+import { Pill } from "@/components/ui/badges";
 import { GateRejectedNote } from "./banners";
 import { CodeHighlight, type FoldRange } from "./CodeViewer";
+import { RegenerateWithNote } from "./RegenerateWithNote";
 
 /**
  * The right-hand code panel for the selected spec: header toolbar (Save/Cancel
@@ -32,6 +34,9 @@ export function SpecCodePanel({
   updateSpecPending,
   startExecutionPending,
   copyLabel,
+  changedLines,
+  regenVersion,
+  feedbackSignal,
   onCopy,
   onDownload,
   onStartEdit,
@@ -63,12 +68,15 @@ export function SpecCodePanel({
   updateSpecPending: boolean;
   startExecutionPending: boolean;
   copyLabel: string;
+  changedLines?: Set<number>;
+  regenVersion?: number;
+  feedbackSignal?: number;
   onCopy: () => void;
   onDownload: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
-  onRegenerate: () => void;
+  onRegenerate: (comment?: string) => void;
   onRunSpec: () => void;
   onStartHeal: () => void;
   onStartExecution: () => void;
@@ -129,26 +137,18 @@ export function SpecCodePanel({
                 <Pencil size={13} />
                 Edit
               </button>
-              <button
-                onClick={onRegenerate}
-                disabled={specRegenerating || isProductDefect}
-                title={
-                  isProductDefect
-                    ? "Product defect is terminal — regeneration disabled"
-                    : "Regenerate this spec from its test case"
-                }
-                className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-60"
-              >
-                {specRegenerating ? (
-                  <span
-                    className="h-[13px] w-[13px] rounded-full border-2"
-                    style={{ borderColor: "rgba(167,139,250,.35)", borderTopColor: "#a78bfa", animation: "spin .8s linear infinite" }}
-                  />
-                ) : (
-                  <RotateCcw size={13} />
-                )}
-                {specRegenerating ? "Regenerating…" : "Regenerate"}
-              </button>
+              <RegenerateWithNote
+                label="Regenerate"
+                regenerating={specRegenerating}
+                disabled={isProductDefect}
+                onRegenerate={onRegenerate}
+                openSignal={feedbackSignal}
+              />
+              {regenVersion != null && (
+                <Pill color="#a78bfa" bg="rgba(167,139,250,.14)">
+                  v{regenVersion}
+                </Pill>
+              )}
               <button
                 onClick={onRunSpec}
                 disabled={generating || specRegenerating || healingThisCase || runningThisSpec || runSuppressed}
@@ -235,6 +235,7 @@ export function SpecCodePanel({
               foldRanges={foldRanges}
               folded={folded}
               onToggle={toggleFold}
+              changedLines={changedLines}
             />
           </div>
           {(generating || specRegenerating) && (

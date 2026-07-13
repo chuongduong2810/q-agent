@@ -37,6 +37,8 @@ import { SpecList } from "./automation/SpecList";
 import { ProductDefectBanner, BlockedBanner } from "./automation/banners";
 import { SpecCodePanel } from "./automation/SpecCodePanel";
 import { HealTimeline } from "./automation/HealTimeline";
+import { diffLines } from "./automation/lineDiff";
+import { RegenSummary, deriveTags } from "./automation/RegenSummary";
 
 export function Automation() {
   const runId = Number(useParams().runId);
@@ -76,6 +78,22 @@ export function Automation() {
   );
 
   const [copyLabel, setCopyLabel] = useState("Copy");
+
+  // Ephemeral, client-side inline-diff state for the last regeneration of the
+  // selected case: which lines changed vs the previous code, a lines-changed
+  // count, heuristic tags, and a per-case version number. Cleared when the
+  // selected case changes; never persisted (no migration).
+  const [regenResult, setRegenResult] = useState<{
+    caseId: number;
+    prevCode: string;
+    changed: Set<number>;
+    count: number;
+    tags: string[];
+    version: number;
+  } | null>(null);
+  const [versionByCase, setVersionByCase] = useState<Record<number, number>>({});
+  // Bumped by the RegenSummary "Feedback" button to force-open the note composer.
+  const [feedbackSignal, setFeedbackSignal] = useState(0);
   // Generation runs in the background on the server; the POST returns
   // immediately. Derive the running state from the persisted server status so it
   // survives navigation and blocks re-triggering.
@@ -279,6 +297,38 @@ export function Automation() {
     });
   };
 
+  // Clear the inline-diff banner whenever the selected case changes so a diff
+  // never bleeds across specs.
+  useEffect(() => {
+    setRegenResult(null);
+  }, [selectedSpecCaseId]);
+
+  // Regenerate the selected spec, optionally with a reviewer note. Captures the
+  // current code first so success can diff old vs new; a regeneration that leaves
+  // the code unchanged OR comes back blocked shows no diff banner (the
+  // GateRejectedNote / BlockedBanner already explain those outcomes).
+  const handleRegenerate = (comment?: string) => {
+    if (!selectedSpec) return;
+    const caseId = selectedSpec.testCaseId;
+    const prevCode = selectedSpec.code;
+    regenerateSpec.mutate(
+      { caseId, comment },
+      {
+        onSuccess: (data) => {
+          if (data.code === prevCode || data.status === "blocked") return;
+          const { changed, count, removed } = diffLines(prevCode, data.code);
+          const nextLines = data.code.split("\n");
+          const added = [...changed].map((i) => nextLines[i] ?? "");
+          const tags = deriveTags(added, removed);
+          const nextVersion = (versionByCase[caseId] ?? 1) + 1;
+          setVersionByCase((prev) => ({ ...prev, [caseId]: nextVersion }));
+          setRegenResult({ caseId, prevCode, changed, count, tags, version: nextVersion });
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to regenerate spec"),
+      },
+    );
+  };
+
   const cancelEdit = () => setEditing(false);
 
   const saveEdit = () => {
@@ -371,8 +421,31 @@ export function Automation() {
           {isBlocked && (
             <BlockedBanner
               reason={selectedSpec?.blockReason ?? ""}
-              onRegenerate={() => selectedSpec && regenerateSpec.mutate(selectedSpec.testCaseId)}
+              onRegenerate={handleRegenerate}
               regenerating={specRegenerating}
+            />
+          )}
+          {regenResult && regenResult.caseId === selectedSpec?.testCaseId && (
+            <RegenSummary
+              version={regenResult.version}
+              count={regenResult.count}
+              tags={regenResult.tags}
+              reverting={updateSpec.isPending}
+              onFeedback={() => setFeedbackSignal((n) => n + 1)}
+              onRevert={() => {
+                if (!selectedSpec) return;
+                updateSpec.mutate(
+                  { caseId: selectedSpec.testCaseId, code: regenResult.prevCode },
+                  {
+                    onSuccess: () => {
+                      setRegenResult(null);
+                      toast.success("Reverted to previous spec");
+                    },
+                    onError: (e) =>
+                      toast.error(e instanceof Error ? e.message : "Failed to revert spec"),
+                  },
+                );
+              }}
             />
           )}
           <SpecCodePanel
@@ -397,12 +470,19 @@ export function Automation() {
             updateSpecPending={updateSpec.isPending}
             startExecutionPending={startExecution.isPending}
             copyLabel={copyLabel}
+            changedLines={
+              regenResult && regenResult.caseId === selectedSpec?.testCaseId
+                ? regenResult.changed
+                : undefined
+            }
+            regenVersion={selectedSpec ? versionByCase[selectedSpec.testCaseId] : undefined}
+            feedbackSignal={feedbackSignal}
             onCopy={handleCopy}
             onDownload={handleDownload}
             onStartEdit={startEdit}
             onCancelEdit={cancelEdit}
             onSaveEdit={saveEdit}
-            onRegenerate={() => selectedSpec && regenerateSpec.mutate(selectedSpec.testCaseId)}
+            onRegenerate={handleRegenerate}
             onRunSpec={runThisSpec}
             onStartHeal={startHeal}
             onStartExecution={startExecutionAndView}

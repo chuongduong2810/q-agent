@@ -607,6 +607,17 @@ class AutomationSpecUpdate(ApiModel):
     code: str
 
 
+class AutomationSpecRegenerate(ApiModel):
+    """Optional free-text reviewer note steering a single-case spec regeneration.
+
+    The comment is injected into the generation prompt as reviewer guidance and
+    recorded in the audit log; it is never persisted on the spec row and cannot
+    bypass the placeholder / invented-reference gate.
+    """
+
+    comment: str | None = None
+
+
 # ---------------------------------------------------------------- Execution
 class EvidenceOut(ApiModel):
     id: int
