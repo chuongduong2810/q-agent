@@ -22,7 +22,7 @@ import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./ses
 // Mirrors api/app/config.py's Settings.exec_timeout_s / auth_capture_timeout_s.
 const EXEC_TIMEOUT_MS = 600_000;
 const AUTH_CAPTURE_TIMEOUT_MS = 300_000;
-const IDLE_POLL_MS = 3_000;
+const IDLE_POLL_MS = 1_000;
 
 let activeChild: ChildProcess | null = null;
 

@@ -141,6 +141,21 @@ def test_finalize_pass_sets_status_and_feeds_kb(db_session, monkeypatch):
     assert calls["merge"] and calls["swap"]  # both KB feedback paths fired on a pass
 
 
+def test_heal_status_reports_queued_agent_heal(db_session):
+    """The heal-status endpoint flags a queued/running agent heal so the button
+    shows 'Healing…' immediately (not only once heal.progress streams)."""
+    from app.models.execution import Execution
+    from app.routers.automation import heal_case_spec_status
+
+    run, case, _spec = _seed(db_session)
+    assert heal_case_spec_status(case.id, db=db_session, user=None)["healing"] is False
+
+    ex = Execution(run_id=run.id, status="queued", target="local-agent", heal_case_id=case.id, total=1)
+    db_session.add(ex)
+    db_session.commit()
+    assert heal_case_spec_status(case.id, db=db_session, user=None)["healing"] is True
+
+
 def test_finalize_blocked_sets_block_reason(db_session, monkeypatch):
     run, case, spec = _seed(db_session)
     monkeypatch.setattr(heal_service.spec_service, "write_spec_file", lambda *a, **k: "spec.ts")
