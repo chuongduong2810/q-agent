@@ -15,7 +15,7 @@ import { emit } from "./bus";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
 import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorCaptureScript } from "./paths";
-import { applyAuthFixtures, writeConfig } from "./playwrightConfig";
+import { applyFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
 
@@ -203,15 +203,15 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
 
     writeConfig(workDir, job.workers, job.headless, job.baseUrl, storageState);
 
-    // Replay captured sessionStorage (MSAL/SPA tokens) only when a manual-auth
-    // session actually exists; otherwise normalize spec imports back to
-    // '@playwright/test' (mirrors `_apply_auth_fixtures`'s `use_fixtures` gate).
-    const useFixtures = Boolean(job.manualAuth && storageState && sessionStoragePath && fs.statSync(sessionStoragePath).size > 0);
-    applyAuthFixtures(
+    // Always inject the generated fixtures.ts (DOM capture on every run) + rewrite
+    // spec imports to it. sessionStorage replay (MSAL/SPA tokens) is additionally
+    // enabled only when a manual-auth session actually exists.
+    const replaySession = Boolean(job.manualAuth && storageState && sessionStoragePath && fs.statSync(sessionStoragePath).size > 0);
+    applyFixtures(
       workDir,
       job.specs.map((s) => s.filename),
       sessionStoragePath || path.join(workDir, "sessionStorage.json"),
-      useFixtures
+      replaySession
     );
 
     const total = job.specs.length;

@@ -142,6 +142,8 @@ test("filters attachments to known kinds and drops attachments without a path", 
                       { name: "screenshot", path: "/tmp/shot.png" },
                       { name: "video", path: "/tmp/vid.webm" },
                       { name: "trace", path: "/tmp/trace.zip" },
+                      { name: "qagent-dom-raw", path: "/tmp/dom.html" },
+                      { name: "qagent-dom-distilled", path: "/tmp/dom.json" },
                       { name: "stdout", path: "/tmp/stdout.txt" },
                       { name: "screenshot", path: "" },
                     ],
@@ -158,6 +160,8 @@ test("filters attachments to known kinds and drops attachments without a path", 
     { kind: "screenshot", path: "/tmp/shot.png" },
     { kind: "video", path: "/tmp/vid.webm" },
     { kind: "trace", path: "/tmp/trace.zip" },
+    { kind: "dom", path: "/tmp/dom.html" },
+    { kind: "dom-distilled", path: "/tmp/dom.json" },
   ]);
 });
 

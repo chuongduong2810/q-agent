@@ -1,9 +1,9 @@
 /**
  * Port of `api/app/services/playwright_runner.py`'s config template
- * (`_PLAYWRIGHT_CONFIG_TEMPLATE` + `_write_config`) and the sessionStorage
- * fixture shim (`_auth_fixtures_ts` + `_apply_auth_fixtures`), reproduced
- * faithfully so a spec that runs on the server and one that runs via the
- * Local Agent behave identically.
+ * (`_PLAYWRIGHT_CONFIG_TEMPLATE` + `_write_config`) and the injected-fixtures
+ * shim (`_fixtures_ts` + `_apply_fixtures`), reproduced faithfully so a spec
+ * that runs on the server and one that runs via the Local Agent behave
+ * identically — including always-on DOM capture (raw + distilled).
  */
 
 import * as fs from "fs";
@@ -53,14 +53,37 @@ export function writeConfig(
 }
 
 /**
- * TypeScript for a generated `fixtures.ts` that replays sessionStorage —
- * port of `_auth_fixtures_ts`.
+ * TypeScript for a generated `fixtures.ts` that captures the page DOM after
+ * every test, and optionally replays a captured sessionStorage — port of
+ * `_fixtures_ts`.
+ *
+ * The module re-exports Playwright's `test` extended with:
+ * - an `{auto: true}` fixture that, after each test, best-effort attaches the
+ *   live page's raw HTML (`qagent-dom-raw`) and a distilled inventory of the
+ *   page's interactable elements (`qagent-dom-distilled`) via `testInfo.attach`,
+ *   so self-heal can ground on the real DOM. Wrapped in try/catch so it never
+ *   fails a test.
+ * - (only when `replaySession`) a `context` override that restores the captured
+ *   `sessionStorage` (MSAL/SPA tokens) for the current origin before app code runs.
  *
  * @param sessionFile Absolute path to the captured `sessionStorage.json`;
- *   embedded as a JSON-encoded string literal so the fixture reads it at
- *   runtime.
+ *   embedded as a JSON-encoded string literal, read at runtime only when
+ *   `replaySession` is set.
+ * @param replaySession Whether to inject the sessionStorage-replay `context`
+ *   override (DOM capture is always injected regardless).
  */
-export function authFixturesTs(sessionFile: string): string {
+export function fixturesTs(sessionFile: string, replaySession: boolean): string {
+  const contextFixture = replaySession
+    ? "  context: async ({ context }, use) => {\n" +
+      "    await context.addInitScript((sessions: Record<string, Record<string, string>>) => {\n" +
+      "      try {\n" +
+      "        const entries = sessions[location.origin];\n" +
+      "        if (entries) for (const k in entries) window.sessionStorage.setItem(k, entries[k]);\n" +
+      "      } catch {}\n" +
+      "    }, SESSIONS);\n" +
+      "    await use(context);\n" +
+      "  },\n"
+    : "";
   return (
     "import { test as base, expect } from '@playwright/test';\n" +
     "import * as fs from 'fs';\n" +
@@ -69,16 +92,41 @@ export function authFixturesTs(sessionFile: string): string {
     "let SESSIONS: Record<string, Record<string, string>> = {};\n" +
     "try { SESSIONS = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8')); } catch {}\n" +
     "\n" +
-    "export const test = base.extend({\n" +
-    "  context: async ({ context }, use) => {\n" +
-    "    await context.addInitScript((sessions: Record<string, Record<string, string>>) => {\n" +
-    "      try {\n" +
-    "        const entries = sessions[location.origin];\n" +
-    "        if (entries) for (const k in entries) window.sessionStorage.setItem(k, entries[k]);\n" +
-    "      } catch {}\n" +
-    "    }, SESSIONS);\n" +
-    "    await use(context);\n" +
-    "  },\n" +
+    "export const test = base.extend<{ _domCapture: void }>({\n" +
+    contextFixture +
+    "  // Always-on DOM capture: after each test, snapshot the live page so the\n" +
+    "  // runner (evidence) and self-heal loop (real selectors) can use it.\n" +
+    "  _domCapture: [async ({ page }, use, testInfo) => {\n" +
+    "    await use();\n" +
+    "    try {\n" +
+    "      const raw = await page.content();\n" +
+    "      await testInfo.attach('qagent-dom-raw', { body: raw, contentType: 'text/html' });\n" +
+    "    } catch {}\n" +
+    "    try {\n" +
+    "      const snapshot = await page.evaluate(() => {\n" +
+    "        const SEL = 'a,button,input,select,textarea,[role],[data-testid],[data-test],[id]';\n" +
+    "        const elements = Array.from(document.querySelectorAll(SEL)).slice(0, 400).map((node) => {\n" +
+    "          const el = node as HTMLElement;\n" +
+    "          const text = (el.innerText || '').trim().slice(0, 80);\n" +
+    "          return {\n" +
+    "            tag: el.tagName.toLowerCase(),\n" +
+    "            role: el.getAttribute('role') || undefined,\n" +
+    "            testId: el.getAttribute('data-testid') || el.getAttribute('data-test') || undefined,\n" +
+    "            id: el.id || undefined,\n" +
+    "            name: el.getAttribute('name') || undefined,\n" +
+    "            text: text || undefined,\n" +
+    "            placeholder: el.getAttribute('placeholder') || undefined,\n" +
+    "            type: el.getAttribute('type') || undefined,\n" +
+    "          };\n" +
+    "        });\n" +
+    "        return { path: location.pathname, url: location.href, elements };\n" +
+    "      });\n" +
+    "      await testInfo.attach('qagent-dom-distilled', {\n" +
+    "        body: JSON.stringify(snapshot),\n" +
+    "        contentType: 'application/json',\n" +
+    "      });\n" +
+    "    } catch {}\n" +
+    "  }, { auto: true }],\n" +
     "});\n" +
     "\n" +
     "export { expect };\n" +
@@ -87,36 +135,34 @@ export function authFixturesTs(sessionFile: string): string {
 }
 
 /**
- * Rewrite each spec's Playwright import to use (or stop using) the
- * sessionStorage fixture — port of `_apply_auth_fixtures`. Only the module
- * specifier is touched.
+ * Point each spec's Playwright import at the generated `fixtures.ts` and write
+ * it — port of `_apply_fixtures`. Only the module specifier is touched.
  *
- * The Python version globs `*.spec.ts` in `specDir`; the agent already
- * knows exactly which spec filenames it wrote for this job, so
- * `specFilenames` is passed explicitly instead of re-scanning the
- * directory (equivalent behavior, no extra glob dependency).
+ * DOM capture is always on, so fixtures are ALWAYS injected (unlike the previous
+ * auth-only behavior): each spec's `'@playwright/test'` import is rewritten to
+ * `'./fixtures'` and `fixtures.ts` is (re)written every run. `replaySession` only
+ * controls whether the generated module also replays the captured sessionStorage.
+ *
+ * The Python version globs `*.spec.ts` in `specDir`; the agent already knows
+ * exactly which spec filenames it wrote for this job, so `specFilenames` is
+ * passed explicitly instead of re-scanning the directory.
  *
  * @param specDir The job's local workdir containing the spec files.
  * @param specFilenames The spec filenames written into `specDir` for this job.
  * @param sessionFile Absolute path to the `sessionStorage.json` snapshot embedded
  *   in the generated `fixtures.ts`.
- * @param enabled Whether sessionStorage replay is active for this run.
+ * @param replaySession Whether sessionStorage replay is active for this run.
  */
-export function applyAuthFixtures(
+export function applyFixtures(
   specDir: string,
   specFilenames: string[],
   sessionFile: string,
-  enabled: boolean
+  replaySession: boolean
 ): void {
-  const replacements: [string, string][] = enabled
-    ? [
-        ["'@playwright/test'", "'./fixtures'"],
-        ['"@playwright/test"', '"./fixtures"'],
-      ]
-    : [
-        ["'./fixtures'", "'@playwright/test'"],
-        ['"./fixtures"', '"@playwright/test"'],
-      ];
+  const replacements: [string, string][] = [
+    ["'@playwright/test'", "'./fixtures'"],
+    ['"@playwright/test"', '"./fixtures"'],
+  ];
   for (const filename of specFilenames) {
     const specPath = path.join(specDir, filename);
     let text: string;
@@ -133,7 +179,5 @@ export function applyAuthFixtures(
       fs.writeFileSync(specPath, newText, "utf-8");
     }
   }
-  if (enabled) {
-    fs.writeFileSync(path.join(specDir, "fixtures.ts"), authFixturesTs(sessionFile), "utf-8");
-  }
+  fs.writeFileSync(path.join(specDir, "fixtures.ts"), fixturesTs(sessionFile, replaySession), "utf-8");
 }
