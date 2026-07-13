@@ -59,6 +59,77 @@ def test_get_knowledge_404_when_absent(client):
     assert client.get("/projects/Ghost/knowledge").status_code == 404
 
 
+# --- Heal->KB DOM enrichment (#249) ------------------------------------------
+
+
+def _seed_kb_row(db_session, key="Surency Platform", routes=None, selectors=None):
+    from app.models.knowledge import ProjectKnowledge
+
+    row = ProjectKnowledge(
+        key=key,
+        project_key=key,
+        name=key,
+        owner_id=None,
+        status="indexed",
+        knowledge={"routes": routes or [], "selectors": selectors or []},
+    )
+    db_session.add(row)
+    db_session.commit()
+    return row
+
+
+def _reload_kb(db_session, key="Surency Platform"):
+    from app.models.knowledge import ProjectKnowledge
+
+    db_session.expire_all()
+    return db_session.query(ProjectKnowledge).filter(ProjectKnowledge.key == key).first()
+
+
+def test_merge_discovered_dom_adds_new_route_and_selectors(db_session):
+    _seed_kb_row(db_session)
+
+    added = knowledge_service.merge_discovered_dom(
+        "Surency Platform", "", {"route": "/login", "selectors": ["#login-submit"]}, None
+    )
+    assert added == 2
+
+    kn = _reload_kb(db_session).knowledge
+    assert any(r["path"] == "/login" and r.get("source") == "dom-heal" for r in kn["routes"])
+    sel = next(s for s in kn["selectors"] if s["selector"] == "#login-submit")
+    assert sel["source"] == "dom-heal"
+    assert sel["screen"] == "login"
+    assert sel["element"] == "login-submit"
+
+
+def test_merge_discovered_dom_dedups_existing(db_session):
+    _seed_kb_row(
+        db_session,
+        routes=[{"path": "/login"}],
+        selectors=[{"screen": "login", "element": "submit", "selector": "#login-submit"}],
+    )
+
+    # Only the genuinely-new selector is added; existing route + selector are untouched.
+    added = knowledge_service.merge_discovered_dom(
+        "Surency Platform", "", {"route": "/login", "selectors": ["#login-submit", "#remember"]}, None
+    )
+    assert added == 1
+
+    kn = _reload_kb(db_session).knowledge
+    assert [r["path"] for r in kn["routes"]] == ["/login"]
+    assert sorted(s["selector"] for s in kn["selectors"]) == ["#login-submit", "#remember"]
+
+
+def test_merge_discovered_dom_noop_without_row(db_session):
+    assert knowledge_service.merge_discovered_dom("Ghost", "", {"route": "/x"}, None) == 0
+
+
+def test_merge_discovered_dom_noop_when_nothing_discovered(db_session):
+    _seed_kb_row(db_session)
+    assert knowledge_service.merge_discovered_dom(
+        "Surency Platform", "", {"route": "", "selectors": []}, None
+    ) == 0
+
+
 def test_build_surfaces_claude_error(client, monkeypatch):
     from app.services.claude_cli import ClaudeError
 
