@@ -880,6 +880,24 @@ def _selector_literals(code: str) -> set[str]:
     return set(_SELECTOR_LITERAL_RE.findall(code or ""))
 
 
+def _load_distilled_dom(attachments: list[dict]) -> dict[str, Any] | None:
+    """Best-effort: load the ``dom-distilled`` attachment's JSON (the live-DOM snapshot).
+
+    Returns the parsed ``{path, url, elements: [...]}`` payload captured by the
+    injected fixtures (see ``_fixtures_ts``), or None if there is no such
+    attachment or it can't be read/parsed. Never raises — DOM grounding is
+    additive to the heal, not required.
+    """
+    for att in attachments or []:
+        if att.get("kind") == "dom-distilled" and att.get("path"):
+            try:
+                return json.loads(Path(att["path"]).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Could not read distilled DOM snapshot {}: {}", att["path"], exc)
+                return None
+    return None
+
+
 def _propose_healed_selector_to_kb(
     project_key: str | None, repo: str, before_code: str, after_code: str, owner_id: int | None
 ) -> None:
@@ -1227,9 +1245,13 @@ def heal_spec(case_id: int) -> None:
                 break
 
             emit("fixing", attempt, "Asking Claude to fix the spec", error=final_error)
+            # Ground the fix on the real page: the distilled DOM captured for this
+            # failing attempt gives Claude actual selectors, which is the only
+            # grounding a blocked spec (empty KB) has to work with.
+            dom_snapshot = _load_distilled_dom(attachments)
             try:
                 fixed = spec_service.generate_fixed_spec_code(
-                    case, spec.code, final_error, final_output, context, examples
+                    case, spec.code, final_error, final_output, context, examples, dom_snapshot
                 )
             except ClaudeError as exc:
                 final_error = f"Heal generation failed: {exc}"

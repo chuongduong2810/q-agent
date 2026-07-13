@@ -22,7 +22,7 @@ from app.models.run import RunTicket
 from app.models.testcase import TestCase
 from app.models.ticket import Ticket
 from app.services import claude_cli, project_config_service
-from app.services.prompts import render_project_context
+from app.services.prompts import render_dom_snapshot, render_project_context
 from app.services.skills import AUTOMATION_GENERATOR
 from app.services.workspace_scope import scoped_specs_dir
 
@@ -204,6 +204,7 @@ def _build_fix_prompt(
     run_output: str = "",
     context: dict[str, Any] | None = None,
     examples: list[dict] | None = None,
+    dom_snapshot: dict[str, Any] | None = None,
 ) -> str:
     """Render a Claude prompt asking it to FIX a spec that failed when executed.
 
@@ -216,6 +217,10 @@ def _build_fix_prompt(
             so fixes use the real, grounded values rather than guesses.
         examples: Optional few-shot reference specs (proven, already-passing) so the
             fix keeps this project's conventions.
+        dom_snapshot: Optional distilled live-DOM captured when the spec failed
+            (``qagent-dom-distilled``) — the page's real interactable elements, so
+            the fixer can pick grounded locators even when the KB has no selectors
+            (the ``blocked`` case).
 
     Returns:
         A prompt instructing Claude to return the complete corrected spec file.
@@ -228,10 +233,13 @@ def _build_fix_prompt(
         context, include_secrets=True, rank_query=_case_rank_query(case)
     )
     grounding = f"{project_block}\n\n" if project_block else ""
+    dom_block_text = render_dom_snapshot(dom_snapshot)
+    dom_block = f"{dom_block_text}\n\n" if dom_block_text else ""
     output_block = f"\n\nPlaywright output (tail):\n{run_output.strip()[-2000:]}" if run_output.strip() else ""
     return (
         "The following Playwright test FAILED when executed. Fix it so it passes.\n\n"
         f"{grounding}"
+        f"{dom_block}"
         f"{_render_examples(examples)}"
         f"Test case being automated:\n"
         f"Title: {case.title}\n"
@@ -258,6 +266,7 @@ def generate_fixed_spec_code(
     run_output: str = "",
     context: dict[str, Any] | None = None,
     examples: list[dict] | None = None,
+    dom_snapshot: dict[str, Any] | None = None,
 ) -> str:
     """Ask Claude to repair a failing spec, given its code and the failure.
 
@@ -268,6 +277,8 @@ def generate_fixed_spec_code(
         run_output: Optional tail of the Playwright process output.
         context: Resolved project context for grounded fixes.
         examples: Optional few-shot reference specs (proven, already-passing).
+        dom_snapshot: Optional distilled live-DOM captured at the failure so the
+            fixer can pick real locators (see ``_build_fix_prompt``).
 
     Returns:
         The corrected TypeScript spec source code.
@@ -276,7 +287,9 @@ def generate_fixed_spec_code(
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
     raw = claude_cli.run_prompt(
-        _build_fix_prompt(case, current_code, error_message, run_output, context, examples),
+        _build_fix_prompt(
+            case, current_code, error_message, run_output, context, examples, dom_snapshot
+        ),
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
         label=f"Heal: {case.ticket_external_id} {case.code}",
