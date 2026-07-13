@@ -195,6 +195,40 @@ def test_start_execution_default_target_is_server(client, db_session, monkeypatc
     assert body["status"] == "running"
 
 
+def test_run_single_spec_on_terminal_run_commits_execution(client, db_session):
+    """Regression (#247): a manual "Run anyway" on a terminal (failed/blocked)
+    run must durably COMMIT the queued local-agent execution.
+
+    ``set_run_status`` short-circuits (returns False, no commit) on a terminal
+    run, and ``get_db`` never auto-commits, so ``run_single_spec`` must commit
+    itself — otherwise the flushed Execution/ExecutionResult roll back on session
+    close: the endpoint returns 200 (from the in-memory object) but nothing is
+    queued and the Local Agent has nothing to claim.
+    """
+    import app.db as db_module
+
+    user = _make_user(db_session, "terminal-run@example.com")
+    _pair_device(db_session, user)
+    run, case = _seed_agent_run(db_session, user.id)
+    run.status = "failed"  # terminal — the "run anyway" case (#245)
+    db_session.commit()
+
+    resp = client.post(f"/cases/{case.id}/spec/run", json={"target": "local-agent"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "queued"
+
+    # A SEPARATE session sees only COMMITTED rows. Pre-fix the execution was
+    # flushed but never committed, so this query came back empty.
+    other = db_module.SessionLocal()
+    try:
+        execs = other.query(Execution).filter(Execution.run_id == run.id).all()
+    finally:
+        other.close()
+    assert len(execs) == 1
+    assert execs[0].status == "queued"
+    assert execs[0].target == "local-agent"
+
+
 # ------------------------------------------------------------------- job protocol
 def test_job_endpoints_reject_missing_or_invalid_token(client):
     assert client.post("/agent/jobs/next").status_code == 401
