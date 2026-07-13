@@ -93,6 +93,10 @@ _ATTACHMENT_KIND_MAP = {
     "screenshot": "screenshot",
     "video": "video",
     "trace": "trace",
+    # DOM captured by the injected fixtures (see _fixtures_ts): raw page HTML and a
+    # distilled interactable-element inventory used to ground self-heal + the KB.
+    "qagent-dom-raw": "dom",
+    "qagent-dom-distilled": "dom-distilled",
 }
 
 
@@ -232,21 +236,49 @@ def _capture_once(base_url: str, dest: Path) -> bool:
     return ok
 
 
-def _auth_fixtures_ts(session_file: Path) -> str:
-    """TypeScript for a generated ``fixtures.ts`` that replays sessionStorage.
+def _fixtures_ts(session_file: Path, replay_session: bool) -> str:
+    """TypeScript for a generated ``fixtures.ts`` that captures the page DOM after
+    every test, and optionally replays a captured sessionStorage.
 
-    The fixture extends the base Playwright ``test`` with a ``context`` that adds an
-    init script restoring the captured ``sessionStorage`` entries for the current
-    origin before any app code runs — so MSAL/SPA tokens are present on load and the
-    restored session doesn't bounce back to the login page.
+    The module re-exports Playwright's ``test`` extended with:
+
+    * an ``{auto: true}`` fixture that, after each test, best-effort attaches the
+      live page's raw HTML (``qagent-dom-raw``) and a distilled inventory of the
+      page's interactable elements (``qagent-dom-distilled``) via
+      ``testInfo.attach`` — so the runner and self-heal loop can ground on the real
+      DOM (actual selectors/routes) instead of guessing. Capture is wrapped in
+      try/catch so it can never fail a test (the page may be closed/navigated at a
+      failure point).
+    * (only when ``replay_session``) a ``context`` override adding an init script
+      that restores the captured ``sessionStorage`` entries (where MSAL/SPA tokens
+      live) for the current origin before any app code runs, so the restored
+      session doesn't bounce back to the login page.
 
     Args:
         session_file: Absolute path to the ``sessionStorage.json`` snapshot; embedded
-            as a JSON-encoded string literal so the fixture reads it at runtime.
+            as a JSON-encoded string literal and read at runtime only when
+            ``replay_session`` is set.
+        replay_session: Whether to inject the sessionStorage-replay ``context``
+            override (DOM capture is always injected regardless).
 
     Returns:
         The fixtures module source.
     """
+    context_fixture = (
+        (
+            "  context: async ({ context }, use) => {\n"
+            "    await context.addInitScript((sessions: Record<string, Record<string, string>>) => {\n"
+            "      try {\n"
+            "        const entries = sessions[location.origin];\n"
+            "        if (entries) for (const k in entries) window.sessionStorage.setItem(k, entries[k]);\n"
+            "      } catch {}\n"
+            "    }, SESSIONS);\n"
+            "    await use(context);\n"
+            "  },\n"
+        )
+        if replay_session
+        else ""
+    )
     return (
         "import { test as base, expect } from '@playwright/test';\n"
         "import * as fs from 'fs';\n"
@@ -255,16 +287,41 @@ def _auth_fixtures_ts(session_file: Path) -> str:
         "let SESSIONS: Record<string, Record<string, string>> = {};\n"
         "try { SESSIONS = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8')); } catch {}\n"
         "\n"
-        "export const test = base.extend({\n"
-        "  context: async ({ context }, use) => {\n"
-        "    await context.addInitScript((sessions: Record<string, Record<string, string>>) => {\n"
-        "      try {\n"
-        "        const entries = sessions[location.origin];\n"
-        "        if (entries) for (const k in entries) window.sessionStorage.setItem(k, entries[k]);\n"
-        "      } catch {}\n"
-        "    }, SESSIONS);\n"
-        "    await use(context);\n"
-        "  },\n"
+        "export const test = base.extend<{ _domCapture: void }>({\n"
+        f"{context_fixture}"
+        "  // Always-on DOM capture: after each test, snapshot the live page so the\n"
+        "  // runner (evidence) and self-heal loop (real selectors) can use it.\n"
+        "  _domCapture: [async ({ page }, use, testInfo) => {\n"
+        "    await use();\n"
+        "    try {\n"
+        "      const raw = await page.content();\n"
+        "      await testInfo.attach('qagent-dom-raw', { body: raw, contentType: 'text/html' });\n"
+        "    } catch {}\n"
+        "    try {\n"
+        "      const snapshot = await page.evaluate(() => {\n"
+        "        const SEL = 'a,button,input,select,textarea,[role],[data-testid],[data-test],[id]';\n"
+        "        const elements = Array.from(document.querySelectorAll(SEL)).slice(0, 400).map((node) => {\n"
+        "          const el = node as HTMLElement;\n"
+        "          const text = (el.innerText || '').trim().slice(0, 80);\n"
+        "          return {\n"
+        "            tag: el.tagName.toLowerCase(),\n"
+        "            role: el.getAttribute('role') || undefined,\n"
+        "            testId: el.getAttribute('data-testid') || el.getAttribute('data-test') || undefined,\n"
+        "            id: el.id || undefined,\n"
+        "            name: el.getAttribute('name') || undefined,\n"
+        "            text: text || undefined,\n"
+        "            placeholder: el.getAttribute('placeholder') || undefined,\n"
+        "            type: el.getAttribute('type') || undefined,\n"
+        "          };\n"
+        "        });\n"
+        "        return { path: location.pathname, url: location.href, elements };\n"
+        "      });\n"
+        "      await testInfo.attach('qagent-dom-distilled', {\n"
+        "        body: JSON.stringify(snapshot),\n"
+        "        contentType: 'application/json',\n"
+        "      });\n"
+        "    } catch {}\n"
+        "  }, { auto: true }],\n"
         "});\n"
         "\n"
         "export { expect };\n"
@@ -272,25 +329,23 @@ def _auth_fixtures_ts(session_file: Path) -> str:
     )
 
 
-def _apply_auth_fixtures(spec_dir: Path, session_file: Path, enabled: bool) -> None:
-    """Rewrite spec imports to use (or stop using) the sessionStorage fixture.
+def _apply_fixtures(spec_dir: Path, session_file: Path, replay_session: bool) -> None:
+    """Point every spec's Playwright import at the generated ``fixtures.ts`` and write it.
 
-    Deterministically normalizes each ``*.spec.ts`` file's Playwright import module
-    specifier: when ``enabled`` it points at ``'./fixtures'`` (and writes the
-    generated ``fixtures.ts``); when not enabled it points back at
-    ``'@playwright/test'`` so a spec left rewritten by a prior auth run is restored
-    for a normal run. Only the module specifier is touched.
+    DOM capture is always on, so fixtures are ALWAYS injected (unlike the previous
+    auth-only behavior): each ``*.spec.ts`` import of ``'@playwright/test'`` is
+    rewritten to ``'./fixtures'`` and ``fixtures.ts`` is (re)written every run.
+    ``replay_session`` only controls whether the generated module *also* replays the
+    captured sessionStorage. Only the import module specifier is touched in specs
+    (generated specs import just ``test``/``expect``/types from ``@playwright/test``).
 
     Args:
         spec_dir: The run's spec directory containing ``*.spec.ts`` files.
         session_file: Absolute path to the ``sessionStorage.json`` snapshot embedded
             in the generated ``fixtures.ts``.
-        enabled: Whether sessionStorage replay is active for this run.
+        replay_session: Whether sessionStorage replay is active for this run.
     """
-    if enabled:
-        replacements = (("'@playwright/test'", "'./fixtures'"), ('"@playwright/test"', '"./fixtures"'))
-    else:
-        replacements = (("'./fixtures'", "'@playwright/test'"), ('"./fixtures"', '"@playwright/test"'))
+    replacements = (("'@playwright/test'", "'./fixtures'"), ('"@playwright/test"', '"./fixtures"'))
     for spec in spec_dir.glob("*.spec.ts"):
         text = spec.read_text(encoding="utf-8")
         new_text = text
@@ -298,8 +353,7 @@ def _apply_auth_fixtures(spec_dir: Path, session_file: Path, enabled: bool) -> N
             new_text = new_text.replace(old, new)
         if new_text != text:
             spec.write_text(new_text, encoding="utf-8")
-    if enabled:
-        (spec_dir / "fixtures.ts").write_text(_auth_fixtures_ts(session_file), encoding="utf-8")
+    (spec_dir / "fixtures.ts").write_text(_fixtures_ts(session_file, replay_session), encoding="utf-8")
 
 
 # --------------------------------------------------------- standalone auth capture
@@ -640,17 +694,17 @@ def run_execution(execution_id: int) -> None:
 
             _write_config(spec_dir, execution.workers, headless, base_url, storage_state)
 
-            # Replay captured sessionStorage (MSAL/SPA tokens) via a generated
-            # fixtures.ts + spec import rewrite, but only when a manual-auth session
-            # (storageState + sessionStorage snapshot) actually exists. Non-auth runs
-            # normalize spec imports back to '@playwright/test' and write no fixtures.
+            # Always inject the generated fixtures.ts (DOM capture on every run) +
+            # rewrite spec imports to it. sessionStorage replay (MSAL/SPA tokens) is
+            # additionally enabled only when a manual-auth session (storageState +
+            # sessionStorage snapshot) actually exists.
             session_file = (
                 project_config_service.session_path(project_key, run.owner_id)
                 if project_key
                 else spec_dir / "sessionStorage.json"
             )
-            use_fixtures = bool(manual_auth and storage_state and session_file.exists())
-            _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
+            replay_session = bool(manual_auth and storage_state and session_file.exists())
+            _apply_fixtures(spec_dir, session_file, replay_session)
 
             # A single-result execution targets just that one spec (the "run this
             # test" action); a multi-case run executes the whole suite.
@@ -1002,7 +1056,7 @@ def heal_spec(case_id: int) -> None:
             if saved.exists() and saved.stat().st_size > 0:
                 storage_state = str(saved)
             session_file = project_config_service.session_path(project_key, run.owner_id)
-        use_fixtures = bool(manual_auth and storage_state and session_file.exists())
+        replay_session = bool(manual_auth and storage_state and session_file.exists())
 
         context = spec_service.build_case_context(db, case, env=run.env)
         # KB view the placeholder gate compares a regenerated fix against.
@@ -1074,7 +1128,7 @@ def heal_spec(case_id: int) -> None:
                 return
             emit("running", attempt, f"Running spec (attempt {attempt}/{max_attempts})")
             _write_config(spec_dir, 1, headless, base_url, storage_state)
-            _apply_auth_fixtures(spec_dir, session_file, use_fixtures)
+            _apply_fixtures(spec_dir, session_file, replay_session)
 
             report: dict[str, Any] = {}
             run_error: str | None = None
