@@ -297,6 +297,62 @@ def generate_fixed_spec_code(
     return _extract_code(raw)
 
 
+def _build_chat_edit_prompt(
+    case: TestCase, current_code: str, instruction: str, context: dict[str, Any] | None
+) -> str:
+    """Render a prompt asking Claude to edit an existing spec per a reviewer instruction.
+
+    Feeds the current spec, the natural-language instruction, grounded project
+    context, and the shared robustness rules. Asks for a short prose explanation
+    followed by the COMPLETE edited spec in a ```typescript fence — the caller
+    splits the two (:func:`generate_chat_edit`).
+    """
+    project_block = render_project_context(
+        context, include_secrets=True, rank_query=_case_rank_query(case)
+    )
+    grounding = f"{project_block}\n\n" if project_block else ""
+    return (
+        "You are editing an existing Playwright test spec based on a reviewer's instruction.\n\n"
+        f"{grounding}"
+        f"{_ROBUSTNESS_RULES}"
+        f"Reviewer instruction:\n{instruction.strip()}\n\n"
+        "Current spec:\n"
+        f"```typescript\n{current_code.strip()}\n```\n\n"
+        "First, in 1-3 short sentences, explain what you changed and why (plain prose — no "
+        "code, no markdown headings, no bullet list). Then output the COMPLETE edited spec "
+        "file in a single ```typescript fenced block. Apply the instruction faithfully; keep "
+        "the same test intent and all existing assertions unless the instruction says "
+        "otherwise; use the real grounded routes/selectors above; never weaken assertions or "
+        "introduce placeholders/invented references."
+    )
+
+
+def generate_chat_edit(
+    db, run, case: TestCase, current_code: str, instruction: str
+) -> tuple[str, str]:
+    """Ask Claude to edit a spec per a NL instruction; return ``(explanation, new_code)``.
+
+    Backend for the Automation screen's AI chat panel. Resolves the run's grounded
+    project context, prompts Claude for a prose explanation + the complete edited
+    spec, and splits the response: ``new_code`` via :func:`_extract_code`, the
+    ``explanation`` = the text before the code fence.
+
+    Raises:
+        claude_cli.ClaudeError: if the CLI is unavailable or errors.
+    """
+    context = build_case_context(db, case, env=run.env)
+    raw = claude_cli.run_prompt(
+        _build_chat_edit_prompt(case, current_code, instruction, context),
+        system=_SYSTEM_PROMPT,
+        skill=AUTOMATION_GENERATOR,
+        label=f"Chat edit: {case.ticket_external_id} {case.code}",
+    )
+    new_code = _extract_code(raw)
+    match = _FENCE_RE.search(raw)
+    explanation = (raw[: match.start()] if match else "").strip()
+    return (explanation or "Updated the spec as requested.", new_code)
+
+
 def _extract_code(raw: str) -> str:
     """Pull TypeScript source out of Claude's response.
 
