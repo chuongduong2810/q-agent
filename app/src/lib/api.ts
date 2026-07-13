@@ -190,13 +190,21 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
   }
 
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail = "";
     try {
       const body = await res.json();
-      detail = (body as { detail?: string }).detail ?? detail;
+      const raw = (body as { detail?: unknown }).detail;
+      // FastAPI 422s put a list of validation objects in `detail` — not
+      // user-facing, so only surface a plain string detail.
+      if (typeof raw === "string") detail = raw;
     } catch {
       /* ignore non-JSON error bodies */
     }
+    // Never throw an empty message: `res.statusText` is "" over HTTP/2 (and
+    // behind the tunnel), which previously produced a blank error toast when the
+    // body carried no string detail. Fall back to the status text, then a
+    // status-coded default so the toast always says something.
+    if (!detail.trim()) detail = res.statusText.trim() || `Request failed (HTTP ${res.status})`;
     throw new ApiError(res.status, detail);
   }
   if (res.status === 204) return undefined as T;
