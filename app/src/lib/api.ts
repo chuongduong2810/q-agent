@@ -372,6 +372,10 @@ export const api = {
   linkedCases: (externalId: string) =>
     get<LinkedTestCaseOut[]>(`/tickets/${encodeURIComponent(externalId)}/linked-cases`),
   syncTickets: (body: SyncRequest) => post<SyncResult>("/tickets/sync", body),
+  // Local-only delete — never calls the provider, so a re-sync restores tickets.
+  deleteTicket: (externalId: string) => del<void>(`/tickets/${encodeURIComponent(externalId)}`),
+  deleteTickets: (externalIds: string[]) =>
+    post<{ deleted: number }>("/tickets/delete", { externalIds }),
 
   // runs
   listRuns: () => get<RunOut[]>("/runs"),

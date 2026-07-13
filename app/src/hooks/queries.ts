@@ -459,6 +459,24 @@ export const useSyncTickets = () => {
   });
 };
 
+/** Local-delete a single ticket (never calls the provider; a re-sync restores it). */
+export const useDeleteTicket = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (externalId: string) => api.deleteTicket(externalId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tickets"] }),
+  });
+};
+
+/** Bulk local-delete tickets by external id; resolves with the deleted count. */
+export const useDeleteTickets = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (externalIds: string[]) => api.deleteTickets(externalIds),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tickets"] }),
+  });
+};
+
 // -------------------------------------------------------------- runs
 export const useRuns = () => useQuery({ queryKey: queryKeys.runs, queryFn: api.listRuns });
 

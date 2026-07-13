@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DropdownShell, MultiSelect, Select } from "@/components/ui/Dropdown";
 import { StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
 import { EmptyState } from "@/components/ui/misc";
@@ -12,9 +13,12 @@ import { SyncTicketsModal } from "@/components/tickets/SyncTicketsModal";
 import {
   useConnectionSprints,
   useConnectionWorkItemMetadata,
+  useDeleteTicket,
+  useDeleteTickets,
   useProviders,
   useTickets,
 } from "@/hooks/queries";
+import { toast } from "@/lib/toast";
 import { useAuth } from "@/store/auth";
 import { useUI } from "@/store/ui";
 import type { ConnectionOut, ProviderKind, TicketFilters, TicketOut } from "@/types/api";
@@ -111,6 +115,7 @@ export function Tickets() {
   const selected = useUI((s) => s.selected);
   const toggleSelected = useUI((s) => s.toggleSelected);
   const setSelected = useUI((s) => s.setSelected);
+  const clearSelected = useUI((s) => s.clearSelected);
   const openCreateRun = useUI((s) => s.openCreateRun);
   const navigate = useNavigate();
   const selectedSprint = useUI((s) => s.selectedSprint);
@@ -189,6 +194,46 @@ export function Tickets() {
 
   const selCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
 
+  // Local delete (LOCAL only — never calls the provider; a re-sync restores tickets).
+  const deleteTicket = useDeleteTicket();
+  const deleteTickets = useDeleteTickets();
+  // The ticket queued for single-row delete confirmation, and the bulk-delete flag.
+  const [confirmTicket, setConfirmTicket] = useState<TicketOut | null>(null);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+
+  const onConfirmDeleteTicket = () => {
+    if (!confirmTicket) return;
+    const id = confirmTicket.externalId;
+    deleteTicket.mutate(id, {
+      onSuccess: () => {
+        if (selected[id]) toggleSelected(id); // keep the selection count accurate
+        setConfirmTicket(null);
+        toast.success("Ticket removed", { description: `${id} was removed locally.` });
+      },
+      onError: (e) =>
+        toast.error("Couldn't remove ticket", {
+          description: e instanceof Error ? e.message : undefined,
+        }),
+    });
+  };
+
+  const onConfirmDeleteSelected = () => {
+    const ids = Object.keys(selected).filter((k) => selected[k]);
+    deleteTickets.mutate(ids, {
+      onSuccess: (res) => {
+        clearSelected();
+        setConfirmBulk(false);
+        toast.success(`Removed ${res.deleted} ticket${res.deleted === 1 ? "" : "s"}`, {
+          description: "Removed locally — re-sync to restore.",
+        });
+      },
+      onError: (e) =>
+        toast.error("Couldn't remove tickets", {
+          description: e instanceof Error ? e.message : undefined,
+        }),
+    });
+  };
+
   const sprintOptions = (sprints ?? []).map((s) => ({ value: s.path, label: s.name }));
   const areaOptions = (metadata?.areaPaths ?? []).map((a) => ({ value: a.path, label: a.name, hint: a.path }));
   const stateOptions = (metadata?.states ?? []).map((s) => ({ value: s, label: s }));
@@ -242,6 +287,16 @@ export function Tickets() {
 
           <div className="flex items-center gap-[9px] md:contents">
             <div className="ml-auto flex items-center gap-[9px]">
+              {selCount > 0 && (
+                <Button
+                  variant="danger"
+                  className="hidden md:inline-flex"
+                  onClick={() => setConfirmBulk(true)}
+                >
+                  <Trash2 size={13} />
+                  Remove {selCount} selected
+                </Button>
+              )}
               <Button variant="glass" onClick={() => setSyncOpen(true)}>
                 <RefreshCw size={13} />
                 Sync
@@ -333,6 +388,7 @@ export function Tickets() {
                 selected={!!selected[tk.externalId]}
                 onToggle={() => toggleSelected(tk.externalId)}
                 onOpen={() => navigate(`/tickets/${encodeURIComponent(tk.externalId)}`)}
+                onRequestDelete={() => setConfirmTicket(tk)}
                 index={i}
               />
             ))}
@@ -377,7 +433,37 @@ export function Tickets() {
         />
       )}
 
-      <MobileSelectionBar count={selCount} onCreateRun={openCreateRun} />
+      <MobileSelectionBar
+        count={selCount}
+        onCreateRun={openCreateRun}
+        onRemove={() => setConfirmBulk(true)}
+      />
+
+      <ConfirmDialog
+        open={!!confirmTicket}
+        title="Remove ticket?"
+        message={
+          confirmTicket
+            ? `Remove ${confirmTicket.externalId} from Q-Agent? This only deletes it locally — the work item in your provider is untouched, and a re-sync restores it.`
+            : ""
+        }
+        confirmLabel="Remove"
+        danger
+        loading={deleteTicket.isPending}
+        onConfirm={onConfirmDeleteTicket}
+        onClose={() => setConfirmTicket(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulk}
+        title={`Remove ${selCount} ticket${selCount === 1 ? "" : "s"}?`}
+        message={`Remove ${selCount} selected ticket${selCount === 1 ? "" : "s"} from Q-Agent? This only deletes them locally — the work items in your provider are untouched, and a re-sync restores them.`}
+        confirmLabel={`Remove ${selCount}`}
+        danger
+        loading={deleteTickets.isPending}
+        onConfirm={onConfirmDeleteSelected}
+        onClose={() => setConfirmBulk(false)}
+      />
     </div>
   );
 }
@@ -387,15 +473,32 @@ function TicketRow({
   selected,
   onToggle,
   onOpen,
+  onRequestDelete,
   index,
 }: {
   ticket: TicketOut;
   selected: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  onRequestDelete: () => void;
   index: number;
 }) {
   const [glyph, glyphColor] = providerGlyph[ticket.providerKind] ?? ["?", "#8b8b9e"];
+  // Trash affordance — stops propagation so it never opens the ticket.
+  const deleteButton = (
+    <button
+      type="button"
+      aria-label={`Remove ${ticket.externalId}`}
+      title="Remove locally"
+      onClick={(e) => {
+        e.stopPropagation();
+        onRequestDelete();
+      }}
+      className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-white/[0.08] bg-white/[0.03] text-ink-dim transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+    >
+      <Trash2 size={14} />
+    </button>
+  );
   const checkboxOn = (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 6 9 17l-5-5" />
@@ -452,6 +555,8 @@ function TicketRow({
         <Button variant="glass" size="sm" onClick={onOpen} className="shrink-0">
           Details
         </Button>
+
+        {deleteButton}
       </div>
 
       {/* Mobile card — checkbox + tappable body (glyph/id/priority, title, status·sprint·AC). */}
@@ -490,18 +595,29 @@ function TicketRow({
             <span>&middot; {ticket.acCount} AC</span>
           </div>
         </div>
+
+        {deleteButton}
       </div>
     </motion.div>
   );
 }
 
 /**
- * Floating "Create run · N selected" pill shown only on phones (below `md`)
- * once one or more tickets are selected — the mobile stand-in for the desktop
- * toolbar's always-visible "Create Run" button. Portalled to `document.body`
- * per the floating-overlay convention, matching `RunBulkBar`'s pattern.
+ * Floating selection bar shown only on phones (below `md`) once one or more
+ * tickets are selected — the mobile stand-in for the desktop toolbar's
+ * "Create Run" + "Remove N selected" buttons. A destructive trash button sits
+ * left of the primary "Create run" pill so the two never overlap. Portalled to
+ * `document.body` per the floating-overlay convention, matching `RunBulkBar`.
  */
-function MobileSelectionBar({ count, onCreateRun }: { count: number; onCreateRun: () => void }) {
+function MobileSelectionBar({
+  count,
+  onCreateRun,
+  onRemove,
+}: {
+  count: number;
+  onCreateRun: () => void;
+  onRemove: () => void;
+}) {
   return createPortal(
     <AnimatePresence>
       {count > 0 && (
@@ -510,12 +626,21 @@ function MobileSelectionBar({ count, onCreateRun }: { count: number; onCreateRun
           animate={{ opacity: 1, y: 0, x: "-50%" }}
           exit={{ opacity: 0, y: 24, x: "-50%" }}
           transition={{ type: "spring", stiffness: 420, damping: 34 }}
-          className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-[900] w-[calc(100%-30px)] max-w-[440px] md:hidden"
+          className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-[900] flex w-[calc(100%-30px)] max-w-[440px] items-center gap-2 md:hidden"
         >
           <button
             type="button"
+            aria-label={`Remove ${count} selected`}
+            onClick={onRemove}
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[15px] border border-red-500/30 text-red-300 shadow-[0_10px_26px_-8px_rgba(0,0,0,.6)]"
+            style={{ background: "rgb(42,26,30)" }}
+          >
+            <Trash2 size={18} />
+          </button>
+          <button
+            type="button"
             onClick={onCreateRun}
-            className="flex w-full items-center justify-center gap-2 rounded-[15px] py-[15px] text-[14px] font-extrabold text-white shadow-[0_10px_26px_-8px_rgba(139,92,246,.7)]"
+            className="flex flex-1 items-center justify-center gap-2 rounded-[15px] py-[15px] text-[14px] font-extrabold text-white shadow-[0_10px_26px_-8px_rgba(139,92,246,.7)]"
             style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}
           >
             <Plus size={15} strokeWidth={2.4} />
