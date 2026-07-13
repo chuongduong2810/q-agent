@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -437,6 +437,7 @@ export function Tickets() {
         count={selCount}
         onCreateRun={openCreateRun}
         onRemove={() => setConfirmBulk(true)}
+        onClear={clearSelected}
       />
 
       <ConfirmDialog
@@ -605,46 +606,65 @@ function TicketRow({
 /**
  * Floating selection bar shown only on phones (below `md`) once one or more
  * tickets are selected — the mobile stand-in for the desktop toolbar's
- * "Create Run" + "Remove N selected" buttons. A destructive trash button sits
- * left of the primary "Create run" pill so the two never overlap. Portalled to
- * `document.body` per the floating-overlay convention, matching `RunBulkBar`.
+ * "Create Run" + "Remove N selected" buttons. Styled to match the Runs board's
+ * {@link RunBulkBar}: a compact centred glass bar with an "N selected" chip and
+ * icon actions (create-run · remove · clear), portalled to `document.body` per
+ * the floating-overlay convention.
  */
 function MobileSelectionBar({
   count,
   onCreateRun,
   onRemove,
+  onClear,
 }: {
   count: number;
   onCreateRun: () => void;
   onRemove: () => void;
+  onClear: () => void;
 }) {
   return createPortal(
     <AnimatePresence>
       {count > 0 && (
         <motion.div
-          initial={{ opacity: 0, y: 24, x: "-50%" }}
+          initial={{ opacity: 0, y: 90, x: "-50%" }}
           animate={{ opacity: 1, y: 0, x: "-50%" }}
-          exit={{ opacity: 0, y: 24, x: "-50%" }}
+          exit={{ opacity: 0, y: 90, x: "-50%" }}
           transition={{ type: "spring", stiffness: 420, damping: 34 }}
-          className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-[900] flex w-[calc(100%-30px)] max-w-[440px] items-center gap-2 md:hidden"
+          className="fixed bottom-[calc(18px+env(safe-area-inset-bottom))] left-1/2 z-[900] flex items-center gap-1 rounded-[16px] border border-white/[0.12] py-2 pl-2 pr-2.5 shadow-[0_30px_70px_-20px_rgba(0,0,0,.85)] md:hidden"
+          style={{ background: "rgb(26,26,34)" }}
         >
+          <span className="mr-1 flex items-center gap-2 rounded-[11px] bg-[rgba(139,92,246,.18)] py-1.5 pl-2 pr-3 text-[12.5px] font-semibold text-ink">
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet px-1.5 text-[11px] font-bold text-white">
+              {count}
+            </span>
+            selected
+          </span>
           <button
             type="button"
-            aria-label={`Remove ${count} selected`}
-            onClick={onRemove}
-            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[15px] border border-red-500/30 text-red-300 shadow-[0_10px_26px_-8px_rgba(0,0,0,.6)]"
-            style={{ background: "rgb(42,26,30)" }}
+            title="Create run"
+            onClick={onCreateRun}
+            className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[11px] bg-[rgba(139,92,246,.9)] px-3 text-[13px] font-bold text-white transition-colors hover:bg-[rgba(139,92,246,1)]"
           >
-            <Trash2 size={18} />
+            <Plus size={15} strokeWidth={2.4} />
+            Create run
           </button>
           <button
             type="button"
-            onClick={onCreateRun}
-            className="flex flex-1 items-center justify-center gap-2 rounded-[15px] py-[15px] text-[14px] font-extrabold text-white shadow-[0_10px_26px_-8px_rgba(139,92,246,.7)]"
-            style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}
+            title="Remove selected"
+            aria-label={`Remove ${count} selected`}
+            onClick={onRemove}
+            className="flex h-9 w-9 items-center justify-center rounded-[11px] text-[#fb7185] transition-colors hover:bg-[rgba(251,113,133,.14)]"
           >
-            <Plus size={15} strokeWidth={2.4} />
-            Create run &middot; {count} selected
+            <Trash2 size={16} strokeWidth={2} />
+          </button>
+          <div className="mx-0.5 h-6 w-px bg-white/[0.1]" />
+          <button
+            type="button"
+            title="Clear selection"
+            onClick={onClear}
+            className="flex h-9 w-9 items-center justify-center rounded-[11px] text-ink-soft transition-colors hover:bg-white/[0.08] hover:text-ink"
+          >
+            <X size={16} strokeWidth={2} />
           </button>
         </motion.div>
       )}
