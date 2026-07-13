@@ -14,6 +14,7 @@ import {
   useUploadOwnClaudeCredentials,
 } from "@/hooks/queries";
 import { cn } from "@/lib/cn";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import type {
   ByModelUsage,
   ClaudeCredentialsMeta,
@@ -120,7 +121,8 @@ export function ClaudeStatsButton() {
           <>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/25" />
             <Star size={12} strokeWidth={2} className="text-ink-dim" />
-            <span className="h-3 w-16 animate-pulse rounded bg-white/[0.14]" />
+            {/* Label skeleton is hidden on mobile where the chip is icon-only. */}
+            <span className="hidden h-3 w-16 animate-pulse rounded bg-white/[0.14] md:block" />
           </>
         ) : (
           <>
@@ -137,8 +139,10 @@ export function ClaudeStatsButton() {
               />
             </span>
             <Star size={12} strokeWidth={2} style={{ color: "#fbbf24" }} fill="#fbbf24" />
-            {label}
-            <ChevronDown size={12} strokeWidth={2} />
+            {/* On mobile the chip is compact (dot + star only) to fit the top bar;
+                the model label + chevron show from `md` up. */}
+            <span className="hidden md:inline">{label}</span>
+            <ChevronDown size={12} strokeWidth={2} className="hidden md:block" />
           </>
         )}
       </button>
@@ -235,6 +239,7 @@ function StatsPanel({
   const uploadOwn = useUploadOwnClaudeCredentials();
   const test = useTestClaudeCredentials();
   const fileRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const switching = setMode.isPending || uploadOwn.isPending;
   const effMeta = effectiveCredMeta(credStatus);
@@ -256,6 +261,8 @@ function StatsPanel({
   useEffect(() => {
     if (!open) return;
     const place = () => {
+      // On mobile the panel is a full-width bottom sheet, so no anchoring needed.
+      if (isMobile) return;
       const el = anchorRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
@@ -285,9 +292,10 @@ function StatsPanel({
       window.removeEventListener("scroll", reposition, true);
       window.removeEventListener("resize", reposition);
     };
-  }, [open, anchorRef, onClose]);
+  }, [open, anchorRef, onClose, isMobile]);
 
-  if (!open || !pos) return null;
+  if (!open) return null;
+  if (!isMobile && !pos) return null;
 
   const credMode = credStatus?.mode ?? "none";
   const credBadge = credMode === "own" ? "Personal" : credMode === "shared" ? "Shared" : "Not set";
@@ -372,12 +380,8 @@ function StatsPanel({
     ["Cache write", bd.cacheWrite, "#fbbf24"],
   ];
 
-  return createPortal(
-    <div
-      data-claude-stats
-      className="fixed z-[1000] rounded-[14px] border border-white/[0.12] p-[14px] shadow-[0_30px_70px_-20px_#000]"
-      style={{ top: pos.top, left: pos.left, width: PANEL_WIDTH, background: "rgba(24,24,32,.97)" }}
-    >
+  const content = (
+    <>
       {/* Header */}
       <div className="flex items-center gap-2.5">
         <span
@@ -538,6 +542,44 @@ function StatsPanel({
           Claude sessions on this machine.
         </span>
       </div>
+    </>
+  );
+
+  // Mobile: a full-width bottom sheet (scrim + slide-up panel with a grab handle).
+  if (isMobile) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[1000]"
+        style={{ background: "rgba(4,4,8,.6)", backdropFilter: "blur(2px)" }}
+        onClick={onClose}
+      >
+        <div
+          data-claude-stats
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-x-0 bottom-0 max-h-[92vh] animate-[fadeInUp_.3s_ease] overflow-y-auto rounded-t-[26px] border-t border-white/[0.12] p-4"
+          style={{
+            background: "rgba(24,24,32,.99)",
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
+          }}
+        >
+          <div className="mb-3 flex justify-center">
+            <span className="h-1 w-10 rounded-full bg-white/25" />
+          </div>
+          {content}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  // Desktop: an anchored dropdown panel below the chip.
+  return createPortal(
+    <div
+      data-claude-stats
+      className="fixed z-[1000] rounded-[14px] border border-white/[0.12] p-[14px] shadow-[0_30px_70px_-20px_#000]"
+      style={{ top: pos!.top, left: pos!.left, width: PANEL_WIDTH, background: "rgba(24,24,32,.97)" }}
+    >
+      {content}
     </div>,
     document.body,
   );

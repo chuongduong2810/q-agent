@@ -1,6 +1,7 @@
 import { Menu, Plus, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
+import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
 import { useRunRouteId } from "@/hooks/useRunRouteId";
 import { useRun } from "@/hooks/queries";
 import { useUI } from "@/store/ui";
@@ -80,6 +81,7 @@ export function MobileTopBar() {
       </div>
 
       <AiActivityIndicator />
+      <ClaudeStatsButton />
 
       {inRun ? (
         <button
