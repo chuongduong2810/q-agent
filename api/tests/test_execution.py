@@ -102,6 +102,44 @@ def test_parse_playwright_report_maps_pass_and_fail():
     assert kinds == {"screenshot", "trace"}
 
 
+def test_parse_playwright_report_maps_dom_attachments():
+    """Captured DOM attachments map to the 'dom' / 'dom-distilled' evidence kinds."""
+    report = {
+        "suites": [
+            {
+                "title": "x.spec.ts",
+                "file": "x.spec.ts",
+                "specs": [
+                    {
+                        "title": "captures dom",
+                        "file": "x.spec.ts",
+                        "tests": [
+                            {
+                                "status": "expected",
+                                "results": [
+                                    {
+                                        "status": "passed",
+                                        "duration": 5,
+                                        "attachments": [
+                                            {"name": "qagent-dom-raw", "path": "/t/dom.html"},
+                                            {"name": "qagent-dom-distilled", "path": "/t/dom.json"},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "suites": [],
+            }
+        ]
+    }
+    results = parse_playwright_report(report)
+    assert len(results) == 1
+    kinds = {a["kind"]: a["path"] for a in results[0]["attachments"]}
+    assert kinds == {"dom": "/t/dom.html", "dom-distilled": "/t/dom.json"}
+
+
 def test_parse_playwright_report_empty_suites_returns_empty_list():
     assert parse_playwright_report({"suites": []}) == []
 
@@ -529,39 +567,52 @@ def test_run_execution_manual_auth_failure_fails_run_without_specs(client, db_se
     assert "Manual login was not completed" in current["results"][0]["errorMessage"]
 
 
-def test_auth_fixtures_ts_contents(tmp_path):
-    """The generated fixtures.ts wires an init script and embeds the session path."""
+def test_fixtures_ts_contents(tmp_path):
+    """The generated fixtures.ts always wires DOM capture; sessionStorage replay is gated."""
     from app.services import playwright_runner as runner
 
     session_file = tmp_path / "sessionStorage.json"
-    ts = runner._auth_fixtures_ts(session_file)
-    assert "addInitScript" in ts
-    assert "export const test" in ts
     import json as _json
 
-    assert _json.dumps(str(session_file)) in ts
+    # DOM capture is always present; the session path is always embedded.
+    replay = runner._fixtures_ts(session_file, replay_session=True)
+    assert "export const test" in replay
+    assert "testInfo.attach('qagent-dom-raw'" in replay
+    assert "testInfo.attach('qagent-dom-distilled'" in replay
+    assert _json.dumps(str(session_file)) in replay
+    # replay_session=True injects the sessionStorage-replay init script.
+    assert "addInitScript" in replay
+
+    # replay_session=False keeps DOM capture but drops the init script.
+    no_replay = runner._fixtures_ts(session_file, replay_session=False)
+    assert "testInfo.attach('qagent-dom-distilled'" in no_replay
+    assert "addInitScript" not in no_replay
 
 
-def test_apply_auth_fixtures_rewrites_imports_both_ways(tmp_path):
-    """enabled=True rewrites to './fixtures' + writes fixtures.ts; enabled=False reverts."""
+def test_apply_fixtures_always_injects(tmp_path):
+    """_apply_fixtures always rewrites imports to './fixtures' + writes fixtures.ts."""
     from app.services import playwright_runner as runner
 
     spec = tmp_path / "1428-TC-01.spec.ts"
-    spec.write_text(
+    original = (
         "import { test, expect } from '@playwright/test';\n"
-        "test('x', async ({ page }) => { await page.goto('/'); });\n",
-        encoding="utf-8",
+        "test('x', async ({ page }) => { await page.goto('/'); });\n"
     )
+    spec.write_text(original, encoding="utf-8")
     session_file = tmp_path / "sessionStorage.json"
 
-    runner._apply_auth_fixtures(tmp_path, session_file, enabled=True)
+    # Even without session replay, DOM capture means fixtures are injected.
+    runner._apply_fixtures(tmp_path, session_file, replay_session=False)
     assert "'./fixtures'" in spec.read_text(encoding="utf-8")
     assert "'@playwright/test'" not in spec.read_text(encoding="utf-8")
-    assert (tmp_path / "fixtures.ts").exists()
+    fixtures = (tmp_path / "fixtures.ts").read_text(encoding="utf-8")
+    assert "qagent-dom-distilled" in fixtures
+    assert "addInitScript" not in fixtures
 
-    runner._apply_auth_fixtures(tmp_path, session_file, enabled=False)
-    assert "'@playwright/test'" in spec.read_text(encoding="utf-8")
-    assert "'./fixtures'" not in spec.read_text(encoding="utf-8")
+    # With replay enabled, the init script is added; specs stay pointed at './fixtures'.
+    runner._apply_fixtures(tmp_path, session_file, replay_session=True)
+    assert "'./fixtures'" in spec.read_text(encoding="utf-8")
+    assert "addInitScript" in (tmp_path / "fixtures.ts").read_text(encoding="utf-8")
 
 
 def test_run_execution_manual_auth_applies_session_fixtures(client, db_session, monkeypatch):
@@ -608,8 +659,8 @@ def test_run_execution_manual_auth_applies_session_fixtures(client, db_session, 
     assert "'./fixtures'" in spec.read_text(encoding="utf-8")
 
 
-def test_run_execution_non_auth_leaves_playwright_import(client, db_session, monkeypatch):
-    """A normal (non-auth) run keeps specs importing '@playwright/test' and no fixtures."""
+def test_run_execution_non_auth_still_injects_dom_fixtures(client, db_session, monkeypatch):
+    """A normal (non-auth) run still injects fixtures for DOM capture, without session replay."""
     import app.services.playwright_runner as runner_module
     from app.services.workspace_scope import scoped_specs_dir
 
@@ -639,5 +690,8 @@ def test_run_execution_non_auth_leaves_playwright_import(client, db_session, mon
             break
 
     assert client.get(f"/executions/{execution_id}").json()["status"] == "done"
-    assert "'@playwright/test'" in spec.read_text(encoding="utf-8")
-    assert not (spec_dir / "fixtures.ts").exists()
+    # DOM capture: fixtures are always injected now; a non-auth run has no session replay.
+    assert "'./fixtures'" in spec.read_text(encoding="utf-8")
+    fixtures = (spec_dir / "fixtures.ts").read_text(encoding="utf-8")
+    assert "qagent-dom-distilled" in fixtures
+    assert "addInitScript" not in fixtures

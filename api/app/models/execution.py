@@ -15,7 +15,11 @@ EXEC_STATUSES = ("queued", "running", "passed", "failed", "done")
 # (queued for a paired device to claim via /agent/jobs/next).
 EXEC_TARGETS = ("server", "local-agent")
 CASE_RESULT_STATUSES = ("pending", "running", "pass", "fail", "skipped")
-EVIDENCE_KINDS = ("screenshot", "video", "trace", "console", "network", "summary")
+# "dom"/"dom-distilled" are captured every run by the injected Playwright fixtures
+# (raw page HTML + a distilled interactable-element inventory) — see playwright_runner._fixtures_ts.
+EVIDENCE_KINDS = (
+    "screenshot", "video", "trace", "console", "network", "summary", "dom", "dom-distilled",
+)
 # Root-cause classification of a failed result (see failure_classifier). "" = unclassified.
 FAILURE_CLASSES = ("", "test_defect", "product_defect", "flaky", "environment", "timeout")
 
