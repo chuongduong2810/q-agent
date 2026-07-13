@@ -923,6 +923,33 @@ def _propose_healed_selector_to_kb(
         logger.warning("Heal->KB selector feedback skipped: {}", exc)
 
 
+def _merge_discovered_dom_to_kb(
+    project_key: str | None,
+    repo: str,
+    passing_code: str,
+    dom_snapshot: dict[str, Any] | None,
+    owner_id: int | None,
+) -> None:
+    """Best-effort: add the route + selectors a DOM-grounded heal pass exercised to the KB (#249).
+
+    The route comes from the passing attempt's captured DOM; the selectors are the
+    literals the passing spec actually used. Adding grounding to a KB that had none
+    is what lets a future generation stop hitting the ``blocked`` gate. Never raises.
+    """
+    if not project_key or not dom_snapshot:
+        return
+    try:
+        route = (dom_snapshot.get("path") or "").strip()
+        selectors = sorted(_selector_literals(passing_code))
+        if not route and not selectors:
+            return
+        knowledge_service.merge_discovered_dom(
+            project_key, repo, {"route": route, "selectors": selectors}, owner_id
+        )
+    except Exception as exc:  # noqa: BLE001 - heal->KB feedback must never break the heal loop
+        logger.warning("Heal->KB DOM merge skipped: {}", exc)
+
+
 def is_healing(case_id: int) -> bool:
     return case_id in _healing
 
@@ -1337,6 +1364,14 @@ def heal_spec(case_id: int) -> None:
         if final_status == "pass" and last_fix_pair is not None:
             _propose_healed_selector_to_kb(
                 project_key, heal_repo, last_fix_pair[0], last_fix_pair[1], run.owner_id
+            )
+        # Heal->KB DOM enrichment (#249): a DOM-grounded pass discovered a real
+        # route + selectors -> ADD any the KB doesn't know yet. Runs on ANY pass
+        # (even attempt 1 with no fix), since enriching an empty KB is exactly what
+        # unblocks the blocked class of specs. Composes with the 1->1 swap above.
+        if final_status == "pass":
+            _merge_discovered_dom_to_kb(
+                project_key, heal_repo, spec.code or "", _load_distilled_dom(attachments), run.owner_id
             )
 
         # Persist the heal trail on the spec so the UI can show the full process.

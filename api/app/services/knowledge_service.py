@@ -479,3 +479,132 @@ def propose_selector_fix(
         return False
     finally:
         db.close()
+
+
+def _element_label_from_selector(selector: str) -> str:
+    """Best-effort human-ish element label derived from a raw selector string.
+
+    Pulls the most identifying token out of common selector shapes so a
+    DOM-discovered ``selectors`` entry reads sensibly (e.g. ``#login-submit`` ->
+    ``login-submit``, ``[data-testid="email"]`` -> ``email``). Falls back to "".
+    """
+    import re
+
+    m = re.search(r'data-test(?:id)?\s*=\s*[\'"]([^\'"]+)', selector)
+    if m:
+        return m.group(1)
+    m = re.search(r"#([A-Za-z0-9_-]+)", selector)
+    if m:
+        return m.group(1)
+    return ""
+
+
+def merge_discovered_dom(
+    project_key: str, repo: str, discovered: dict[str, Any], owner_id: int | None = None
+) -> int:
+    """Best-effort: ADD routes/selectors discovered by a DOM-grounded heal pass to the KB (#249).
+
+    When a self-heal grounded on the live page DOM passes, the route the spec
+    exercised and the selectors it used are, by definition, real. This *adds* any
+    of them the KB doesn't already know (it never rewrites existing entries — that
+    is ``propose_selector_fix``'s job), tagging added entries ``source="dom-heal"``
+    for provenance. Adding grounding to a KB that had none is what lets a future
+    generation stop hitting the ``blocked`` gate.
+
+    Looks up the per-repo row first, falling back to the legacy project-level row
+    (mirrors ``propose_selector_fix`` / ``build_context``). Opens its own session
+    and never raises — heal->KB feedback is additive, not correctness-critical.
+
+    Args:
+        project_key: The project the discovery belongs to.
+        repo: Target repository name ("" for the legacy project-level row).
+        discovered: ``{"route": "/path", "selectors": ["#a", ...], "screen"?: str}``
+            — the route/selectors a passing DOM-grounded heal exercised.
+        owner_id: The knowledge row's owner (ADR 0009) — scopes the lookup.
+
+    Returns:
+        The number of new entries added (0 if nothing new, no row, or on error).
+    """
+    if not project_key:
+        return 0
+    route = (discovered.get("route") or "").strip()
+    selectors = [s for s in (discovered.get("selectors") or []) if s]
+    if not route and not selectors:
+        return 0
+    screen = (discovered.get("screen") or route.strip("/") or "home") or "home"
+
+    db = db_module.SessionLocal()
+    try:
+        row = None
+        if repo:
+            row = (
+                db.query(ProjectKnowledge)
+                .filter(
+                    ProjectKnowledge.key == compose_key(project_key, repo),
+                    ProjectKnowledge.owner_id == owner_id,
+                )
+                .first()
+            )
+        if row is None:
+            row = (
+                db.query(ProjectKnowledge)
+                .filter(ProjectKnowledge.key == project_key, ProjectKnowledge.owner_id == owner_id)
+                .first()
+            )
+        if row is None:
+            return 0
+
+        kn = dict(row.knowledge or {})
+        added = 0
+
+        if route:
+            routes = list(kn.get("routes") or [])
+            known_paths = {r.get("path") for r in routes if isinstance(r, dict)}
+            if route not in known_paths:
+                routes.append(
+                    {
+                        "path": route,
+                        "description": "Discovered during self-heal",
+                        "auth_required": False,
+                        "source": "dom-heal",
+                    }
+                )
+                kn["routes"] = routes
+                added += 1
+
+        if selectors:
+            kb_selectors = list(kn.get("selectors") or [])
+            known_selectors = {s.get("selector") for s in kb_selectors if isinstance(s, dict)}
+            for sel in selectors:
+                if sel in known_selectors:
+                    continue
+                kb_selectors.append(
+                    {
+                        "screen": screen,
+                        "element": _element_label_from_selector(sel),
+                        "selector": sel,
+                        "source": "dom-heal",
+                    }
+                )
+                known_selectors.add(sel)
+                added += 1
+            if added:
+                kn["selectors"] = kb_selectors
+
+        if not added:
+            return 0
+
+        row.knowledge = kn  # reassign so SQLAlchemy tracks the JSON change
+        db.commit()
+        write_knowledge_files(row)
+        logger.info(
+            "Self-heal DOM discovery added {} KB entr{} for {} (route={!r}, {} selectors)",
+            added, "y" if added == 1 else "ies", project_key, route, len(selectors),
+        )
+        return added
+    except Exception as exc:  # noqa: BLE001 - heal->KB feedback is best-effort
+        db.rollback()
+        logger.warning("Self-heal KB DOM merge failed for {}: {}", project_key, exc)
+        return 0
+    finally:
+        db.close()

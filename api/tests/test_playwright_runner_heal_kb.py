@@ -87,3 +87,43 @@ def test_propose_healed_selector_to_kb_never_raises_on_kb_failure(monkeypatch):
 
     # Must not raise.
     playwright_runner._propose_healed_selector_to_kb("Surency Platform", "", before, after, None)
+
+
+# --- Heal->KB DOM enrichment wiring (#249) -----------------------------------
+
+
+def test_merge_discovered_dom_to_kb_passes_route_and_spec_selectors(monkeypatch):
+    """The route comes from the captured DOM; selectors from the passing spec's literals."""
+    calls = []
+    monkeypatch.setattr(
+        knowledge_service, "merge_discovered_dom", lambda *a, **k: calls.append(a) or 2
+    )
+    passing_code = "await page.goto('/login');\nawait page.locator('#login-submit').click();\n"
+    dom = {"path": "/login", "elements": []}
+
+    playwright_runner._merge_discovered_dom_to_kb("P", "org/web", passing_code, dom, None)
+
+    assert calls == [("P", "org/web", {"route": "/login", "selectors": ["#login-submit"]}, None)]
+
+
+def test_merge_discovered_dom_to_kb_noop_without_project_or_dom(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        knowledge_service, "merge_discovered_dom", lambda *a, **k: calls.append(a) or 0
+    )
+
+    playwright_runner._merge_discovered_dom_to_kb(None, "", "code", {"path": "/x"}, None)
+    playwright_runner._merge_discovered_dom_to_kb("P", "", "code", None, None)
+
+    assert calls == []
+
+
+def test_merge_discovered_dom_to_kb_never_raises(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(knowledge_service, "merge_discovered_dom", boom)
+    # Must not raise.
+    playwright_runner._merge_discovered_dom_to_kb(
+        "P", "", "await page.locator('#a').click();\n", {"path": "/a"}, None
+    )
