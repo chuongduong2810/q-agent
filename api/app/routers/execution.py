@@ -120,6 +120,11 @@ def start_execution(
         )
 
     set_run_status(db, run, "executing")
+    # set_run_status commits only when the transition applies; it no-ops (no
+    # commit) on a terminal run, so commit the execution explicitly or the
+    # flushed rows roll back on session close (a "run anyway" on a failed run
+    # would 200 but queue nothing — see #247).
+    db.commit()
     db.refresh(execution)
 
     if target == "server":
@@ -197,6 +202,10 @@ def run_single_spec(
         )
     )
     set_run_status(db, run, "executing")
+    # See start_execution: set_run_status no-ops (no commit) on a terminal run,
+    # so commit explicitly or the flushed Execution/ExecutionResult roll back —
+    # a "run anyway" on a blocked/failed run would 200 but queue nothing (#247).
+    db.commit()
     db.refresh(execution)
 
     if target == "server":
