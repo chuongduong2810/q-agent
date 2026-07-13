@@ -39,6 +39,10 @@ class Execution(Base):
     env: Mapped[str] = mapped_column(String(32), default="Staging")
     browser: Mapped[str] = mapped_column(String(32), default="chromium")
     workers: Mapped[int] = mapped_column(Integer, default=4)
+    # When set, this single-case Execution is an agent-executed self-heal for the
+    # given test_case (see heal_service / the /agent/heal/* endpoints). The claim
+    # payload flags it so the Local Agent runs the heal loop instead of a one-shot run.
+    heal_case_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     total: Mapped[int] = mapped_column(Integer, default=0)
     passed: Mapped[int] = mapped_column(Integer, default=0)
