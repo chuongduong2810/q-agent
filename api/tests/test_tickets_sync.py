@@ -246,6 +246,38 @@ def test_list_tickets_filters_by_epic(client, db_session):
     assert page["items"][0]["epic"] == "Checkout"
 
 
+def test_list_tickets_filters_by_area_path_with_backslash(client, db_session):
+    """Area-path filter matches the selected node AND its children (UNDER
+    semantics), and must handle the backslash in ADO area paths.
+
+    Note: the real-world bug this guards was Postgres-specific — Postgres LIKE
+    treats backslash as its default ESCAPE char, so a raw
+    ``LIKE 'Surency\\Data Platform%'`` matched nothing. The fix uses
+    ``startswith(autoescape=True)`` (ESCAPE '/'). This test runs on SQLite
+    (which doesn't special-case backslash) so it locks in the UNDER semantics
+    and that the fix keeps normal matching intact; the Postgres escape was
+    verified directly against the live database.
+    """
+    from app.models.ticket import Ticket
+
+    db_session.add(
+        Ticket(external_id="1", provider_kind="ado", title="Exact", status="Done", priority="Low", area_path="Surency\\Data Platform")
+    )
+    db_session.add(
+        Ticket(external_id="2", provider_kind="ado", title="Child", status="Done", priority="Low", area_path="Surency\\Data Platform\\Ingestion")
+    )
+    db_session.add(
+        Ticket(external_id="3", provider_kind="ado", title="Other", status="Done", priority="Low", area_path="Surency\\Admin Hub")
+    )
+    db_session.commit()
+
+    resp = client.get("/tickets", params={"areaPath": "Surency\\Data Platform"})
+    assert resp.status_code == 200
+    page = resp.json()
+    ids = {t["externalId"] for t in page["items"]}
+    assert ids == {"1", "2"}  # the node itself + its child, not the sibling
+
+
 @respx.mock
 def test_projects_refresh_upserts_from_connected_providers(client):
     connection_id = _configure_ado(client)
