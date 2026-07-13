@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.prompts import render_project_context
+from app.services.prompts import render_dom_snapshot, render_project_context
 
 
 def test_render_project_context_ranks_routes_by_relevance():
@@ -38,3 +38,44 @@ def test_render_project_context_no_query_keeps_prior_blind_slice_order():
     assert "/r19" in block
     assert "/r20" not in block
     assert "/r24" not in block
+
+
+def test_render_dom_snapshot_lists_identified_elements():
+    """The distilled DOM block surfaces real element identifiers and the current page."""
+    snapshot = {
+        "path": "/login",
+        "elements": [
+            {"tag": "input", "testId": "email", "type": "email"},
+            {"tag": "button", "role": "button", "text": "Sign in"},
+            {"tag": "div"},  # anonymous — no identifier
+        ],
+    }
+    block = render_dom_snapshot(snapshot)
+    assert "Live DOM captured at failure" in block
+    assert "/login" in block
+    assert "testid='email'" in block
+    assert "text='Sign in'" in block
+
+
+def test_render_dom_snapshot_empty_is_blank():
+    assert render_dom_snapshot(None) == ""
+    assert render_dom_snapshot({"elements": []}) == ""
+
+
+def test_build_fix_prompt_includes_discovered_selector():
+    """A DOM snapshot passed to the fixer prompt surfaces its real selectors."""
+    from types import SimpleNamespace
+
+    from app.services.spec_service import _build_fix_prompt
+
+    case = SimpleNamespace(
+        title="Sign in", precondition=None, steps=[],
+        ticket_external_id="TCK-1", code="TC-01",
+    )
+    snapshot = {"path": "/login", "elements": [{"tag": "input", "testId": "username"}]}
+    prompt = _build_fix_prompt(
+        case, "test('Sign in', async () => {});", "locator not found",
+        dom_snapshot=snapshot,
+    )
+    assert "Live DOM captured at failure" in prompt
+    assert "testid='username'" in prompt

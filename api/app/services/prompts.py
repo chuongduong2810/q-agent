@@ -213,6 +213,63 @@ def render_project_context(
     return "\n".join(lines)
 
 
+def render_dom_snapshot(dom_snapshot: dict[str, Any] | None, *, max_elements: int = 60) -> str:
+    """Render a distilled live-DOM snapshot (captured at run/failure time) for a heal prompt.
+
+    Gives the fixer the page's REAL interactable elements so it can pick grounded
+    locators instead of guessing — especially valuable when the KB has no selectors
+    (the ``blocked`` case). Each line lists the stable identifiers Playwright
+    locators care about (test id, role, name, text, …).
+
+    Args:
+        dom_snapshot: The parsed ``qagent-dom-distilled`` payload — ``{path, url,
+            elements: [{tag, role?, testId?, id?, name?, text?, placeholder?, type?}]}``
+            — or None.
+        max_elements: Cap on rendered elements to bound prompt size. Elements
+            carrying an explicit identifier are preferred over anonymous ones.
+
+    Returns:
+        A markdown block, or "" when there is no usable DOM snapshot.
+    """
+    if not dom_snapshot:
+        return ""
+    elements = dom_snapshot.get("elements") or []
+    if not elements:
+        return ""
+
+    def _has_identifier(el: dict) -> bool:
+        return bool(
+            el.get("testId") or el.get("role") or el.get("name")
+            or el.get("text") or el.get("id") or el.get("placeholder")
+        )
+
+    # Prefer elements with a stable identifier; keep source order within the group.
+    identified = [e for e in elements if isinstance(e, dict) and _has_identifier(e)]
+    ranked = (identified or [e for e in elements if isinstance(e, dict)])[:max_elements]
+
+    def _fmt(el: dict) -> str:
+        parts = [el.get("tag", "")]
+        for key, label in (
+            ("testId", "testid"), ("role", "role"), ("name", "name"),
+            ("type", "type"), ("id", "id"), ("placeholder", "placeholder"),
+        ):
+            if el.get(key):
+                parts.append(f"{label}={el[key]!r}")
+        if el.get("text"):
+            parts.append(f"text={el['text']!r}")
+        return "  - " + " ".join(p for p in parts if p)
+
+    lines = ["Live DOM captured at failure — real interactable elements on the page "
+             "(prefer these over guesses):"]
+    loc = dom_snapshot.get("path") or dom_snapshot.get("url") or ""
+    if loc:
+        lines.append(f"- Current page: {loc}")
+    lines.extend(_fmt(e) for e in ranked)
+    if len(elements) > len(ranked):
+        lines.append(f"  … ({len(elements) - len(ranked)} more elements omitted)")
+    return "\n".join(lines)
+
+
 def _repo_section(context: dict[str, Any] | None) -> str:
     """Render the 'pick the target repo' instruction block, or "" when the
     project has no repositories. Shared by the analysis and combined prompts."""
