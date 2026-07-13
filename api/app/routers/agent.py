@@ -33,13 +33,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.deps_auth import require_agent, require_user
 from app.models.execution import Execution, ExecutionResult
 from app.models.run import Run
-from app.models.testcase import AutomationSpec
+from app.models.testcase import AutomationSpec, TestCase
 from app.models.user import User
-from app.services import agent_capture_service, agent_device_service, evidence_service, execution_service, project_config_service, settings_store, spec_service
+from app.services import agent_capture_service, agent_device_service, evidence_service, execution_service, heal_service, project_config_service, settings_store, spec_service
 from app.services.auth_service import AuthError
 from app.services.ownership import get_owned_or_404
 from app.services.playwright_runner import _resolve_project_for_run
@@ -199,7 +200,7 @@ def claim_next_job(
             }
         )
 
-    return {
+    payload = {
         "executionId": execution.id,
         "runCode": run.code,
         "env": execution.env,
@@ -211,6 +212,16 @@ def claim_next_job(
         "authOrigins": auth_origins,
         "specs": specs,
     }
+    # An agent-executed self-heal (issue #260): the agent runs the heal LOOP for
+    # this one case (run → on fail POST /agent/heal/{caseId}/fix → re-run → …),
+    # then POSTs /agent/heal/{caseId}/finalize. Flagged so the agent branches into
+    # heal mode instead of a one-shot run.
+    if execution.heal_case_id is not None:
+        payload["heal"] = {
+            "caseId": execution.heal_case_id,
+            "maxAttempts": settings.heal_max_attempts,
+        }
+    return payload
 
 
 @router.post("/jobs/{execution_id}/events")
@@ -342,5 +353,57 @@ def complete_job(
     execution, run = _owned_execution(db, execution_id, user)
     execution.passed = int(body.get("passed") or 0)
     execution.failed = int(body.get("failed") or 0)
-    execution_service.finalize(db, execution, run, body.get("log", ""))
+    # An agent heal execution (heal_case_id set) re-runs a single case and must not
+    # advance the run's lifecycle (matches the server heal loop).
+    execution_service.finalize(
+        db, execution, run, body.get("log", ""), advance_run=execution.heal_case_id is None
+    )
+    return {"ok": True}
+
+
+# --------------------------------------------------------------- agent self-heal (#260)
+# The heal LOOP runs on the agent (Playwright + captured DOM). These two endpoints
+# do the parts that need the server: Claude (fix generation) + the DB/KB. See
+# app.services.heal_service.
+
+
+def _owned_case_and_run(db: Session, case_id: int, user: User) -> tuple[TestCase, Run]:
+    """Fetch a TestCase + its Run, 404ing unless the run belongs to ``user``."""
+    case = db.get(TestCase, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Test case not found")
+    run = get_owned_or_404(db, Run, case.run_id, user)
+    return case, run
+
+
+@router.post("/heal/{case_id}/fix")
+def agent_heal_fix(
+    case_id: int, body: dict, user: User = Depends(require_agent), db: Session = Depends(get_db)
+) -> dict:
+    """Classify a failed heal attempt and, unless it's a product defect, ask Claude
+    for a fix (server holds the LLM creds + KB the agent lacks).
+
+    Body: ``{currentCode, error, output, domDistilled, attempt}``. Returns the
+    action the agent should take — see :func:`heal_service.plan_fix`.
+    """
+    case, run = _owned_case_and_run(db, case_id, user)
+    return heal_service.plan_fix(
+        db,
+        case,
+        run,
+        body.get("currentCode") or "",
+        body.get("error") or "",
+        body.get("output") or "",
+        body.get("domDistilled"),
+    )
+
+
+@router.post("/heal/{case_id}/finalize")
+def agent_heal_finalize(
+    case_id: int, body: dict, user: User = Depends(require_agent), db: Session = Depends(get_db)
+) -> dict:
+    """Persist an agent heal's final outcome + feed a passing DOM-grounded heal into
+    the KB. Body shape: see :func:`heal_service.finalize_agent_heal`."""
+    case, run = _owned_case_and_run(db, case_id, user)
+    heal_service.finalize_agent_heal(db, case, run, body)
     return {"ok": True}

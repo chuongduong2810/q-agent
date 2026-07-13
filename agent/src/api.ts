@@ -45,6 +45,9 @@ export interface Job {
   manualAuth: boolean;
   authOrigins: string[];
   specs: JobSpec[];
+  /** Present when this job is an agent-executed self-heal (#260): run the heal
+   * LOOP for this one case, calling /agent/heal/{caseId}/fix + /finalize. */
+  heal?: { caseId: number; maxAttempts: number };
 }
 
 function authHeaders(token: string): Record<string, string> {
@@ -183,6 +186,45 @@ export async function postEvidence(cfg: AgentConfig, executionId: number, ev: Ev
     method: "POST",
     headers: authHeaders(cfg.deviceToken),
     body: form,
+  });
+  await throwIfNotOk(res);
+}
+
+/** Server's decision for one failed heal attempt (#260) — see heal_service.plan_fix. */
+export interface HealFixResult {
+  action: "fixed" | "blocked" | "rejected" | "product_defect";
+  code?: string;
+  diff?: string;
+  reason?: string;
+  failureClass?: string;
+  gate?: string;
+}
+
+/** Ask the server to classify + fix one failed heal attempt (Claude + KB live server-side). */
+export async function postHealFix(
+  cfg: AgentConfig,
+  caseId: number,
+  body: { currentCode: string; error: string; output: string; domDistilled: unknown; attempt: number }
+): Promise<HealFixResult> {
+  const res = await fetch(`${cfg.serverUrl}/agent/heal/${caseId}/fix`, {
+    method: "POST",
+    headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  await throwIfNotOk(res);
+  return (await res.json()) as HealFixResult;
+}
+
+/** Persist the heal's final outcome + feed a passing DOM-grounded heal into the KB. */
+export async function postHealFinalize(
+  cfg: AgentConfig,
+  caseId: number,
+  body: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(`${cfg.serverUrl}/agent/heal/${caseId}/finalize`, {
+    method: "POST",
+    headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
   await throwIfNotOk(res);
 }

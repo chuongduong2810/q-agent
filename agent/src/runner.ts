@@ -16,7 +16,7 @@ import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
 import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorCaptureScript } from "./paths";
 import { applyFixtures, writeConfig } from "./playwrightConfig";
-import { ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
+import { ParsedAttachment, ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
 
 // Mirrors api/app/config.py's Settings.exec_timeout_s / auth_capture_timeout_s.
@@ -151,55 +151,80 @@ async function failAllResults(cfg: AgentConfig, job: api.Job, message: string): 
   );
 }
 
+/** Resolved local auth for a job: paths to a saved session, or an `error` when a
+ * required manual login could not be obtained (caller decides how to report it). */
+interface ResolvedAuth {
+  storageState: string;
+  sessionStoragePath: string;
+  error?: string;
+}
+
+/** Reuse a valid local session, or capture one headed — shared by the run + heal paths. */
+async function resolveJobAuth(cfg: AgentConfig, job: api.Job): Promise<ResolvedAuth> {
+  if (!job.manualAuth) return { storageState: "", sessionStoragePath: "" };
+  let origin = job.authOrigins[0] || "";
+  if (!origin && job.baseUrl) {
+    try {
+      origin = new URL(job.baseUrl).origin;
+    } catch {
+      origin = "";
+    }
+  }
+  if (origin && hasValidSession(origin)) {
+    const paths = sessionPathsForOrigin(origin);
+    return { storageState: paths.storageStatePath, sessionStoragePath: paths.sessionStoragePath };
+  }
+  if (origin && job.baseUrl) {
+    const paths = sessionPathsForOrigin(origin);
+    await api.postEvent(cfg, job.executionId, "exec.auth.waiting", { url: job.baseUrl });
+    emit("auth-waiting", { url: job.baseUrl });
+    const captured = await captureAuth(job.baseUrl, paths.storageStatePath, paths.sessionStoragePath);
+    if (captured) {
+      await api.postEvent(cfg, job.executionId, "exec.auth.captured", {});
+      emit("auth-captured", {});
+      return { storageState: paths.storageStatePath, sessionStoragePath: paths.sessionStoragePath };
+    }
+    const message = "Manual login was not completed — enable/redo login capture";
+    await api.postEvent(cfg, job.executionId, "exec.auth.error", { message });
+    emit("error", { message });
+    return { storageState: "", sessionStoragePath: "", error: message };
+  }
+  const message = "Set a base URL for the project first.";
+  await api.postEvent(cfg, job.executionId, "exec.auth.error", { message });
+  emit("error", { message });
+  return { storageState: "", sessionStoragePath: "", error: message };
+}
+
+/** Best-effort: read the distilled DOM JSON from a parsed attachment list. */
+function loadDistilledDom(workDir: string, attachments: ParsedAttachment[]): unknown {
+  const att = attachments.find((a) => a.kind === "dom-distilled");
+  if (!att) return null;
+  const p = path.isAbsolute(att.path) ? att.path : path.join(workDir, att.path);
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
 /** Process one claimed job end-to-end: write specs/config, resolve auth, run Playwright, push results. */
 export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> {
+  if (job.heal) {
+    await processHealJob(cfg, job, job.heal);
+    return;
+  }
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "qagent-"));
   try {
     for (const spec of job.specs) {
       fs.writeFileSync(path.join(workDir, spec.filename), spec.code, "utf-8");
     }
 
-    // ---- Resolve auth: reuse a valid local session, or capture one headed.
-    let storageState = "";
-    let sessionStoragePath = "";
-    if (job.manualAuth) {
-      let origin = job.authOrigins[0] || "";
-      if (!origin && job.baseUrl) {
-        try {
-          origin = new URL(job.baseUrl).origin;
-        } catch {
-          origin = "";
-        }
-      }
-      if (origin && hasValidSession(origin)) {
-        const paths = sessionPathsForOrigin(origin);
-        storageState = paths.storageStatePath;
-        sessionStoragePath = paths.sessionStoragePath;
-      } else if (origin && job.baseUrl) {
-        const paths = sessionPathsForOrigin(origin);
-        await api.postEvent(cfg, job.executionId, "exec.auth.waiting", { url: job.baseUrl });
-        emit("auth-waiting", { url: job.baseUrl });
-        const captured = await captureAuth(job.baseUrl, paths.storageStatePath, paths.sessionStoragePath);
-        if (captured) {
-          storageState = paths.storageStatePath;
-          sessionStoragePath = paths.sessionStoragePath;
-          await api.postEvent(cfg, job.executionId, "exec.auth.captured", {});
-          emit("auth-captured", {});
-        } else {
-          const message = "Manual login was not completed — enable/redo login capture";
-          await api.postEvent(cfg, job.executionId, "exec.auth.error", { message });
-          emit("error", { message });
-          await failAllResults(cfg, job, message);
-          return;
-        }
-      } else {
-        const message = "Set a base URL for the project first.";
-        await api.postEvent(cfg, job.executionId, "exec.auth.error", { message });
-        emit("error", { message });
-        await failAllResults(cfg, job, message);
-        return;
-      }
+    const auth = await resolveJobAuth(cfg, job);
+    if (auth.error) {
+      await failAllResults(cfg, job, auth.error);
+      return;
     }
+    const { storageState, sessionStoragePath } = auth;
 
     writeConfig(workDir, job.workers, job.headless, job.baseUrl, storageState);
 
@@ -370,6 +395,188 @@ async function processCapture(cfg: AgentConfig, capture: api.CaptureJob): Promis
   await api
     .postCaptureComplete(cfg, capture.captureId, ok, ok ? undefined : "Login was not captured")
     .catch((err) => console.error("postCaptureComplete failed:", err));
+}
+
+/**
+ * Run the self-heal LOOP for one case locally (#260): run the spec + capture DOM,
+ * and while it fails ask the server to classify + fix it (Claude + KB live
+ * server-side), apply the returned code, and re-run — up to `maxAttempts`. Streams
+ * `heal.progress`, uploads the final attempt's result + evidence, then posts the
+ * outcome to `/agent/heal/{caseId}/finalize`.
+ */
+async function processHealJob(cfg: AgentConfig, job: api.Job, heal: { caseId: number; maxAttempts: number }): Promise<void> {
+  const spec = job.specs[0];
+  const { ticket, caseCode } = identityFor(spec);
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "qagent-heal-"));
+  const progress = (phase: string, attempt: number, message: string, error = ""): Promise<void> =>
+    api
+      .postEvent(cfg, job.executionId, "heal.progress", {
+        caseId: heal.caseId, ticket, caseCode, attempt, maxAttempts: heal.maxAttempts,
+        phase, message, error: (error || "").slice(0, 600),
+      })
+      .catch(() => {});
+
+  let currentCode = spec.code;
+  let finalStatus: "pass" | "fail" | "blocked" | "product_defect" = "fail";
+  let finalError = "";
+  let elapsedMs = 0;
+  let lastDom: unknown = null;
+  let lastAttachments: ParsedAttachment[] = [];
+  let lastFixBefore: string | null = null;
+  let lastFixAfter: string | null = null;
+  let blockReason = "";
+  let gateReport = "";
+  const attempts: Array<Record<string, unknown>> = [];
+
+  try {
+    const auth = await resolveJobAuth(cfg, job);
+    if (auth.error) {
+      finalError = auth.error;
+    } else {
+      const { storageState, sessionStoragePath } = auth;
+      for (let attempt = 1; attempt <= heal.maxAttempts; attempt++) {
+        fs.writeFileSync(path.join(workDir, spec.filename), currentCode, "utf-8");
+        writeConfig(workDir, 1, job.headless, job.baseUrl, storageState);
+        const replaySession = Boolean(
+          job.manualAuth && storageState && sessionStoragePath && fs.statSync(sessionStoragePath).size > 0
+        );
+        applyFixtures(workDir, [spec.filename], sessionStoragePath || path.join(workDir, "sessionStorage.json"), replaySession);
+
+        await progress("running", attempt, `Running spec (attempt ${attempt}/${heal.maxAttempts})`);
+        const started = Date.now();
+        const { stdout, stderr, timedOut } = await runPlaywright(workDir, 1, spec.filename);
+        elapsedMs = Date.now() - started;
+        const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+
+        let entry: ParsedResult | undefined;
+        const reportPath = path.join(workDir, "report.json");
+        if (!timedOut && fs.existsSync(reportPath)) {
+          try {
+            const parsed = parsePlaywrightReport(JSON.parse(fs.readFileSync(reportPath, "utf-8")));
+            entry = parsed.find((e) => path.basename(e.file) === spec.filename);
+          } catch {
+            // fall through to the no-report error below
+          }
+        }
+        const rec: Record<string, unknown> = { attempt };
+        if (entry) {
+          lastAttachments = entry.attachments;
+          lastDom = loadDistilledDom(workDir, entry.attachments);
+        }
+
+        if (entry && entry.status === "pass") {
+          finalStatus = "pass";
+          finalError = "";
+          rec.status = "pass";
+          attempts.push(rec);
+          await progress("passed", attempt, "Spec passed");
+          break;
+        }
+
+        finalStatus = "fail";
+        finalError = entry
+          ? entry.error_message || output || "Test failed"
+          : timedOut
+            ? "Playwright run timed out"
+            : output || "No result reported by Playwright";
+        rec.status = "fail";
+        rec.error = finalError;
+
+        if (attempt >= heal.maxAttempts) {
+          attempts.push(rec);
+          await progress("failed", attempt, "Still failing after max attempts", finalError);
+          break;
+        }
+
+        await progress("fixing", attempt, "Asking the server to fix the spec", finalError);
+        let fix: api.HealFixResult;
+        try {
+          fix = await api.postHealFix(cfg, heal.caseId, {
+            currentCode, error: finalError, output, domDistilled: lastDom, attempt,
+          });
+        } catch (err) {
+          finalError = `Heal fix request failed: ${(err as Error).message}`;
+          rec.error = finalError;
+          attempts.push(rec);
+          await progress("failed", attempt, finalError, finalError);
+          break;
+        }
+
+        rec.action = fix.action;
+        if (fix.action === "product_defect") {
+          finalStatus = "product_defect";
+          rec.failureClass = fix.failureClass;
+          rec.reason = fix.reason;
+          attempts.push(rec);
+          await progress("product_defect", attempt, "Product defect suspected — routing to report", finalError);
+          break;
+        }
+        if (fix.action === "blocked") {
+          finalStatus = "blocked";
+          blockReason = fix.reason || "";
+          gateReport = fix.gate || "";
+          rec.gate = "blocked";
+          rec.error = fix.reason;
+          attempts.push(rec);
+          await progress("failed", attempt, "Fix blocked by placeholder gate", fix.reason || "");
+          break;
+        }
+        if (fix.action === "rejected") {
+          finalStatus = "fail";
+          rec.gate = "rejected";
+          rec.error = fix.reason;
+          attempts.push(rec);
+          await progress("failed", attempt, "Fix rejected", fix.reason || "");
+          break;
+        }
+        // action === "fixed": apply it and re-run.
+        rec.fixed = true;
+        rec.diff = fix.diff;
+        attempts.push(rec);
+        lastFixBefore = currentCode;
+        lastFixAfter = fix.code || currentCode;
+        currentCode = fix.code || currentCode;
+      }
+    }
+
+    // Report the final attempt's result + evidence against the heal execution.
+    const passResult = finalStatus === "pass";
+    await api
+      .postResult(cfg, job.executionId, {
+        file: spec.filename, status: passResult ? "pass" : "fail",
+        duration_ms: elapsedMs, error_message: passResult ? "" : finalError,
+      })
+      .catch((err) => console.error("postResult failed:", err));
+    for (const att of lastAttachments) {
+      const filePath = path.isAbsolute(att.path) ? att.path : path.join(workDir, att.path);
+      if (!fs.existsSync(filePath)) continue;
+      await api
+        .postEvidence(cfg, job.executionId, {
+          ticketExternalId: ticket, caseCode, kind: att.kind, filePath, filename: path.basename(filePath),
+        })
+        .catch((err) => console.error("postEvidence failed:", err));
+    }
+    await api
+      .postEvent(cfg, job.executionId, "exec.case.result", {
+        ticket, caseCode, status: passResult ? "pass" : "fail", durationMs: elapsedMs,
+      })
+      .catch(() => {});
+
+    await api
+      .postHealFinalize(cfg, heal.caseId, {
+        finalStatus, finalError, finalCode: currentCode,
+        blockReason, gateReport, domDistilled: lastDom,
+        lastFixBefore, lastFixAfter, attempts,
+      })
+      .catch((err) => console.error("postHealFinalize failed:", err));
+
+    await api
+      .postComplete(cfg, job.executionId, { passed: passResult ? 1 : 0, failed: passResult ? 0 : 1, log: finalError })
+      .catch((err) => console.error("postComplete failed:", err));
+    emit("job-complete", { executionId: job.executionId, passed: passResult ? 1 : 0, failed: passResult ? 0 : 1 });
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
 }
 
 /**

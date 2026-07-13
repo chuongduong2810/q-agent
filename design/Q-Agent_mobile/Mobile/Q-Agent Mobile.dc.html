@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{background:#07070b;color:#ECECF1;font-family:'Satoshi','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+  ::selection{background:rgba(139,92,246,.4);color:#fff}
+  main::-webkit-scrollbar,.scrl::-webkit-scrollbar{width:0;height:0}
+  a{color:#a78bfa;text-decoration:none}
+  a:hover{color:#c4b5fd}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes drawerIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+  @keyframes scrimIn{from{opacity:0}to{opacity:1}}
+  @keyframes sheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.82)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes think{0%,80%,100%{transform:scale(.4);opacity:.35}40%{transform:scale(1);opacity:1}}
+  @keyframes barGrow{from{transform:scaleY(0.04)}to{transform:scaleY(1)}}
+  @keyframes toastIn{0%{opacity:0;transform:translate(-50%,26px) scale(.96)}60%{opacity:1;transform:translate(-50%,-3px)}100%{opacity:1;transform:translate(-50%,0)}}
+  @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+</style>
+</helmet>
+
+<template id="__bundler_thumbnail"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#6366f1"/></linearGradient></defs><rect width="512" height="512" fill="#0a0a0f"/><rect x="154" y="154" width="204" height="204" rx="54" fill="url(#tg)"/><g transform="translate(154 154) scale(8.5)"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z" fill="#fff"/></g></svg></template>
+<div style="position:fixed;inset:0;background:radial-gradient(120% 80% at 50% 0%,#12101c,#07070b 70%);z-index:0"></div>
+<div ref="{{ bgRef }}" style="position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.9"></div>
+
+<div style="position:relative;z-index:2;width:100%;max-width:480px;margin:0 auto;height:100vh;display:flex;flex-direction:column;overflow:hidden">
+
+  <!-- ============ TOP BAR ============ -->
+  <header style="flex-shrink:0;display:flex;align-items:center;gap:12px;padding:14px 15px 12px;background:rgba(12,12,18,.72);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border-bottom:1px solid rgba(255,255,255,.06);position:relative;z-index:20">
+    <button onClick="{{ openMenu }}" aria-label="Menu" style="width:40px;height:40px;flex-shrink:0;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#ECECF1" style-active="background:rgba(255,255,255,.12)">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:15.5px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ topTitle }}</div>
+      <div style="font-size:10.5px;color:#7a7a8c;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ topSub }}</div>
+    </div>
+    <button onClick="{{ topAction }}" aria-label="Action" style="{{ topActionStyle }}" style-active="filter:brightness(1.1)">
+      <span dangerouslySetInnerHTML="{{ topActionIcon }}"></span>
+    </button>
+  </header>
+
+  <!-- ============ PIPELINE STEPPER (in-run) ============ -->
+  <sc-if value="{{ inRun }}" hint-placeholder-val="">
+    <div ref="{{ stepRef }}" class="scrl" style="flex-shrink:0;display:flex;gap:7px;overflow-x:auto;padding:11px 15px;background:rgba(12,12,18,.5);border-bottom:1px solid rgba(255,255,255,.05);position:relative;z-index:19;scroll-behavior:smooth">
+      <sc-for list="{{ stepper }}" as="st" hint-placeholder-count="7">
+        <button onClick="{{ st.go }}" data-active="{{ st.activeFlag }}" style="{{ st.style }}">
+          <span style="{{ st.dotStyle }}"><sc-if value="{{ st.done }}" hint-placeholder-val=""><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></sc-if><sc-if value="{{ st.notDone }}" hint-placeholder-val="{{ true }}">{{ st.num }}</sc-if></span>
+          {{ st.label }}
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ============ CONTENT ============ -->
+  <main style="flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:16px 15px calc(16px + var(--pad-bottom,0px));position:relative;z-index:5">
+
+    <!-- ============================ DASHBOARD ============================ -->
+    <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <div style="animation:fadeInUp .5s ease both">
+        <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px">
+          <div>
+            <div style="font-size:12px;color:#8b8b9e;font-weight:600;margin-bottom:3px">Good morning, {{ firstName }}</div>
+            <div style="font-size:22px;font-weight:900;letter-spacing:-.02em;line-height:1.1">{{ activeProject }}</div>
+          </div>
+        </div>
+
+        <!-- hero: continue run -->
+        <button onClick="{{ heroGo }}" style="width:100%;text-align:left;position:relative;overflow:hidden;border:1px solid rgba(139,92,246,.34);border-radius:20px;padding:17px;margin-bottom:14px;background:linear-gradient(135deg,rgba(139,92,246,.22),rgba(99,102,241,.09));cursor:pointer;animation:fadeInUp .55s ease both">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#c4b5fd">{{ heroId }}</span>
+            <span style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:20px;background:{{ heroStatusBg }};color:{{ heroStatusColor }}">{{ heroStatusLabel }}</span>
+          </div>
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.25;margin-bottom:5px">{{ heroName }}</div>
+          <div style="font-size:11.5px;color:#b9a8e6;margin-bottom:13px">{{ heroMeta }}</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#c4b5fd">
+            {{ heroCta }}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+        </button>
+
+        <!-- stat grid -->
+        <div data-tour="stats" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
+          <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+            <div style="border:1px solid rgba(255,255,255,.07);border-radius:17px;padding:14px;background:rgba(20,20,28,.55);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <span style="width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:{{ s.iconBg }};color:{{ s.iconColor }}" dangerouslySetInnerHTML="{{ s.icon }}"></span>
+                <span style="font-size:10px;font-weight:700;color:{{ s.deltaColor }}">{{ s.delta }}</span>
+              </div>
+              <div data-countup style="font-size:23px;font-weight:900;letter-spacing:-.02em;line-height:1">{{ s.value }}</div>
+              <div style="font-size:11px;color:#8b8b9e;font-weight:500;margin-top:3px">{{ s.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- suite health -->
+        <div style="border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:16px;background:rgba(20,20,28,.55);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="font-size:13.5px;font-weight:800">Suite health</div>
+            <div style="font-size:11px;color:#8b8b9e">Last 7 days</div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:7px;height:88px">
+            <sc-for list="{{ trendBars }}" as="b" hint-placeholder-count="7">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end">
+                <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;height:100%">
+                  <div style="width:100%;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#8b5cf6,#6366f1);height:{{ b.passH }}%;transform-origin:bottom;animation:barGrow .6s ease both"></div>
+                  <sc-if value="{{ b.hasFail }}" hint-placeholder-val=""><div style="width:100%;border-radius:0 0 4px 4px;background:rgba(244,63,94,.55);height:{{ b.failH }}%;transform-origin:bottom;animation:barGrow .6s ease both"></div></sc-if>
+                </div>
+                <span style="font-size:9px;color:#6c6c7e;font-weight:600">{{ b.day }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- recent runs -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
+          <div style="font-size:13.5px;font-weight:800">Recent runs</div>
+          <button onClick="{{ goRuns }}" style="background:none;border:none;font-family:inherit;font-size:11.5px;font-weight:700;color:#a78bfa;cursor:pointer">View all</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px">
+          <sc-for list="{{ recentRuns }}" as="r" hint-placeholder-count="3">
+            <button onClick="{{ r.go }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:12px;padding:13px;border-radius:15px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.5);cursor:pointer" style-active="background:rgba(255,255,255,.06)">
+              <span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:{{ r.color }};box-shadow:0 0 9px {{ r.color }}"></span>
+              <span style="flex:1;min-width:0">
+                <span style="display:flex;align-items:center;gap:7px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#a78bfa">{{ r.id }}</span><span style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span></span>
+                <span style="display:block;font-size:11px;color:#8b8b9e;margin-top:2px">{{ r.meta }}</span>
+              </span>
+              <span style="text-align:right;flex-shrink:0"><span style="display:block;font-size:14px;font-weight:800;color:{{ r.color }}">{{ r.rate }}</span><span style="display:block;font-size:10px;color:#6c6c7e">{{ r.ago }}</span></span>
+            </button>
+          </sc-for>
+        </div>
+
+        <!-- recent activity -->
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:11px">Recent activity</div>
+        <div style="display:flex;flex-direction:column;gap:2px;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:6px;background:rgba(20,20,28,.5)">
+          <sc-for list="{{ activity }}" as="a" hint-placeholder-count="5">
+            <div style="display:flex;align-items:flex-start;gap:11px;padding:10px 9px">
+              <span style="width:28px;height:28px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:{{ a.bg }};color:{{ a.color }};font-size:10px;font-weight:800">{{ a.badge }}</span>
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font-size:12.5px;font-weight:600;line-height:1.35"><span style="color:#ECECF1">{{ a.actor }}</span> <span style="color:#8b8b9e">{{ a.action }}</span></span>
+                <span style="display:block;font-size:11px;color:#6c6c7e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.target }}</span>
+              </span>
+              <span style="font-size:10px;color:#5c5c6e;flex-shrink:0;white-space:nowrap">{{ a.ago }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ RUN OVERVIEW ============================ -->
+    <sc-if value="{{ isRun }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <!-- AI working card -->
+        <div style="position:relative;overflow:hidden;border:1px solid rgba(139,92,246,.32);border-radius:20px;padding:18px;margin-bottom:16px;background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.07))">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <div style="width:44px;height:44px;flex-shrink:0;border-radius:13px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px -6px rgba(139,92,246,.8)">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15px;font-weight:800;letter-spacing:-.01em;line-height:1.2">{{ procHeadline }}</div>
+              <div style="font-size:11.5px;color:#b9a8e6;margin-top:3px">{{ procSub }}</div>
+            </div>
+            <sc-if value="{{ procRunning }}" hint-placeholder-val=""><div style="display:flex;gap:4px;flex-shrink:0"><span style="width:6px;height:6px;border-radius:50%;background:#a78bfa;animation:think 1.4s infinite"></span><span style="width:6px;height:6px;border-radius:50%;background:#a78bfa;animation:think 1.4s infinite .2s"></span><span style="width:6px;height:6px;border-radius:50%;background:#a78bfa;animation:think 1.4s infinite .4s"></span></div></sc-if>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="font-size:11px;color:#b9a8e6;font-weight:600">Tickets analyzed</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#c4b5fd">{{ procDoneCount }}/{{ procTotal }}</span></div>
+          <div style="height:7px;border-radius:7px;background:rgba(255,255,255,.08);overflow:hidden"><div style="height:100%;width:{{ procPct }}%;border-radius:7px;background:linear-gradient(90deg,#8b5cf6,#22d3ee);transition:width .5s"></div></div>
+        </div>
+
+        <div style="font-size:12px;font-weight:700;letter-spacing:.04em;color:#8b8b9e;margin-bottom:10px">TICKETS IN THIS RUN</div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px">
+          <sc-for list="{{ runTickets }}" as="t" hint-placeholder-count="3">
+            <button onClick="{{ t.go }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:12px;padding:13px;border-radius:15px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.5);cursor:pointer" style-active="background:rgba(255,255,255,.05)">
+              <span style="width:32px;height:32px;flex-shrink:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;background:{{ t.provColor }};color:{{ t.provGlyphColor }}">{{ t.provGlyph }}</span>
+              <span style="flex:1;min-width:0">
+                <span style="display:flex;align-items:center;gap:7px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;color:#a78bfa">{{ t.id }}</span></span>
+                <span style="display:block;font-size:13px;font-weight:600;line-height:1.3;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.title }}</span>
+              </span>
+              <span style="flex-shrink:0;font-size:11px;font-weight:700;color:{{ t.statusColor }};white-space:nowrap">{{ t.statusLabel }}</span>
+            </button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ procNotRunning }}" hint-placeholder-val="">
+          <button onClick="{{ goReviewStage }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7);display:flex;align-items:center;justify-content:center;gap:9px">
+            Open Review Center
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ============================ REVIEW CENTER ============================ -->
+    <sc-if value="{{ isReview }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <!-- summary -->
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <div style="flex:1;text-align:center;padding:12px 6px;border-radius:14px;border:1px solid rgba(16,185,129,.2);background:rgba(16,185,129,.08)"><div style="font-size:20px;font-weight:900;color:#6ee7b7">{{ rApproved }}</div><div style="font-size:10px;color:#8b8b9e;font-weight:600;margin-top:2px">Approved</div></div>
+          <div style="flex:1;text-align:center;padding:12px 6px;border-radius:14px;border:1px solid rgba(251,191,36,.2);background:rgba(251,191,36,.08)"><div style="font-size:20px;font-weight:900;color:#fbbf24">{{ rPending }}</div><div style="font-size:10px;color:#8b8b9e;font-weight:600;margin-top:2px">Pending</div></div>
+          <div style="flex:1;text-align:center;padding:12px 6px;border-radius:14px;border:1px solid rgba(244,63,94,.2);background:rgba(244,63,94,.08)"><div style="font-size:20px;font-weight:900;color:#fb7185">{{ rRejected }}</div><div style="font-size:10px;color:#8b8b9e;font-weight:600;margin-top:2px">Rejected</div></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <sc-for list="{{ reviewTickets }}" as="tk" hint-placeholder-count="3">
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:17px;background:rgba(20,20,28,.55);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);overflow:hidden">
+              <button onClick="{{ tk.toggle }}" style="width:100%;display:flex;align-items:center;gap:11px;padding:14px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left" style-active="background:rgba(255,255,255,.03)">
+                <span style="width:30px;height:30px;flex-shrink:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;background:{{ tk.provColor }};color:{{ tk.provGlyphColor }}">{{ tk.provGlyph }}</span>
+                <span style="flex:1;min-width:0">
+                  <span style="display:block;font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;color:#a78bfa">{{ tk.id }}</span>
+                  <span style="display:block;font-size:13px;font-weight:700;line-height:1.3;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tk.title }}</span>
+                </span>
+                <span style="{{ tk.countStyle }}">{{ tk.appr }}/{{ tk.total }}</span>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8b8b9e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ tk.chevStyle }}"><path d="M9 6l6 6-6 6"/></svg>
+              </button>
+              <sc-if value="{{ tk.open }}" hint-placeholder-val="">
+                <div style="padding:0 12px 12px">
+                  <button onClick="{{ tk.approveTicket }}" style="width:100%;margin-bottom:10px;padding:9px;border-radius:11px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.1);color:#6ee7b7;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Approve all {{ tk.total }} cases</button>
+                  <div style="display:flex;flex-direction:column;gap:9px">
+                    <sc-for list="{{ tk.cases }}" as="c" hint-placeholder-count="4">
+                      <div style="border:1px solid rgba(255,255,255,.07);border-radius:13px;background:rgba(10,10,16,.4);overflow:hidden">
+                        <button onClick="{{ c.toggle }}" style="width:100%;display:flex;align-items:flex-start;gap:9px;padding:12px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b8b9e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ c.chevStyle }};margin-top:2px"><path d="M9 6l6 6-6 6"/></svg>
+                          <span style="flex:1;min-width:0">
+                            <span style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#c4b5fd">{{ c.id }}</span><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;color:{{ c.prColor }};background:{{ c.prBg }}">{{ c.priority }}</span></span>
+                            <span style="display:block;font-size:12.5px;font-weight:600;line-height:1.35">{{ c.title }}</span>
+                          </span>
+                          <span style="flex-shrink:0;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:20px;color:{{ c.statusColor }};background:{{ c.statusBg }}">{{ c.statusLabel }}</span>
+                        </button>
+                        <sc-if value="{{ c.expanded }}" hint-placeholder-val="">
+                          <div style="padding:0 12px 12px 33px">
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+                              <span style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:6px;color:{{ c.autoCol }};background:{{ c.autoBg }}">{{ c.automation }}</span>
+                              <span style="font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:6px;color:#8b8b9e;background:rgba(255,255,255,.05)">{{ c.testType }}</span>
+                              <span style="font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:6px;color:#8b8b9e;background:rgba(255,255,255,.05)">{{ c.dur }}</span>
+                            </div>
+                            <div style="font-size:10px;font-weight:700;color:#6c6c7e;letter-spacing:.04em;margin-bottom:4px">PRECONDITION</div>
+                            <div style="font-size:12px;color:#c7c7d4;line-height:1.5;margin-bottom:12px">{{ c.precond }}</div>
+                            <div style="font-size:10px;font-weight:700;color:#6c6c7e;letter-spacing:.04em;margin-bottom:7px">STEPS</div>
+                            <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:14px">
+                              <sc-for list="{{ c.steps }}" as="st" hint-placeholder-count="2">
+                                <div style="display:flex;gap:9px">
+                                  <span style="width:19px;height:19px;flex-shrink:0;border-radius:6px;background:rgba(139,92,246,.16);color:#c4b5fd;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ st.n }}</span>
+                                  <span style="flex:1"><span style="display:block;font-size:12px;color:#ECECF1;line-height:1.45">{{ st.a }}</span><span style="display:block;font-size:11.5px;color:#8b8b9e;line-height:1.45;margin-top:3px">→ {{ st.e }}</span></span>
+                                </div>
+                              </sc-for>
+                            </div>
+                            <div style="display:flex;gap:8px">
+                              <button onClick="{{ c.reject }}" style="{{ c.rejectBtnStyle }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>{{ c.rejectLabel }}</button>
+                              <button onClick="{{ c.approve }}" style="{{ c.approveBtnStyle }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{{ c.approveLabel }}</button>
+                            </div>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ SYNC ============================ -->
+    <sc-if value="{{ isSync }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <sc-if value="{{ syncIdle }}" hint-placeholder-val="{{ true }}">
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:20px;background:rgba(20,20,28,.55);text-align:center;margin-bottom:16px">
+            <div style="width:52px;height:52px;margin:0 auto 14px;border-radius:15px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 26px -8px rgba(139,92,246,.7)"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9 9 0 0 0-6.7 3M3 12a9 9 0 0 0 9 9 9 9 0 0 0 6.7-3"/><path d="M21 3v5h-5M3 21v-5h5"/></svg></div>
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.01em;margin-bottom:6px">Push {{ syncApprovedCount }} cases back</div>
+            <div style="font-size:12.5px;color:#8b8b9e;line-height:1.5;margin-bottom:2px">Create the approved test cases in your provider and link them to their work items.</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button onClick="{{ createAndLink }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7)">Create &amp; link test cases</button>
+            <button onClick="{{ createTestCases }}" style="width:100%;padding:14px;border-radius:15px;border:1px solid rgba(255,255,255,.1);cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:700;color:#ECECF1;background:rgba(255,255,255,.05)">Create only (don’t link)</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ syncRunning }}" hint-placeholder-val="">
+          <div style="border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:20px;background:linear-gradient(135deg,rgba(139,92,246,.16),rgba(99,102,241,.06))">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ syncSteps }}" as="st" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="width:26px;height:26px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center">
+                    <sc-if value="{{ st.done }}" hint-placeholder-val=""><span style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></sc-if>
+                    <sc-if value="{{ st.active }}" hint-placeholder-val=""><span style="width:22px;height:22px;border:2.5px solid rgba(196,181,253,.3);border-top-color:#c4b5fd;border-radius:50%;animation:spin .8s linear infinite"></span></sc-if>
+                    <sc-if value="{{ st.pending }}" hint-placeholder-val=""><span style="width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.14)"></span></sc-if>
+                  </span>
+                  <span style="font-size:13.5px;font-weight:600;color:{{ st.labelColor }}">{{ st.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ syncDone }}" hint-placeholder-val="">
+          <div style="display:flex;align-items:center;gap:10px;padding:14px;border-radius:15px;border:1px solid rgba(16,185,129,.25);background:rgba(16,185,129,.08);margin-bottom:16px">
+            <span style="width:34px;height:34px;flex-shrink:0;border-radius:10px;background:rgba(16,185,129,.18);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <div><div style="font-size:14px;font-weight:800;color:#6ee7b7">Synced successfully</div><div style="font-size:11.5px;color:#8b8b9e">Test cases created and linked to work items</div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+            <sc-for list="{{ syncResults }}" as="r" hint-placeholder-count="3">
+              <div style="border:1px solid rgba(255,255,255,.08);border-radius:15px;padding:14px;background:rgba(20,20,28,.5)">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span style="width:28px;height:28px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:{{ r.provColor }};color:{{ r.provGlyphColor }}">{{ r.provGlyph }}</span>
+                  <div style="flex:1;min-width:0"><div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;color:#a78bfa">{{ r.id }}</div><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</div></div>
+                  <span style="flex-shrink:0;font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;color:#6ee7b7;background:rgba(16,185,129,.14)">{{ r.count }} {{ r.kind }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <sc-for list="{{ r.cases }}" as="lc" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="font-family:'JetBrains Mono',monospace;color:#67e8f9;font-weight:600">{{ lc.id }}</span><span style="flex:1;color:#a0a0b2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ lc.title }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <button onClick="{{ goAutomation }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7);display:flex;align-items:center;justify-content:center;gap:9px">Generate automation<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ============================ AUTOMATION ============================ -->
+    <sc-if value="{{ isAutomation }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <sc-if value="{{ autoThinking }}" hint-placeholder-val="{{ true }}">
+          <div style="border:1px solid rgba(139,92,246,.3);border-radius:20px;padding:20px;background:linear-gradient(135deg,rgba(139,92,246,.16),rgba(99,102,241,.06))">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:16px">
+              <div style="width:40px;height:40px;flex-shrink:0;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg></div>
+              <div style="font-size:14.5px;font-weight:800">Writing Playwright specs…</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:13px">
+              <sc-for list="{{ autoThinkSteps }}" as="st" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:11px">
+                  <sc-if value="{{ st.done }}" hint-placeholder-val=""><span style="width:22px;height:22px;flex-shrink:0;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></sc-if>
+                  <sc-if value="{{ st.active }}" hint-placeholder-val="{{ true }}"><span style="width:20px;height:20px;flex-shrink:0;border:2.5px solid rgba(196,181,253,.3);border-top-color:#c4b5fd;border-radius:50%;animation:spin .8s linear infinite"></span></sc-if>
+                  <span style="font-size:13px;color:#c7c7d4">{{ st.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ autoDone }}" hint-placeholder-val="">
+          <div style="font-size:12px;font-weight:700;letter-spacing:.04em;color:#8b8b9e;margin-bottom:9px">GENERATED FILES</div>
+          <div class="scrl" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:13px">
+            <sc-for list="{{ autoFiles }}" as="f" hint-placeholder-count="4">
+              <button onClick="{{ f.select }}" style="{{ f.style }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>{{ f.name }}</button>
+            </sc-for>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:15px;overflow:hidden;background:#0c0c13;margin-bottom:15px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02)">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a0a0b2">{{ autoSelName }}</span>
+              <button onClick="{{ copyCode }}" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.06);border:none;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:700;color:#c7c7d4"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
+            </div>
+            <pre class="scrl" style="margin:0;padding:14px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.65;color:#d4d4e0"><code dangerouslySetInnerHTML="{{ autoCodeHtml }}"></code></pre>
+          </div>
+          <button onClick="{{ runExecution }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7);display:flex;align-items:center;justify-content:center;gap:9px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9z"/></svg>Run tests</button>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ============================ EXECUTION ============================ -->
+    <sc-if value="{{ isConsole }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <sc-if value="{{ execIdle }}" hint-placeholder-val="{{ true }}">
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:22px;background:rgba(20,20,28,.55);text-align:center;margin-bottom:16px">
+            <div style="width:52px;height:52px;margin:0 auto 14px;border-radius:15px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+            <div style="font-size:17px;font-weight:800;margin-bottom:6px">Run {{ execTotal }} automated tests</div>
+            <div style="font-size:12.5px;color:#8b8b9e;line-height:1.5">Executes in parallel across {{ execTotal }} Playwright workers on Staging.</div>
+          </div>
+          <button onClick="{{ runExecution }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7)">Start execution</button>
+        </sc-if>
+
+        <sc-if value="{{ execRunning }}" hint-placeholder-val=""><div style="border:1px solid rgba(139,92,246,.3);border-radius:16px;padding:15px;background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(99,102,241,.05));margin-bottom:14px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><span style="font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border:2.5px solid rgba(196,181,253,.3);border-top-color:#c4b5fd;border-radius:50%;animation:spin .8s linear infinite"></span>Running tests…</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#c4b5fd">{{ execProgress }}%</span></div><div style="height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden"><div style="height:100%;width:{{ execProgress }}%;border-radius:6px;background:linear-gradient(90deg,#8b5cf6,#22d3ee);transition:width .3s"></div></div></div></sc-if>
+
+        <sc-if value="{{ execDone }}" hint-placeholder-val=""><div style="display:flex;gap:9px;margin-bottom:14px"><div style="flex:1;text-align:center;padding:14px;border-radius:14px;border:1px solid rgba(16,185,129,.22);background:rgba(16,185,129,.08)"><div style="font-size:24px;font-weight:900;color:#6ee7b7">{{ passCount }}</div><div style="font-size:11px;color:#8b8b9e;font-weight:600">Passed</div></div><div style="flex:1;text-align:center;padding:14px;border-radius:14px;border:1px solid rgba(244,63,94,.22);background:rgba(244,63,94,.08)"><div style="font-size:24px;font-weight:900;color:#fb7185">{{ failCount }}</div><div style="font-size:11px;color:#8b8b9e;font-weight:600">Failed</div></div></div></sc-if>
+
+        <div style="display:flex;flex-direction:column;gap:2px;border:1px solid rgba(255,255,255,.07);border-radius:15px;padding:6px;background:rgba(10,10,16,.5);font-family:'JetBrains Mono',monospace;margin-bottom:15px">
+          <sc-for list="{{ execRows }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 9px;border-radius:9px">
+              <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:{{ r.statusColor }}"></span>
+              <span style="font-size:10.5px;color:#a78bfa;font-weight:600;flex-shrink:0">{{ r.tid }}</span>
+              <span style="font-size:10.5px;color:#67e8f9;flex-shrink:0">{{ r.cid }}</span>
+              <span style="flex:1;min-width:0;font-family:'Satoshi',sans-serif;font-size:12px;color:#c7c7d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</span>
+              <span style="flex-shrink:0;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:6px;color:{{ r.statusColor }};background:{{ r.statusBg }};font-family:'Satoshi',sans-serif">{{ r.statusLabel }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ execDone }}" hint-placeholder-val=""><button onClick="{{ goEvidence }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7);display:flex;align-items:center;justify-content:center;gap:9px">View evidence<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ============================ EVIDENCE ============================ -->
+    <sc-if value="{{ isEvidence }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div class="scrl" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:13px">
+          <sc-for list="{{ evTickets }}" as="t" hint-placeholder-count="3">
+            <button onClick="{{ t.select }}" style="{{ t.chipStyle }}">{{ t.id }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:4px;padding:4px;border-radius:13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);margin-bottom:14px">
+          <sc-for list="{{ evTabs }}" as="tb" hint-placeholder-count="4">
+            <button onClick="{{ tb.select }}" style="{{ tb.style }}">{{ tb.label }}</button>
+          </sc-for>
+        </div>
+        <!-- artifact viewer -->
+        <div style="border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;background:#0c0c13;margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:7px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="width:9px;height:9px;border-radius:50%;background:#fb7185"></span><span style="width:9px;height:9px;border-radius:50%;background:#fbbf24"></span><span style="width:9px;height:9px;border-radius:50%;background:#6ee7b7"></span><span style="flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c6c7e">{{ evArtifact }}</span></div>
+          <div style="height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:radial-gradient(circle at 50% 40%,rgba(139,92,246,.1),transparent 70%)">
+            <div style="width:46px;height:46px;border-radius:13px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;color:#8b8b9e"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="15" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 8"/></svg></div>
+            <div style="font-size:12px;color:#8b8b9e">Captured at test completion</div>
+          </div>
+        </div>
+        <div style="font-size:12.5px;color:#a0a0b2;line-height:1.5;padding:0 2px;margin-bottom:15px">Evidence for <b style="color:#ECECF1">{{ evActiveTicketTitle }}</b> — screenshots, video, Playwright trace and console log per test, attached automatically.</div>
+        <button onClick="{{ goComment }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7);display:flex;align-items:center;justify-content:center;gap:9px">Publish results<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </div>
+    </sc-if>
+
+    <!-- ============================ COMMENT / PUBLISH ============================ -->
+    <sc-if value="{{ isComment }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="font-size:12.5px;color:#8b8b9e;line-height:1.5;margin-bottom:14px">Post the run results — pass/fail summary and evidence — as a comment on each ticket.</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:15px">
+          <sc-for list="{{ publishCards }}" as="p" hint-placeholder-count="3">
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px;background:rgba(20,20,28,.55)">
+              <div style="display:flex;align-items:center;gap:11px;margin-bottom:11px">
+                <span style="width:30px;height:30px;flex-shrink:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;background:{{ p.provColor }};color:{{ p.provGlyphColor }}">{{ p.provGlyph }}</span>
+                <div style="flex:1;min-width:0"><div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#a78bfa;font-weight:600">{{ p.id }}</div><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.title }}</div></div>
+                <span style="flex-shrink:0;font-size:9.5px;font-weight:700;padding:4px 9px;border-radius:20px;color:{{ p.statusColor }};background:{{ p.statusBg }}">{{ p.statusLabel }}</span>
+              </div>
+              <div style="display:flex;gap:8px;font-size:11px">
+                <span style="display:flex;align-items:center;gap:5px;color:#6ee7b7"><span style="width:7px;height:7px;border-radius:50%;background:#6ee7b7"></span>{{ p.pass }} passed</span>
+                <span style="display:flex;align-items:center;gap:5px;color:#fb7185"><span style="width:7px;height:7px;border-radius:50%;background:#fb7185"></span>{{ p.fail }} failed</span>
+                <span style="color:#8b8b9e">· {{ p.kind }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ anyFailed }}" hint-placeholder-val=""><button onClick="{{ retryFailed }}" style="width:100%;margin-bottom:10px;padding:13px;border-radius:14px;border:1px solid rgba(244,63,94,.3);background:rgba(244,63,94,.1);color:#fb7185;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Retry failed</button></sc-if>
+        <sc-if value="{{ notPublishing }}" hint-placeholder-val="{{ true }}"><button onClick="{{ publishAll }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7)">Publish to all tickets</button></sc-if>
+        <sc-if value="{{ publishing }}" hint-placeholder-val=""><button disabled style="width:100%;padding:15px;border-radius:15px;border:none;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:rgba(139,92,246,.5);display:flex;align-items:center;justify-content:center;gap:9px"><span style="width:15px;height:15px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite"></span>Publishing…</button></sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ============================ TICKETS ============================ -->
+    <sc-if value="{{ isTickets }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);margin-bottom:13px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8b8b9e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input value="{{ ticketSearch }}" onInput="{{ onSearch }}" placeholder="Search tickets…" style="flex:1;min-width:0;background:none;border:none;outline:none;color:#ECECF1;font-family:inherit;font-size:14px" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ ticketRows }}" as="t" hint-placeholder-count="5">
+            <div style="display:flex;align-items:stretch;gap:11px;padding:13px;border-radius:15px;border:1px solid rgba(255,255,255,.08);background:rgba(20,20,28,.5)">
+              <button onClick="{{ t.toggle }}" style="{{ t.checkStyle }};align-self:flex-start;margin-top:2px"><sc-if value="{{ t.sel }}" hint-placeholder-val=""><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></sc-if></button>
+              <button onClick="{{ t.open }}" style="flex:1;min-width:0;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:0">
+                <span style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+                  <span style="width:18px;height:18px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;background:{{ t.provColor }};color:{{ t.provGlyphColor }}">{{ t.provGlyph }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;color:#a78bfa">{{ t.id }}</span>
+                  <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;color:{{ t.prColor }};background:{{ t.prBg }}">{{ t.priority }}</span>
+                </span>
+                <span style="display:block;font-size:13.5px;font-weight:700;line-height:1.35;margin-bottom:7px">{{ t.title }}</span>
+                <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;color:{{ t.statusColor }};background:{{ t.statusBg }}">{{ t.status }}</span>
+                  <span style="font-size:10.5px;color:#8b8b9e">{{ t.sprint }}</span>
+                  <span style="font-size:10.5px;color:#6c6c7e">· {{ t.acCount }} AC</span>
+                </span>
+              </button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ TICKET DETAIL ============================ -->
+    <sc-if value="{{ isTicket }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:11px">
+          <span style="width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:{{ tkProvColor }};color:{{ tkProvGlyphColor }}">{{ tkProvGlyph }}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:#a78bfa">{{ tkId }}</span>
+          <span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:20px;color:{{ tkStatusColor }};background:{{ tkStatusBg }}">{{ tkStatusLabel }}</span>
+        </div>
+        <div style="font-size:20px;font-weight:900;letter-spacing:-.02em;line-height:1.2;margin-bottom:12px">{{ tkTitle }}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+          <span style="font-size:10px;font-weight:700;padding:4px 9px;border-radius:8px;color:{{ tkPrColor }};background:{{ tkPrBg }}">{{ tkPriority }} priority</span>
+          <span style="font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:8px;color:#8b8b9e;background:rgba(255,255,255,.05)">{{ tkAssignee }}</span>
+          <span style="font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:8px;color:#8b8b9e;background:rgba(255,255,255,.05)">{{ tkSprint }}</span>
+        </div>
+
+        <div style="border:1px solid rgba(255,255,255,.07);border-radius:15px;padding:15px;background:rgba(20,20,28,.5);margin-bottom:13px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#6c6c7e;margin-bottom:7px">DESCRIPTION</div>
+          <div style="font-size:13px;color:#c7c7d4;line-height:1.55;margin-bottom:12px">{{ tkDesc }}</div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#6c6c7e;margin-bottom:7px">QA NOTE</div>
+          <div style="font-size:12.5px;color:#a0a0b2;line-height:1.55">{{ tkNote }}</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="font-size:13.5px;font-weight:800">Acceptance criteria</div><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;color:#c4b5fd;background:rgba(139,92,246,.14)">{{ acCount }}</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+          <sc-for list="{{ acList }}" as="ac" hint-placeholder-count="4">
+            <div style="display:flex;gap:10px;padding:12px;border-radius:13px;border:1px solid rgba(255,255,255,.06);background:rgba(20,20,28,.4)">
+              <span style="width:20px;height:20px;flex-shrink:0;border-radius:6px;background:rgba(139,92,246,.16);color:#c4b5fd;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ ac.n }}</span>
+              <span style="flex:1;font-size:12.5px;color:#c7c7d4;line-height:1.5">{{ ac.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:10px">Linked pull requests</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+          <sc-for list="{{ tkPrs }}" as="pr" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:11px;padding:12px;border-radius:13px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.4)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{ pr.color }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6M18 9a9 9 0 0 1-9 9"/><circle cx="18" cy="6" r="3"/></svg>
+              <span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pr.title }}</span><span style="display:block;font-size:10.5px;color:#8b8b9e;font-family:'JetBrains Mono',monospace">{{ pr.repo }} #{{ pr.num }}</span></span>
+              <span style="flex-shrink:0;font-size:10px;font-weight:700;color:{{ pr.color }}">{{ pr.status }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <button onClick="{{ tkGenerate }}" style="width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 10px 26px -8px rgba(139,92,246,.7);display:flex;align-items:center;justify-content:center;gap:9px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>Generate test cases</button>
+      </div>
+    </sc-if>
+
+    <!-- ============================ RUNS BOARD ============================ -->
+    <sc-if value="{{ isRuns }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div class="scrl" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px">
+          <sc-for list="{{ runsFilterChips }}" as="f" hint-placeholder-count="4">
+            <button onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <sc-for list="{{ runsBoard }}" as="r" hint-placeholder-count="4">
+            <button onClick="{{ r.go }}" style="width:100%;text-align:left;border:1px solid rgba(255,255,255,.08);border-radius:17px;padding:15px;background:rgba(20,20,28,.55);cursor:pointer;font-family:inherit" style-active="background:rgba(255,255,255,.05)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#a78bfa">{{ r.id }}</span>
+                <span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:20px;color:{{ r.statusColor }};background:{{ r.statusBg }}">{{ r.statusLabel }}</span>
+                <span style="flex:1"></span>
+                <sc-if value="{{ r.showRate }}" hint-placeholder-val=""><span style="font-size:15px;font-weight:900;color:{{ r.statusColor }}">{{ r.rate }}</span></sc-if>
+              </div>
+              <div style="font-size:15px;font-weight:800;letter-spacing:-.01em;line-height:1.25;margin-bottom:9px">{{ r.name }}</div>
+              <div style="height:5px;border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden;margin-bottom:9px"><div style="height:100%;width:{{ r.prog }}%;border-radius:5px;background:linear-gradient(90deg,#8b5cf6,#22d3ee)"></div></div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#8b8b9e"><span>{{ r.cases }} cases</span><span>· {{ r.tickets }} tickets</span><span>· {{ r.framework }}</span><span style="flex:1"></span><span style="color:#6c6c7e">{{ r.ago }}</span></div>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ PROJECTS ============================ -->
+    <sc-if value="{{ isProjects }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both;display:flex;flex-direction:column;gap:11px">
+        <sc-for list="{{ projectsView }}" as="p" hint-placeholder-count="3">
+          <button onClick="{{ p.open }}" style="width:100%;text-align:left;border:1px solid rgba(255,255,255,.08);border-radius:17px;padding:15px;background:rgba(20,20,28,.55);cursor:pointer;font-family:inherit" style-active="background:rgba(255,255,255,.05)">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">
+              <span style="width:34px;height:34px;flex-shrink:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;background:{{ p.provColor }};color:#fff">{{ p.provGlyph }}</span>
+              <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800;letter-spacing:-.01em">{{ p.name }}</div><div style="font-size:11px;color:#8b8b9e">{{ p.provider }}</div></div>
+              <span style="flex-shrink:0;font-size:9.5px;font-weight:700;padding:4px 9px;border-radius:20px;color:{{ p.statusColor }};background:{{ p.statusBg }}">{{ p.statusLabel }}</span>
+            </div>
+            <sc-if value="{{ p.indexed }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:10.5px;color:#8b8b9e;font-weight:600">Knowledge confidence</span><span style="font-size:11px;font-weight:800;color:{{ p.confColor }}">{{ p.confidence }}%</span></div>
+              <div style="height:5px;border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden;margin-bottom:12px"><div style="height:100%;width:{{ p.confidence }}%;border-radius:5px;background:{{ p.confColor }}"></div></div>
+            </sc-if>
+            <div style="display:flex;gap:16px"><span style="font-size:11.5px;color:#a0a0b2"><b style="color:#ECECF1;font-size:13px">{{ p.tickets }}</b> tickets</span><span style="font-size:11.5px;color:#a0a0b2"><b style="color:#ECECF1;font-size:13px">{{ p.runs }}</b> runs</span><span style="font-size:11.5px;color:#a0a0b2"><b style="color:#6ee7b7;font-size:13px">{{ p.rate }}</b> pass</span></div>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- ============================ PROJECT DETAIL ============================ -->
+    <sc-if value="{{ isProject }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="font-size:11px;color:#8b8b9e">{{ projProvider }}</span><span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:20px;color:{{ projStatusColor }};background:{{ projStatusBg }}">{{ projStatusLabel }}</span></div>
+        <div style="border:1px solid rgba(139,92,246,.28);border-radius:18px;padding:17px;background:linear-gradient(135deg,rgba(139,92,246,.16),rgba(99,102,241,.05));margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:13px;font-weight:800">Knowledge base</span><span style="font-size:19px;font-weight:900;color:{{ projConfColor }}">{{ projConfidence }}%</span></div>
+          <div style="height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:12px"><div style="height:100%;width:{{ projConfidence }}%;border-radius:6px;background:{{ projConfColor }}"></div></div>
+          <div style="font-size:11.5px;color:#b9a8e6">Last indexed {{ projLastIndexed }} · {{ projRepo }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:14px">
+          <div style="text-align:center;padding:13px 6px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.5)"><div style="font-size:19px;font-weight:900">{{ projTickets }}</div><div style="font-size:10px;color:#8b8b9e;font-weight:600">Tickets</div></div>
+          <div style="text-align:center;padding:13px 6px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.5)"><div style="font-size:19px;font-weight:900">{{ projPageObjects }}</div><div style="font-size:10px;color:#8b8b9e;font-weight:600">Page obj.</div></div>
+          <div style="text-align:center;padding:13px 6px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.5)"><div style="font-size:19px;font-weight:900">{{ projFixtures }}</div><div style="font-size:10px;color:#8b8b9e;font-weight:600">Fixtures</div></div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:#8b8b9e;letter-spacing:.04em;margin-bottom:9px">TECH STACK</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+          <sc-for list="{{ projStack }}" as="st" hint-placeholder-count="4"><span style="font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:9px;color:#c7c7d4;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07)">{{ st.label }}</span></sc-for>
+        </div>
+        <button onClick="{{ projGoTickets }}" style="width:100%;padding:14px;border-radius:14px;border:1px solid rgba(255,255,255,.1);cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:700;color:#ECECF1;background:rgba(255,255,255,.05)">View tickets</button>
+      </div>
+    </sc-if>
+
+    <!-- ============================ REPORTS ============================ -->
+    <sc-if value="{{ isReports }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+          <sc-for list="{{ reportsStats }}" as="st" hint-placeholder-count="4">
+            <div style="border:1px solid rgba(255,255,255,.07);border-radius:15px;padding:14px;background:rgba(20,20,28,.5)"><div data-countup style="font-size:22px;font-weight:900;letter-spacing:-.02em;color:{{ st.color }}">{{ st.value }}</div><div style="font-size:11px;color:#8b8b9e;font-weight:500;margin-top:3px">{{ st.label }}</div></div>
+          </sc-for>
+        </div>
+        <div style="border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:16px;background:rgba(20,20,28,.55);margin-bottom:16px">
+          <div style="font-size:13.5px;font-weight:800;margin-bottom:14px">Pass rate · last 7 days</div>
+          <div style="display:flex;align-items:flex-end;gap:7px;height:96px">
+            <sc-for list="{{ trendBars }}" as="b" hint-placeholder-count="7">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end">
+                <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;height:100%">
+                  <div style="width:100%;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#8b5cf6,#6366f1);height:{{ b.passH }}%;transform-origin:bottom;animation:barGrow .6s ease both"></div>
+                  <sc-if value="{{ b.hasFail }}" hint-placeholder-val=""><div style="width:100%;border-radius:0 0 4px 4px;background:rgba(244,63,94,.55);height:{{ b.failH }}%"></div></sc-if>
+                </div>
+                <span style="font-size:9px;color:#6c6c7e;font-weight:600">{{ b.day }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:11px">Flaky tests</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ flaky }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.5)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              <div style="flex:1;min-width:0"><div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;color:#c7c7d4">{{ f.name }}</div><div style="font-size:11px;color:#8b8b9e">{{ f.sub }}</div></div>
+              <span style="flex-shrink:0;font-size:14px;font-weight:800;color:{{ f.rateColor }}">{{ f.rate }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ AUDIT ============================ -->
+    <sc-if value="{{ isAudit }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);margin-bottom:12px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8b8b9e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input value="{{ auditSearch }}" onInput="{{ onAuditSearch }}" placeholder="Search events…" style="flex:1;min-width:0;background:none;border:none;outline:none;color:#ECECF1;font-family:inherit;font-size:14px" />
+        </div>
+        <div class="scrl" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:13px">
+          <sc-for list="{{ auditCatChips }}" as="c" hint-placeholder-count="6"><button onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button></sc-for>
+        </div>
+        <div style="position:relative;padding-left:8px">
+          <sc-for list="{{ auditRows }}" as="e" hint-placeholder-count="6">
+            <div style="display:flex;gap:12px;padding-bottom:14px;position:relative">
+              <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0"><span style="width:11px;height:11px;border-radius:50%;background:{{ e.statusColor }};box-shadow:0 0 8px {{ e.statusColor }};margin-top:3px"></span><span style="flex:1;width:2px;background:rgba(255,255,255,.08);margin-top:3px"></span></div>
+              <div style="flex:1;min-width:0;padding-bottom:2px">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px"><span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;color:{{ e.catColor }};background:{{ e.catBg }}">{{ e.catLabel }}</span><span style="font-size:10px;color:#6c6c7e;font-family:'JetBrains Mono',monospace">{{ e.day }} {{ e.ts }}</span></div>
+                <div style="font-size:12.5px;line-height:1.4"><span style="font-weight:700;color:#ECECF1">{{ e.actor }}</span> <span style="color:#a0a0b2">{{ e.action }}</span></div>
+                <div style="font-size:11.5px;color:#8b8b9e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.target }}</div>
+                <div style="font-size:10.5px;color:#6c6c7e;margin-top:3px;font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.meta }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ SETTINGS ============================ -->
+    <sc-if value="{{ isSettings }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="font-size:12px;font-weight:700;color:#8b8b9e;letter-spacing:.04em;margin-bottom:10px">INTEGRATIONS</div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:22px">
+          <sc-for list="{{ integrations }}" as="i" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;padding:14px;border-radius:15px;border:1px solid rgba(255,255,255,.08);background:rgba(20,20,28,.5)">
+              <span style="width:34px;height:34px;flex-shrink:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;background:{{ i.color }};color:{{ i.glyphColor }}">{{ i.glyph }}</span>
+              <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700">{{ i.name }}</div><div style="font-size:11px;color:#8b8b9e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ i.sub }}</div></div>
+              <span style="flex-shrink:0;font-size:10px;font-weight:700;padding:5px 11px;border-radius:20px;color:{{ i.statusColor }};background:{{ i.statusBg }}">{{ i.statusLabel }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size:12px;font-weight:700;color:#8b8b9e;letter-spacing:.04em;margin-bottom:10px">EXECUTION</div>
+        <div style="border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(20,20,28,.5);padding:4px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 13px;border-bottom:1px solid rgba(255,255,255,.05)">
+            <div><div style="font-size:13px;font-weight:700">Parallel workers</div><div style="font-size:11px;color:#8b8b9e">Concurrent Playwright workers</div></div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#c4b5fd">{{ parallel }}</span>
+          </div>
+          <div style="padding:12px 13px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><input type="range" min="1" max="8" value="{{ parallel }}" onInput="{{ setParallel }}" style="width:100%;accent-color:#8b5cf6" /></div>
+          <sc-for list="{{ settingToggles }}" as="t" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 13px">
+              <div style="flex:1"><div style="font-size:13px;font-weight:700">{{ t.label }}</div><div style="font-size:11px;color:#8b8b9e">{{ t.sub }}</div></div>
+              <button onClick="{{ t.toggle }}" style="{{ t.trackStyle }}"><span style="{{ t.knobStyle }}"></span></button>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size:12px;font-weight:700;color:#8b8b9e;letter-spacing:.04em;margin-bottom:10px">CLAUDE CREDENTIAL</div>
+        <div style="display:flex;gap:9px;margin-bottom:10px">
+          <button onClick="{{ setCredShared }}" style="{{ credSegSharedStyle }}">Shared team</button>
+          <button onClick="{{ setCredPersonal }}" style="{{ credSegPersonalStyle }}">My account</button>
+        </div>
+        <div style="font-size:11.5px;color:#8b8b9e;line-height:1.5;padding:0 2px">Runs use the shared Surency QA account by default. Switch to your own Claude account to bill runs to you.</div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ ADMIN · TEAM ============================ -->
+    <sc-if value="{{ isAdminUsers }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="display:flex;gap:9px;margin-bottom:14px">
+          <div style="flex:1;text-align:center;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:rgba(20,20,28,.5)"><div style="font-size:22px;font-weight:900">{{ userStatsTotal }}</div><div style="font-size:10.5px;color:#8b8b9e;font-weight:600">Members</div></div>
+          <div style="flex:1;text-align:center;padding:13px;border-radius:14px;border:1px solid rgba(16,185,129,.2);background:rgba(16,185,129,.08)"><div style="font-size:22px;font-weight:900;color:#6ee7b7">{{ userStatsActive }}</div><div style="font-size:10.5px;color:#8b8b9e;font-weight:600">Active</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ usersView }}" as="u" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:15px;border:1px solid rgba(255,255,255,.08);background:rgba(20,20,28,.5)">
+              <span style="width:38px;height:38px;flex-shrink:0;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;background:{{ u.grad }}">{{ u.initials }}</span>
+              <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.name }}</div><div style="font-size:11px;color:#8b8b9e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.email }}</div></div>
+              <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:20px;color:{{ u.roleColor }};background:{{ u.roleBg }}">{{ u.role }}</span><span style="font-size:10px;font-weight:600;color:{{ u.statusColor }}">{{ u.statusLabel }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============================ ADMIN · CREDENTIALS ============================ -->
+    <sc-if value="{{ isAdminCreds }}" hint-placeholder-val="">
+      <div style="animation:fadeInUp .45s ease both">
+        <div style="font-size:12.5px;color:#8b8b9e;line-height:1.5;margin-bottom:14px">Shared Claude accounts every run can use. Uploaded as <span style="font-family:'JetBrains Mono',monospace;color:#a0a0b2">.credentials.json</span>.</div>
+        <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:15px">
+          <sc-for list="{{ credsView }}" as="c" hint-placeholder-count="2">
+            <div style="border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:15px;background:rgba(20,20,28,.55)">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="width:32px;height:32px;flex-shrink:0;border-radius:9px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg></span>
+                <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.label }}</div><div style="font-size:11px;color:#8b8b9e">{{ c.email }}</div></div>
+                <sc-if value="{{ c.isDefault }}" hint-placeholder-val=""><span style="flex-shrink:0;font-size:9px;font-weight:700;padding:3px 8px;border-radius:20px;color:#c4b5fd;background:rgba(139,92,246,.16)">DEFAULT</span></sc-if>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:7px;color:#67e8f9;background:rgba(34,211,238,.13)">{{ c.subLabel }} plan</span>
+                <span style="font-size:11px;font-weight:600;color:{{ c.expColor }}">{{ c.expLabel }}</span>
+                <span style="font-size:10.5px;color:#6c6c7e">· refreshed {{ c.lastRefreshed }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <button style="width:100%;padding:14px;border-radius:14px;border:1px dashed rgba(255,255,255,.18);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#a0a0b2;background:rgba(255,255,255,.02);display:flex;align-items:center;justify-content:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Upload credential</button>
+      </div>
+    </sc-if>
+
+    <div style="height:2px"></div>
+  </main>
+
+  <!-- ============ BOTTOM ACTION BAR ============ -->
+  <sc-if value="{{ showActionBar }}" hint-placeholder-val="">
+    <div style="flex-shrink:0;padding:12px 15px calc(12px + env(safe-area-inset-bottom));background:rgba(12,12,18,.86);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border-top:1px solid rgba(255,255,255,.08);position:relative;z-index:18">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><span style="font-size:11.5px;color:#8b8b9e">Reviewed <b style="color:#ECECF1">{{ barReviewed }}</b> / {{ rTotal }}</span><span style="font-size:11.5px;color:#6ee7b7;font-weight:700">{{ rApproved }} approved</span></div>
+      <div style="height:5px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:12px"><div style="height:100%;width:{{ barPct }}%;border-radius:5px;background:linear-gradient(90deg,#8b5cf6,#22d3ee);transition:width .3s"></div></div>
+      <div style="display:flex;gap:9px">
+        <button onClick="{{ approveAllRun }}" style="flex:1;padding:12px;border-radius:13px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#ECECF1;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Approve all</button>
+        <button onClick="{{ goSyncScreen }}" style="{{ barContinueStyle }}">Continue to Sync</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ DRAWER ============ -->
+  <sc-if value="{{ menuOpen }}" hint-placeholder-val="">
+    <div onClick="{{ closeMenu }}" style="position:absolute;inset:0;background:rgba(4,4,8,.62);backdrop-filter:blur(2px);z-index:40;animation:scrimIn .25s ease both"></div>
+    <aside class="scrl" style="position:absolute;top:0;bottom:0;left:0;width:82%;max-width:320px;z-index:41;background:rgba(15,15,22,.97);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;overflow-y:auto;box-shadow:30px 0 70px -20px rgba(0,0,0,.8);animation:drawerIn .3s cubic-bezier(.2,.8,.2,1) both">
+      <div style="display:flex;align-items:center;gap:11px;padding:18px 16px 16px">
+        <div style="width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#8b5cf6,#6366f1);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px -4px rgba(139,92,246,.7)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg></div>
+        <div style="flex:1"><div style="font-weight:900;font-size:17px;letter-spacing:-.02em">Q&#8209;Agent</div><div style="font-size:9.5px;color:#7a7a8c;letter-spacing:.05em;font-weight:600">QA OPERATING SYSTEM</div></div>
+        <button onClick="{{ closeMenu }}" style="width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.06);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#c7c7d4"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+
+      <!-- run context (in-run) -->
+      <sc-if value="{{ inRun }}" hint-placeholder-val="">
+        <div style="margin:0 12px 6px;padding:12px;border-radius:14px;background:linear-gradient(135deg,rgba(139,92,246,.18),rgba(99,102,241,.07));border:1px solid rgba(139,92,246,.3)">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;color:#c4b5fd">{{ runCtxId }}</span><span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:{{ heroStatusBg }};color:{{ heroStatusColor }}">{{ heroStatusLabel }}</span></div>
+          <div style="font-size:13px;font-weight:800;line-height:1.25">{{ heroName }}</div>
+          <div style="font-size:10px;color:#b9a8e6;margin-top:5px">{{ heroMeta }}</div>
+        </div>
+        <button onClick="{{ exitRun }}" style="display:flex;align-items:center;gap:9px;margin:6px 14px 6px;padding:8px 8px;border-radius:10px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:#a0a0b2"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>All of Q&#8209;Agent</button>
+      </sc-if>
+
+      <div style="font-size:10px;font-weight:700;letter-spacing:.12em;color:#5c5c6e;padding:6px 20px 8px">{{ navHeading }}</div>
+      <nav style="display:flex;flex-direction:column;gap:2px;padding:0 10px">
+        <sc-for list="{{ drawerNav }}" as="n" hint-placeholder-count="8">
+          <button onClick="{{ n.go }}" style="{{ n.style }}" style-active="background:rgba(255,255,255,.08)">
+            <span style="display:flex;width:20px;justify-content:center" dangerouslySetInnerHTML="{{ n.icon }}"></span>
+            <span style="flex:1;text-align:left">{{ n.label }}</span>
+            <sc-if value="{{ n.badge }}" hint-placeholder-val=""><span style="font-size:10px;font-weight:700;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;padding:2px 7px;border-radius:20px">{{ n.badge }}</span></sc-if>
+          </button>
+        </sc-for>
+      </nav>
+
+      <sc-if value="{{ showAdmin }}" hint-placeholder-val="">
+        <div style="height:1px;background:rgba(255,255,255,.06);margin:12px 16px 4px"></div>
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 20px"><span style="font-size:10px;font-weight:700;letter-spacing:.12em;color:#5c5c6e">ADMIN</span><span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:20px;background:rgba(139,92,246,.16);color:#c4b5fd">RESTRICTED</span></div>
+        <nav style="display:flex;flex-direction:column;gap:2px;padding:0 10px">
+          <sc-for list="{{ adminNav }}" as="a" hint-placeholder-count="2">
+            <button onClick="{{ a.go }}" style="{{ a.style }}" style-active="background:rgba(255,255,255,.08)">
+              <span style="display:flex;width:20px;justify-content:center" dangerouslySetInnerHTML="{{ a.icon }}"></span>
+              <span style="flex:1;text-align:left">{{ a.label }}</span>
+            </button>
+          </sc-for>
+        </nav>
+      </sc-if>
+
+      <div style="flex:1;min-height:14px"></div>
+
+      <!-- credits -->
+      <div style="margin:8px 12px 10px;padding:13px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:11.5px;font-weight:700">AI credits</span><span style="font-size:10.5px;color:#8b8b9e">2,840 / 5,000</span></div>
+        <div style="height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden"><div style="height:100%;width:57%;border-radius:6px;background:linear-gradient(90deg,#8b5cf6,#22d3ee)"></div></div>
+      </div>
+
+      <!-- profile -->
+      <div style="display:flex;align-items:center;gap:11px;padding:12px 16px 18px;border-top:1px solid rgba(255,255,255,.06)">
+        <div style="width:36px;height:36px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;background:{{ identityGrad }}">{{ identityInitials }}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ identityName }}</div><div style="font-size:10.5px;color:#8b8b9e">{{ identityRole }}</div></div>
+        <button onClick="{{ toggleRole }}" style="font-size:10px;font-weight:700;padding:6px 10px;border-radius:9px;background:rgba(139,92,246,.16);color:#c4b5fd;border:1px solid rgba(139,92,246,.3);cursor:pointer;font-family:inherit">{{ roleSwitchLabel }}</button>
+      </div>
+    </aside>
+  </sc-if>
+
+  <!-- ============ TICKETS SELECTION BAR ============ -->
+  <sc-if value="{{ isTickets }}" hint-placeholder-val="">
+    <sc-if value="{{ hasSel }}" hint-placeholder-val="">
+      <div style="position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:35;width:calc(100% - 30px);max-width:440px;animation:fadeInUp .3s ease both">
+        <button onClick="{{ openCreateRunFromSel }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:15px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 14px 34px -10px rgba(139,92,246,.85)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9z"/></svg>
+          Create run · {{ selCount }} selected
+        </button>
+      </div>
+    </sc-if>
+  </sc-if>
+
+  <!-- ============ CREATE RUN SHEET ============ -->
+  <sc-if value="{{ createRunOpen }}" hint-placeholder-val="">
+    <div onClick="{{ closeCreateRun }}" style="position:absolute;inset:0;background:rgba(4,4,8,.62);z-index:50;animation:scrimIn .25s ease both"></div>
+    <div class="scrl" style="position:absolute;left:0;right:0;bottom:0;z-index:51;max-height:88%;overflow-y:auto;background:rgba(17,17,24,.99);backdrop-filter:blur(30px);border-top:1px solid rgba(255,255,255,.1);border-radius:26px 26px 0 0;padding:8px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -20px 60px -20px #000;animation:sheetIn .35s cubic-bezier(.2,.8,.2,1) both">
+      <div style="width:40px;height:4px;border-radius:4px;background:rgba(255,255,255,.15);margin:8px auto 16px"></div>
+      <div style="font-size:19px;font-weight:900;letter-spacing:-.02em;margin-bottom:4px">New run</div>
+      <div style="font-size:12.5px;color:#8b8b9e;margin-bottom:18px">Generate, review and execute test cases in one pipeline.</div>
+
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#8b8b9e;margin-bottom:9px">SCOPE</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+        <sc-for list="{{ crScope }}" as="o" hint-placeholder-count="3">
+          <button onClick="{{ o.go }}" style="{{ o.style }}"><span style="{{ o.dot }}"></span><span style="flex:1"><span style="display:block;font-size:13.5px;font-weight:700;color:#ECECF1">{{ o.label }}</span><span style="display:block;font-size:11px;color:#8b8b9e;margin-top:1px">{{ o.sub }}</span></span></button>
+        </sc-for>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#8b8b9e;margin-bottom:9px">FRAMEWORK</div>
+      <div style="display:flex;gap:8px;margin-bottom:18px"><sc-for list="{{ fwOptions }}" as="f" hint-placeholder-count="3"><button onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</button></sc-for></div>
+
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#8b8b9e;margin-bottom:9px">ENVIRONMENT</div>
+      <div style="display:flex;gap:8px;margin-bottom:18px"><sc-for list="{{ envOptions }}" as="e" hint-placeholder-count="3"><button onClick="{{ e.go }}" style="{{ e.style }}">{{ e.label }}</button></sc-for></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#8b8b9e">PARALLEL WORKERS</span><span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#c4b5fd">{{ runWorkers }}</span></div>
+      <input type="range" min="1" max="8" value="{{ runWorkers }}" onInput="{{ setWorkers }}" style="width:100%;margin-bottom:22px;accent-color:#8b5cf6" />
+
+      <button onClick="{{ confirmCreateRun }}" style="width:100%;padding:16px;border-radius:15px;border:none;cursor:pointer;font-family:inherit;font-size:15px;font-weight:800;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 12px 30px -8px rgba(139,92,246,.75);display:flex;align-items:center;justify-content:center;gap:9px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>Start run</button>
+    </div>
+  </sc-if>
+
+  <!-- ============ TOAST ============ -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="">
+    <div style="position:absolute;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:11px;padding:13px 16px;border-radius:15px;background:rgba(24,24,32,.97);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.1);box-shadow:0 20px 50px -18px #000;max-width:calc(100% - 30px);animation:toastIn .4s cubic-bezier(.2,.8,.2,1) both">
+      <span style="width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:{{ toastIconBg }};color:{{ toastIconColor }}" dangerouslySetInnerHTML="{{ toastIcon }}"></span>
+      <div style="min-width:0"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ toastMsg }}</div><sc-if value="{{ toastSub }}" hint-placeholder-val=""><div style="font-size:11px;color:#8b8b9e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ toastSub }}</div></sc-if></div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:420,&quot;height&quot;:900},&quot;showParticles&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Ambient&quot;},&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;admin&quot;,&quot;member&quot;],&quot;default&quot;:&quot;admin&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
+class Component extends DCLogic {
+  bgRef = React.createRef();
+  stepRef = React.createRef();
+  scrollStepIntoView(){ const c=this.stepRef&&this.stepRef.current; if(!c)return; const act=c.querySelector('[data-active="1"]'); if(!act)return; const target=act.offsetLeft-(c.clientWidth-act.offsetWidth)/2; c.scrollTo({left:Math.max(0,target),behavior:'smooth'}); }
+
+  state = {
+    screen:'dashboard', inRun:false, menuOpen:false, toast:null,
+    role:'admin', activeProject:'Surency Platform', activeTicket:'SUR-1428',
+    run:{ id:'RUN-204', name:'Sprint 24 — Broker regression', scope:'Selected tickets', framework:'Playwright', env:'Staging', workers:4, tickets:['SUR-1428','SUR-1402','SUR-1390'], status:'review' },
+    processingIndex:0, processingPhase:0,
+    approval:{}, regenId:null, reviewOpen:'SUR-1428', expandedCase:null, edits:{}, editing:null, draft:null, reviewSel:{},
+    syncScreenState:'idle', syncStep:0, syncStatus:{}, linked:{},
+    autoPhase:'idle', autoThinkStep:0, autoSel:'', copied:false,
+    execRunning:false, execDone:false, execProgress:0, execStatus:{}, execIndex:0,
+    evidenceTicket:'SUR-1428', evidenceTab:'screenshot',
+    publish:{}, publishing:false,
+    ticketSearch:'', selected:{}, createRunOpen:false, runScope:'selected', runFramework:'Playwright', runEnv:'Staging', runWorkers:4,
+    runsFilter:'all',
+    auditCat:'all', auditSearch:'',
+    projectTab:'overview',
+    settings:{ parallel:4, retryFlaky:true, screenshotOnFail:true, video:false },
+    credSource:'shared',
+    users:[
+      {id:'u1',name:'Maya Kaur',email:'maya.kaur@surency.com',role:'Admin',status:'active',lastActive:'Active now',initials:'MK',grad:'linear-gradient(135deg,#f59e0b,#f43f5e)'},
+      {id:'u2',name:'Diego Ramos',email:'diego.ramos@surency.com',role:'Member',status:'active',lastActive:'6 min ago',initials:'DR',grad:'linear-gradient(135deg,#22d3ee,#6366f1)'},
+      {id:'u3',name:'Priya Nair',email:'priya.nair@surency.com',role:'Member',status:'active',lastActive:'1 hour ago',initials:'PN',grad:'linear-gradient(135deg,#8b5cf6,#6366f1)'},
+      {id:'u4',name:'Tom Fischer',email:'tom.fischer@surency.com',role:'Member',status:'active',lastActive:'Yesterday',initials:'TF',grad:'linear-gradient(135deg,#10b981,#22d3ee)'},
+      {id:'u5',name:'Sara Lindqvist',email:'sara.l@surency.com',role:'Member',status:'invited',lastActive:'Invited 2 days ago',initials:'SL',grad:'linear-gradient(135deg,#f43f5e,#8b5cf6)'},
+    ],
+    sharedCreds:[
+      {id:'cred-team',label:'Surency QA — Team',email:'qa-bot@surency.com',subscription:'max',expDisplay:'Aug 15, 2026',daysLeft:38,lastRefreshed:'2 hours ago',isDefault:true},
+      {id:'cred-overflow',label:'Surency QA — Overflow',email:'qa-bot2@surency.com',subscription:'pro',expDisplay:'Jul 10, 2026',daysLeft:1,lastRefreshed:'5 days ago',isDefault:false},
+    ],
+  };
+
+  // ---------- data ----------
+  tickets = [
+    {id:'SUR-1428', provider:'ado', title:'View list of all broker agencies', status:'Ready for QA', priority:'High', assignee:'Maya Kaur', sprint:'Sprint 24', labels:['broker-mgmt','list-view'], acCount:10},
+    {id:'SUR-1431', provider:'ado', title:'Broker agency detail screen', status:'In Progress', priority:'High', assignee:'Maya Kaur', sprint:'Sprint 24', labels:['broker-mgmt','detail'], acCount:7},
+    {id:'SUR-1402', provider:'jira', title:'Deactivate broker agency confirmation dialog', status:'Ready for QA', priority:'Medium', assignee:'Diego R.', sprint:'Sprint 24', labels:['broker-mgmt','modal'], acCount:5},
+    {id:'SUR-1390', provider:'ado', title:'License expiration reminder emails', status:'Ready for QA', priority:'Low', assignee:'Priya N.', sprint:'Sprint 23', labels:['notifications','email'], acCount:6},
+    {id:'SUR-1377', provider:'jira', title:'Broker Agents tab pagination', status:'Blocked', priority:'Medium', assignee:'Maya Kaur', sprint:'Sprint 23', labels:['broker-mgmt','pagination'], acCount:4},
+  ];
+  caseBank = {
+    'SUR-1428':[
+      {id:'TC-01',title:'Broker Management loads with two tabs, Broker Agencies active by default',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.2s',precond:'Signed in as a Surency Internal Admin.',steps:[{a:'Navigate to the Brokers section.',e:'Broker Management screen is displayed.'},{a:'Observe the tab bar default selection.',e:'Broker Agencies and Broker Agents tabs shown; Broker Agencies active.'}]},
+      {id:'TC-02',title:'Agency row shows name, number, type, next expiration, status + actions',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'4.1s',precond:'Broker Agencies tab active.',steps:[{a:'Load the Broker Agencies list.',e:'The list renders one row per agency.'},{a:'Inspect a row and the actions column.',e:'Row shows name, number, type, next expiration, status and an ellipsis menu.'}]},
+      {id:'TC-03',title:'Multiple licenses show only the nearest upcoming expiration',priority:'Medium',testType:'Business rule',automation:'Playwright',plat:'Web',dur:'2.8s',precond:'An agency has multiple licenses.',steps:[{a:'Find the multi-license agency row.',e:'Only the nearest upcoming expiration date is shown.'}]},
+      {id:'TC-04',title:'No licenses on file leaves the expiration column blank',priority:'Medium',testType:'Edge case',automation:'Playwright',plat:'Web',dur:'2.5s',precond:'An agency has no licenses.',steps:[{a:'Find the no-license agency row.',e:'The expiration column is blank.'}]},
+      {id:'TC-05',title:'Ellipsis on an Active agency offers Deactivate',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.6s',precond:'An Active agency exists.',steps:[{a:'Open the ellipsis menu on an Active row.',e:'Menu shows a single option: Deactivate.'}]},
+      {id:'TC-06',title:'Ellipsis on an Inactive agency offers Activate',priority:'High',testType:'Functional',automation:'Playwright',plat:'Mobile',dur:'3.9s',precond:'An Inactive agency exists.',steps:[{a:'Open the ellipsis menu on an Inactive row.',e:'Menu shows a single option: Activate.'}]},
+      {id:'TC-07',title:'Search filters by agency name or number',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'4.4s',precond:'List displayed.',steps:[{a:'Type an agency name fragment.',e:'List filters by name.'},{a:'Type an agency number.',e:'List filters by number.'}]},
+      {id:'TC-08',title:'Status filter narrows the list',priority:'Medium',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.1s',precond:'List displayed.',steps:[{a:'Select the Active status filter.',e:'Only Active agencies are shown.'}]},
+      {id:'TC-09',title:'Empty state when no agencies exist',priority:'Low',testType:'Empty state',automation:'Manual',plat:'Web',dur:'—',precond:'No agencies in the system.',steps:[{a:'Open the Broker Agencies list.',e:'Empty-state message indicates none added yet.'}]},
+      {id:'TC-10',title:'Clicking an agency name opens its detail view',priority:'High',testType:'Navigation',automation:'Playwright',plat:'Web',dur:'2.7s',precond:'List displayed.',steps:[{a:'Click a broker agency name.',e:'Navigates to that agency’s detail view.'}]},
+    ],
+    'SUR-1402':[
+      {id:'TC-01',title:'Clicking Deactivate opens a confirmation dialog',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'2.9s',precond:'Active agency with ellipsis menu open.',steps:[{a:'Choose Deactivate from the menu.',e:'A confirmation dialog opens.'}]},
+      {id:'TC-02',title:'Dialog shows the agency name and warning copy',priority:'Medium',testType:'Functional',automation:'Playwright',plat:'Web',dur:'2.2s',precond:'Confirmation dialog open.',steps:[{a:'Read the dialog contents.',e:'Dialog names the agency and warns the action is reversible.'}]},
+      {id:'TC-03',title:'Confirm deactivates the agency and shows a toast',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.4s',precond:'Confirmation dialog open.',steps:[{a:'Click Confirm.',e:'Agency status becomes Inactive; success toast appears.'}]},
+      {id:'TC-04',title:'Cancel closes the dialog with no change',priority:'Medium',testType:'Functional',automation:'Playwright',plat:'Web',dur:'2.0s',precond:'Confirmation dialog open.',steps:[{a:'Click Cancel.',e:'Dialog closes; agency remains Active.'}]},
+      {id:'TC-05',title:'Deactivating with active licenses shows an extra warning',priority:'Medium',testType:'Business rule',automation:'Playwright',plat:'Web',dur:'2.7s',precond:'Agency has active licenses.',steps:[{a:'Open the deactivate dialog.',e:'An additional warning about active licenses is shown.'}]},
+    ],
+    'SUR-1390':[
+      {id:'TC-01',title:'Reminder email sent 30 days before expiration',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.0s',precond:'Agency license expires in 30 days.',steps:[{a:'Run the daily reminder job.',e:'A 30-day reminder email is queued.'}]},
+      {id:'TC-02',title:'Reminder email sent 7 days before expiration',priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.0s',precond:'Agency license expires in 7 days.',steps:[{a:'Run the daily reminder job.',e:'A 7-day reminder email is queued.'}]},
+      {id:'TC-03',title:'No email when the agency has no licenses',priority:'Medium',testType:'Edge case',automation:'Playwright',plat:'Web',dur:'2.4s',precond:'Agency has no licenses.',steps:[{a:'Run the reminder job.',e:'No reminder email is queued.'}]},
+      {id:'TC-04',title:'Email contains agency name and expiration date',priority:'Medium',testType:'Functional',automation:'Playwright',plat:'Web',dur:'2.6s',precond:'A reminder email is generated.',steps:[{a:'Inspect the email body.',e:'Body contains the agency name and expiration date.'}]},
+      {id:'TC-05',title:'Unsubscribed agencies receive no reminders',priority:'Medium',testType:'Business rule',automation:'Playwright',plat:'Web',dur:'2.3s',precond:'Agency opted out of reminders.',steps:[{a:'Run the reminder job.',e:'No email is queued for the opted-out agency.'}]},
+      {id:'TC-06',title:'Reminder respects the account timezone',priority:'Low',testType:'Functional',automation:'Manual',plat:'Web',dur:'—',precond:'Account timezone is US/Pacific.',steps:[{a:'Trigger the scheduled send.',e:'Email sends at 8am in the account timezone.'}]},
+    ],
+  };
+  detail = {
+    desc:'As a Surency Internal Admin, I want to view a list of all broker agencies in the system, so that I can find and manage broker agency records.',
+    note:'The Broker Management section uses a tabbed layout: Broker Agencies and Broker Agents. The expiration date shows the nearest upcoming expiration across all licenses; blank if none.',
+    labels:['broker-mgmt','list-view','admin'],
+    comments:[{who:'Diego R.',ini:'DR',role:'Product',when:'2 days ago',text:'Confirmed with compliance — State stays a license-level attribute, keep it off the list view.'},{who:'Maya Kaur',ini:'MK',role:'QA Lead',when:'1 day ago',text:'Adding edge coverage for zero-license agencies and inactive-agency actions.'}],
+    prs:[{repo:'surency-web',num:'2841',title:'feat(brokers): agency list view + filters',status:'Open',color:'#6ee7b7'},{repo:'surency-api',num:'1190',title:'feat: nearest-expiration resolver',status:'Merged',color:'#a78bfa'}],
+  };
+  acStatements = ['A Surency Internal Admin navigating to the Brokers section sees two tabs — Broker Agencies and Broker Agents — with Broker Agencies active by default.','Each agency row displays name, number, type, next license expiration and status, with an ellipsis actions menu.','When an agency has more than one license, only the nearest upcoming expiration is shown.','When an agency has no licenses, the expiration column is blank.','The ellipsis menu for an Active agency shows a single option: Deactivate.','The ellipsis menu for an Inactive agency shows a single option: Activate.','Typing in search filters by agency name or number.','Selecting a status filter shows only agencies matching that status.','When there are no agencies, a message indicates none have been added.','Clicking a broker agency name navigates to its detail view.'];
+  runsCatalog=[
+    {id:'RUN-206',name:'Checkout regression',scope:'Entire Sprint 24',framework:'Playwright',env:'Staging',workers:6,tickets:['SUR-1428','SUR-1402','SUR-1390'],status:'executing',cases:41,pass:38,fail:1,ago:'now',stage:5},
+    {id:'RUN-205',name:'Payments API smoke',scope:'Selected tickets',framework:'Playwright',env:'Staging',workers:4,tickets:['SUR-1428','SUR-1402'],status:'analyzing',cases:12,pass:0,fail:0,ago:'now',stage:2},
+    {id:'RUN-203',name:'Auth smoke',scope:'Selected tickets',framework:'Playwright',env:'Staging',workers:4,tickets:['SUR-1428'],status:'done',cases:24,pass:24,fail:0,ago:'1h',stage:7},
+    {id:'RUN-201',name:'Full regression',scope:'Entire Sprint 23',framework:'Playwright',env:'Staging',workers:6,tickets:['SUR-1428','SUR-1402','SUR-1390'],status:'done',cases:218,pass:209,fail:9,ago:'1d',stage:7},
+    {id:'RUN-198',name:'Claims portal',scope:'Selected tickets',framework:'Selenium',env:'Staging',workers:4,tickets:['SUR-1402'],status:'failed',cases:63,pass:41,fail:22,ago:'2d',stage:6},
+  ];
+  projectsData = [
+    {name:'Surency Platform',provider:'Azure DevOps',provGlyph:'A',provColor:'#0078d4',tickets:42,runs:1,rate:'94%',status:'ready',framework:'Playwright',repo:'surency-eng/surency-web',lastIndexed:'2 hours ago',confidence:96,stack:['React 18','TypeScript','Vite','.NET 8 API'],pageObjects:32,fixtures:12},
+    {name:'Surency Mobile',provider:'Azure DevOps',provGlyph:'A',provColor:'#0078d4',tickets:28,runs:0,rate:'91%',status:'needs_refresh',framework:'Playwright',repo:'surency-eng/surency-mobile',lastIndexed:'9 days ago',confidence:74,stack:['React Native','Expo','TypeScript'],pageObjects:14,fixtures:5},
+    {name:'Claims Portal',provider:'Jira',provGlyph:'J',provColor:'#2684ff',tickets:63,runs:0,rate:'97%',status:'not_indexed',framework:'Playwright',repo:'surency-eng/claims-portal',lastIndexed:'—',confidence:0,stack:['Angular 17','TypeScript','NgRx'],pageObjects:24,fixtures:8},
+  ];
+  auditEvents = [
+    {id:'EVT-9241',ts:'09:41',day:'Jul 2',cat:'ai',actor:'Q-Agent',action:'Generated test cases',target:'RUN-204 · 21 cases across 3 tickets',status:'success',meta:'claude-sonnet · 4.2s · 2,840 tokens'},
+    {id:'EVT-9240',ts:'09:38',day:'Jul 2',cat:'sync',actor:'Q-Agent',action:'Created & linked test cases',target:'SUR-1428 · Azure DevOps',status:'success',meta:'10 test cases created'},
+    {id:'EVT-9239',ts:'09:36',day:'Jul 2',cat:'review',actor:'Maya Kaur',action:'Approved test cases',target:'SUR-1428 · 10 cases',status:'success',meta:'Bulk approve all'},
+    {id:'EVT-9238',ts:'09:31',day:'Jul 2',cat:'execution',actor:'Q-Agent',action:'Executed test run',target:'RUN-204 · 18 automated cases',status:'warning',meta:'17 passed · 1 failed (TC-06)'},
+    {id:'EVT-9237',ts:'09:24',day:'Jul 2',cat:'auth',actor:'Diego R.',action:'Signed in',target:'Q-Agent workspace',status:'success',meta:'SSO · Okta · Chrome on macOS'},
+    {id:'EVT-9236',ts:'09:18',day:'Jul 2',cat:'knowledge',actor:'Q-Agent',action:'Built project knowledge base',target:'Claims Portal · v1',status:'success',meta:'96 specs · 93% confidence'},
+    {id:'EVT-9234',ts:'08:52',day:'Jul 2',cat:'run',actor:'Maya Kaur',action:'Created run',target:'RUN-204 · Sprint 24 regression',status:'success',meta:'Playwright · Staging · 4 workers'},
+    {id:'EVT-9231',ts:'18:22',day:'Jul 1',cat:'auth',actor:'Unknown',action:'Failed sign-in attempt',target:'Q-Agent workspace',status:'error',meta:'Invalid credentials · rate-limited'},
+    {id:'EVT-9228',ts:'16:20',day:'Jul 1',cat:'review',actor:'Diego R.',action:'Rejected test case',target:'SUR-1390 · TC-03',status:'success',meta:'Reason: duplicate coverage'},
+  ];
+  auditCats = {ai:['AI','#a78bfa','rgba(139,92,246,.14)'],sync:['Sync','#67e8f9','rgba(34,211,238,.13)'],review:['Review','#6ee7b7','rgba(16,185,129,.14)'],execution:['Execution','#fbbf24','rgba(251,191,36,.13)'],auth:['Auth','#f9a8d4','rgba(244,114,182,.14)'],knowledge:['Knowledge','#c4b5fd','rgba(196,181,253,.14)'],run:['Run','#fca5a5','rgba(252,165,165,.13)']};
+
+  navDefs = [
+    {id:'dashboard',label:'Dashboard',icon:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'},
+    {id:'projects',label:'Projects',icon:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'},
+    {id:'tickets',label:'Tickets',icon:'<path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M13 6v12"/>'},
+    {id:'runs',label:'Runs',badge:'1',icon:'<rect x="3" y="4" width="18" height="4" rx="1.2"/><rect x="3" y="10" width="18" height="4" rx="1.2"/><rect x="3" y="16" width="12" height="4" rx="1.2"/>'},
+    {id:'review',label:'Review Center',icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'},
+    {id:'reports',label:'Reports',icon:'<path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8" rx="1"/><rect x="12" y="6" width="3" height="12" rx="1"/><rect x="17" y="13" width="3" height="5" rx="1"/>'},
+    {id:'audit',label:'Audit Log',icon:'<path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/>'},
+    {id:'settings',label:'Settings',icon:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6.2 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 3.6V3.5a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.4 12z"/>'},
+  ];
+  adminDefs = [
+    {id:'admin-users',label:'Team',icon:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'},
+    {id:'admin-creds',label:'Claude Credentials',icon:'<path d="M12 2.4l2.6 6.6 6.9.4-5.3 4.4 1.8 6.7L12 17.3 6 20.9l1.8-6.7L2.5 9.4l6.9-.4z"/>'},
+  ];
+  pipeDefs = [
+    {id:'run',label:'Overview'},{id:'review',label:'Review'},{id:'sync',label:'Sync'},{id:'automation',label:'Automation'},{id:'console',label:'Execution'},{id:'evidence',label:'Evidence'},{id:'comment',label:'Comment'},
+  ];
+  runStageMap={processing:1,review:2,sync:3,automation:4,executing:5,evidence:6,comment:7,done:7,analyzing:1};
+
+  // ---------- helpers ----------
+  ic(p,s){ s=s||18; return {__html:'<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'}; }
+  gid(tid,cid){ return tid+'::'+cid; }
+  genericCases(t){ return [
+    {id:'TC-01',title:'Happy path — '+t.title,priority:'High',testType:'Functional',automation:'Playwright',plat:'Web',dur:'3.0s',precond:'Feature is available to the user.',steps:[{a:'Perform the primary action.',e:'The expected outcome occurs.'}]},
+    {id:'TC-02',title:'Validation & error handling',priority:'Medium',testType:'Functional',automation:'Playwright',plat:'Web',dur:'2.6s',precond:'Feature is available.',steps:[{a:'Submit invalid input.',e:'A clear validation message is shown.'}]},
+    {id:'TC-03',title:'Edge case coverage',priority:'Low',testType:'Edge case',automation:'Manual',plat:'Web',dur:'—',precond:'Boundary condition set up.',steps:[{a:'Exercise the boundary condition.',e:'The system degrades gracefully.'}]},
+  ]; }
+  getCases(tid){ return this.caseBank[tid] || this.genericCases(this.tickets.find(t=>t.id===tid) || {title:tid}); }
+  runCaseList(){ const out=[]; this.state.run.tickets.forEach(tid=>{ this.getCases(tid).forEach(c=>out.push({tid,c})); }); return out; }
+  prColor(p){return p==='High'?'#fb7185':p==='Medium'?'#fbbf24':'#94a3b8';}
+  prBg(p){return p==='High'?'rgba(251,113,133,.14)':p==='Medium'?'rgba(251,191,36,.14)':'rgba(148,163,184,.14)';}
+  autoColor(a){return a==='Playwright'?'#67e8f9':'#c4b5fd';}
+  autoBg(a){return a==='Playwright'?'rgba(34,211,238,.13)':'rgba(196,181,253,.13)';}
+  findRun(id){ if(this.state.run&&this.state.run.id===id)return this.state.run; return this.runsCatalog.find(r=>r.id===id)||this.state.run; }
+
+  // ---------- navigation ----------
+  openMenu=()=>this.setState({menuOpen:true});
+  closeMenu=()=>this.setState({menuOpen:false});
+  navigate=(sc)=>this.setState({screen:sc,inRun:false,menuOpen:false});
+  gotoStage=(sc)=>this.setState({screen:sc,inRun:true,menuOpen:false});
+  enterRun=(id)=>{ const r=this.findRun(id); const sc=r.status==='processing'||r.status==='analyzing'?'run':(r.status==='done'||r.status==='executing'?'evidence':'review'); this.setState({run:r,inRun:true,screen:'run',menuOpen:false}); };
+  enterRunAt=(id,stage)=>{ const r=this.findRun(id); this.setState({run:r,inRun:true,screen:stage,menuOpen:false}); };
+  exitRun=()=>this.setState({inRun:false,screen:'runs',menuOpen:false});
+  goRuns=()=>this.navigate('runs');
+  openTicket=(id)=>this.setState({activeTicket:id,screen:'ticket',inRun:false,menuOpen:false});
+  openProject=(n)=>this.setState({activeProject:n,screen:'project',inRun:false,projectTab:'overview',menuOpen:false});
+  toggleRole=()=>this.setState(st=>{ const r=st.role==='admin'?'member':'admin'; const onAdmin=(st.screen==='admin-users'||st.screen==='admin-creds'); return {role:r, screen:(r==='member'&&onAdmin)?'dashboard':st.screen, menuOpen:false}; });
+
+  // ---------- review ----------
+  toggleReview=(tid)=>this.setState(s=>({reviewOpen:s.reviewOpen===tid?null:tid}));
+  toggleCase=(gid)=>this.setState(s=>({expandedCase:s.expandedCase===gid?null:gid}));
+  approve=(gid)=>this.setState(s=>({approval:{...s.approval,[gid]:s.approval[gid]==='approved'?'pending':'approved'}}));
+  reject=(gid)=>this.setState(s=>({approval:{...s.approval,[gid]:s.approval[gid]==='rejected'?'pending':'rejected'}}));
+  regen=(gid)=>{ this.setState({regenId:gid}); clearTimeout(this._rg); this._rg=setTimeout(()=>this.setState(s=>({regenId:null,approval:{...s.approval,[gid]:'pending'}})),1000); };
+  approveTicket=(tid)=>this.setState(s=>{ const ap={...s.approval}; this.getCases(tid).forEach(c=>{ if(ap[this.gid(tid,c.id)]!=='rejected') ap[this.gid(tid,c.id)]='approved'; }); return {approval:ap}; });
+  approveAllRun=()=>{ this.setState(s=>{ const ap={...s.approval}; this.runCaseList().forEach(({tid,c})=>{ if(ap[this.gid(tid,c.id)]!=='rejected') ap[this.gid(tid,c.id)]='approved'; }); return {approval:ap}; }); this.showToast('All cases approved','success','Ready to sync'); };
+  mapCase(tid,c){ const gid=this.gid(tid,c.id); const st=this.state.approval[gid]||'pending'; const m={pending:['#fbbf24','Pending','rgba(251,191,36,.14)'],approved:['#6ee7b7','Approved','rgba(16,185,129,.14)'],rejected:['#fb7185','Rejected','rgba(244,63,94,.14)']};
+    const ed=this.state.edits[gid]; const title=ed?ed.title:c.title;
+    return {...c, gid, title, prColor:this.prColor(c.priority),prBg:this.prBg(c.priority),autoCol:this.autoColor(c.automation),autoBg:this.autoBg(c.automation),
+      steps:c.steps.map((x,i)=>({...x,n:i+1})), status:st,statusColor:m[st][0],statusLabel:m[st][1],statusBg:m[st][2],
+      expanded:this.state.expandedCase===gid,toggle:()=>this.toggleCase(gid),
+      chevStyle:'transition:transform .25s;flex-shrink:0'+(this.state.expandedCase===gid?';transform:rotate(90deg)':''),
+      regenerating:this.state.regenId===gid, notRegenerating:this.state.regenId!==gid,
+      approve:()=>this.approve(gid),reject:()=>this.reject(gid),regenC:()=>this.regen(gid),
+      isApproved:st==='approved', isRejected:st==='rejected',
+      approveBtnStyle:'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border-radius:11px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;color:#6ee7b7;border:1px solid rgba(16,185,129,'+(st==='approved'?'.5)':'.3)')+';background:rgba(16,185,129,'+(st==='approved'?'.26)':'.12)'),
+      rejectBtnStyle:'flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border-radius:11px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;color:#fb7185;border:1px solid rgba(244,63,94,'+(st==='rejected'?'.5)':'.28)')+';background:rgba(244,63,94,'+(st==='rejected'?'.2)':'.1)'),
+      approveLabel:st==='approved'?'Approved':'Approve', rejectLabel:st==='rejected'?'Rejected':'Reject' }; }
+
+  // ---------- create run ----------
+  openCreateRun=()=>this.setState({createRunOpen:true,menuOpen:false});
+  closeCreateRun=()=>this.setState({createRunOpen:false});
+  setRunScope=(v)=>this.setState({runScope:v}); setRunFramework=(v)=>this.setState({runFramework:v}); setRunEnv=(v)=>this.setState({runEnv:v}); setWorkers=(e)=>this.setState({runWorkers:+e.target.value});
+  scopeIds(){ const s=this.state; if(s.runScope==='sprint') return this.tickets.filter(t=>t.sprint==='Sprint 24').map(t=>t.id); if(s.runScope==='assigned') return this.tickets.filter(t=>t.assignee==='Maya Kaur').map(t=>t.id); const sel=Object.keys(s.selected).filter(k=>s.selected[k]); return sel.length?sel:['SUR-1428','SUR-1402','SUR-1390']; }
+  confirmCreateRun=()=>{ const ids=this.scopeIds(); const s=this.state;
+    const run={ id:'RUN-205', name:(s.runScope==='sprint'?'Sprint 24 regression':s.runScope==='assigned'?'My assigned tickets':'Selected tickets')+' — '+ids.length+' tickets', scope:s.runScope==='sprint'?'Entire Sprint 24':s.runScope==='assigned'?'Assigned tickets':'Selected tickets', framework:s.runFramework, env:s.runEnv, workers:s.runWorkers, tickets:ids, status:'processing' };
+    this.setState({ run, createRunOpen:false, screen:'run', inRun:true, processingIndex:0, processingPhase:0, approval:{}, execDone:false, execStatus:{}, autoPhase:'idle', publish:{}, syncScreenState:'idle', syncStatus:{}, linked:{} });
+    clearInterval(this._proc);
+    this._proc=setInterval(()=> this.setState(st=>{ const n=st.run.tickets.length; let idx=st.processingIndex, ph=st.processingPhase;
+      if(ph<2) return {processingPhase:ph+1}; idx+=1;
+      if(idx>=n){ clearInterval(this._proc); return {processingIndex:idx, run:{...st.run,status:'review'}}; }
+      return {processingIndex:idx, processingPhase:0}; }), 640);
+  };
+
+  // ---------- sync ----------
+  runSync=(link)=>{ if(this.state.syncScreenState==='running')return; const approved=this.runCaseList().filter(({tid,c})=>this.state.approval[this.gid(tid,c.id)]==='approved'); if(!approved.length){ this.showToast('Approve some cases first','error',''); return; } this.setState({screen:'sync',inRun:true,syncScreenState:'running',syncStep:0,run:{...this.state.run,status:'sync'}}); clearInterval(this._sync);
+    this._sync=setInterval(()=>this.setState(s=>{ const n=s.syncStep+1; if(n>=(link?3:2)){ clearInterval(this._sync);
+      const linked={...s.linked}; const st={...s.syncStatus};
+      s.run.tickets.forEach(tid=>{ const appr=this.getCases(tid).filter(c=>s.approval[this.gid(tid,c.id)]==='approved'); if(!appr.length) return; const t=this.tickets.find(x=>x.id===tid)||{}; const kind=(t.provider==='jira')?'Bug':'User Story'; linked[tid]=appr.map((c,i)=>({id:(t.provider==='jira'?'QA-':'TC-')+(4200+i),title:c.title,status:'Design'})); st[tid]=link?{created:true,linked:true,kind}:{created:true,linked:false,kind}; });
+      return {syncStep:link?3:2,syncScreenState:'done',linked,syncStatus:st,run:{...s.run,status:'sync'}}; }
+      return {syncStep:n}; }),820); };
+  createTestCases=()=>this.runSync(false);
+  createAndLink=()=>this.runSync(true);
+
+  // ---------- automation ----------
+  genAutomation=()=>{ const approved=this.runCaseList().filter(({tid,c})=>this.state.approval[this.gid(tid,c.id)]==='approved'); if(!approved.length){ this.showToast('Approve some cases first','error',''); return; } const first=(approved.find(x=>x.c.automation!=='Manual')||approved[0]); this.setState({autoPhase:'thinking',autoThinkStep:0,autoSel:this.gid(first.tid,first.c.id),screen:'automation',inRun:true}); clearInterval(this._athink); this._athink=setInterval(()=>this.setState(s=>({autoThinkStep:Math.min(s.autoThinkStep+1,2)})),470); clearTimeout(this._t2); this._t2=setTimeout(()=>{clearInterval(this._athink); this.setState({autoPhase:'done'});},1650); };
+  selectAuto=(gid)=>this.setState({autoSel:gid});
+  copyCode=()=>{ this.setState({copied:true}); clearTimeout(this._cp); this._cp=setTimeout(()=>this.setState({copied:false}),1400); this.showToast('Copied to clipboard','success',''); };
+  shortT(t){ return t.length>44?t.slice(0,44)+'…':t; }
+  actionLine(a){ if(/ellipsis|menu/i.test(a))return "await row.getByRole('button',{name:'More actions'}).click();"; if(/search|type an agency name/i.test(a))return "await page.getByPlaceholder('Search agencies…').fill('Meridian');"; if(/status filter|select the active/i.test(a))return "await page.getByRole('button',{name:/Status/}).click();"; if(/click a broker agency name/i.test(a))return "await page.getByRole('link',{name:agencyName}).click();"; if(/confirm/i.test(a))return "await page.getByRole('button',{name:'Confirm'}).click();"; if(/cancel/i.test(a))return "await page.getByRole('button',{name:'Cancel'}).click();"; if(/run the .*job|trigger/i.test(a))return "await runReminderJob();"; if(/navigate|open the|load the/i.test(a))return "await page.goto('/admin/brokers');"; return "await page.locator('main').waitFor();"; }
+  genCode(tid,c){ if(c.automation==='Manual') return '// '+tid+' · '+c.id+' — '+c.title+'\n//\n// Manual test case — no Playwright automation generated.'; let body=''; c.steps.forEach((st,i)=>{ body+="\n  // "+(i+1)+". "+st.a+"\n  "+this.actionLine(st.a)+"\n  await expect(page.locator('main')).toBeVisible(); // "+st.e+"\n"; }); return "import { test, expect } from '@playwright/test';\n\n/**\n * "+tid+" · "+c.id+" — "+c.title+"\n * Priority: "+c.priority+"  ·  "+c.testType+"  ·  "+c.plat+"\n */\ntest('"+c.id+": "+this.shortT(c.title)+"', async ({ page }) => {\n  // "+c.precond+"\n  const agencyName = 'Meridian Insurance Partners';\n  const row = page.getByRole('row', { name: /Coastal Risk/ });"+body+"});\n"; }
+  highlight(code){ let h=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); const store=[]; const stash=(c,t)=>{store.push('<span style="color:'+c+'">'+t+'</span>');return '\u0000'+(store.length-1)+'\u0000';}; h=h.replace(/(\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g,m=>stash('#6b7280',m)); h=h.replace(/('[^'\n]*'|`[^`]*`|"[^"\n]*")/g,m=>stash('#6ee7b7',m)); h=h.replace(/\b(import|from|const|let|async|await|test|expect|return|new|of|true|false)\b/g,m=>stash('#c4b5fd',m)); h=h.replace(/\u0000(\d+)\u0000/g,(_,i)=>store[+i]); return {__html:h}; }
+
+  // ---------- execution ----------
+  runExecution=()=>{ if(this.state.execRunning) return;
+    const approved=this.runCaseList().filter(({tid,c})=>this.state.approval[this.gid(tid,c.id)]==='approved' && c.automation!=='Manual');
+    const list=approved.length?approved:this.runCaseList().filter(({c})=>c.automation!=='Manual');
+    const keys=list.map(x=>this.gid(x.tid,x.c.id));
+    this.setState({execRunning:true,execDone:false,execProgress:0,execIndex:0,screen:'console',inRun:true,execStatus:Object.fromEntries(keys.map(k=>[k,'pending'])), run:{...this.state.run,status:'executing'}});
+    let i=0; const step=()=>{ if(i>=keys.length){ this.setState(s=>({execRunning:false,execDone:true,execProgress:100,run:{...s.run,status:'evidence'}})); return; }
+      const {tid,c}=list[i]; const k=keys[i]; const fail=(tid==='SUR-1428'&&c.id==='TC-06');
+      this.setState(s=>({execStatus:{...s.execStatus,[k]:'running'},execIndex:i}));
+      this._et=setTimeout(()=>{ this.setState(s=>({execStatus:{...s.execStatus,[k]:fail?'fail':'pass'},execProgress:Math.round((i+1)/keys.length*100)})); i++; this._et2=setTimeout(step,170); },420); };
+    this._et=setTimeout(step,600);
+  };
+
+  // ---------- evidence / comment ----------
+  setEvidenceTicket=(tid)=>this.setState({evidenceTicket:tid}); setEvidenceTab=(t)=>this.setState({evidenceTab:t});
+  publishAll=()=>{ if(this.state.publishing)return; this.setState({publishing:true}); clearTimeout(this._pb); this._pb=setTimeout(()=>this.setState(s=>{ const p={}; s.run.tickets.forEach((tid,i)=>{ p[tid]=(i===s.run.tickets.length-1)?'failed':'published'; }); return {publishing:false,publish:p,run:{...s.run,status:'comment'}}; }),1400); };
+  retryFailed=()=>{ this.setState(s=>{ const p={...s.publish}; Object.keys(p).forEach(k=>{ if(p[k]==='failed') p[k]='published'; }); return {publish:p}; }); this.showToast('Retry succeeded','success','All comments published'); };
+
+  // ---------- tickets / settings ----------
+  onSearch=(e)=>this.setState({ticketSearch:e.target.value});
+  toggleSel=(id)=>this.setState(s=>({selected:{...s.selected,[id]:!s.selected[id]}}));
+  setRunsFilter=(f)=>this.setState({runsFilter:f});
+  setAuditCat=(c)=>this.setState({auditCat:c});
+  onAuditSearch=(e)=>this.setState({auditSearch:e.target.value});
+  setProjectTab=(t)=>{ if(t==='tickets'){this.navigate('tickets');return;} if(t==='runs'){this.navigate('runs');return;} this.setState({projectTab:t}); };
+  toggleSetting=(k)=>this.setState(st=>({settings:{...st.settings,[k]:!st.settings[k]}}));
+  setParallel=(e)=>this.setState(st=>({settings:{...st.settings,parallel:+e.target.value}}));
+  setCredSource=(v)=>{ this.setState({credSource:v}); this.showToast(v==='shared'?'Using the shared account':'Using your personal account','success',''); };
+
+  showToast=(msg,type,sub)=>{ const id=Date.now(); this.setState({toast:{id,msg,type:type||'success',sub:sub||''}}); clearTimeout(this._toastT); this._toastT=setTimeout(()=>{ this.setState(s=>(s.toast&&s.toast.id===id?{toast:null}:{})); },3200); };
+
+  countUp(){ clearTimeout(this._cuT); this._cuT=setTimeout(()=>{ document.querySelectorAll('main [data-countup]').forEach(el=>{ if(el.__cu)return; const raw=el.textContent.trim(); const m=raw.match(/^([^\d]*)([\d,]+(?:\.\d+)?)(.*)$/); if(!m)return; el.__cu=1; const pre=m[1], suf=m[3]; const target=parseFloat(m[2].replace(/,/g,'')); const dec=(m[2].split('.')[1]||'').length; const hasComma=m[2].indexOf(',')>=0; const fmt=(v)=>{ let n=dec?v.toFixed(dec):Math.round(v).toString(); if(hasComma)n=(dec?parseFloat(n):parseInt(n,10)).toLocaleString(); return pre+n+suf; }; const t0=performance.now(), dur=680; const tick=(now)=>{ const p=Math.min(1,(now-t0)/dur); const e=1-Math.pow(1-p,3); el.textContent=fmt(target*e); if(p<1)requestAnimationFrame(tick); else {el.textContent=raw; el.__cu=0;} }; el.textContent=fmt(0); requestAnimationFrame(tick); }); },60); }
+
+  componentDidMount(){ this._propRole=this.props.role; if(this.props.role&&this.props.role!==this.state.role)this.setState({role:this.props.role}); this.initThree(0); if(this.state.screen==='dashboard')this.countUp(); this._prevScreen=this.state.screen; }
+  componentDidUpdate(){ if(this.props.role!==this._propRole){ this._propRole=this.props.role; if(this.props.role&&this.props.role!==this.state.role)this.setState({role:this.props.role}); } if(this.state.screen!==this._prevScreen){ if(this.state.screen==='dashboard')this.countUp(); const m=document.querySelector('main'); if(m)m.scrollTop=0; this._prevScreen=this.state.screen; } if(this.state.inRun)requestAnimationFrame(()=>this.scrollStepIntoView()); }
+  componentWillUnmount(){ ['_proc','_sync','_athink','_t2','_et','_et2','_rg','_cp','_pb','_toastT','_cuT'].forEach(k=>{clearTimeout(this[k]);clearInterval(this[k]);}); if(this._three){cancelAnimationFrame(this.raf);window.removeEventListener('resize',this._three.onResize);try{this._three.renderer.dispose();this._three.el.innerHTML='';}catch(e){}} }
+
+  initThree(tries){ const THREE=window.THREE; if((this.props.showParticles??true)===false)return; if(!THREE||!this.bgRef.current){ if(tries<40)setTimeout(()=>this.initThree(tries+1),200); return; }
+    const el=this.bgRef.current; const W=()=>el.clientWidth||window.innerWidth,H=()=>el.clientHeight||window.innerHeight;
+    const scene=new THREE.Scene(); const camera=new THREE.PerspectiveCamera(62,W()/H(),1,4000); camera.position.z=720;
+    const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true}); renderer.setPixelRatio(Math.min(window.devicePixelRatio,2)); renderer.setSize(W(),H()); el.appendChild(renderer.domElement);
+    const N=48; const pts=[],pos=[],col=[],base=[]; const baseCol=new THREE.Color(0xa78bfa);
+    for(let i=0;i<N;i++){const v=new THREE.Vector3((Math.random()-.5)*1300,(Math.random()-.5)*1500,(Math.random()-.5)*640);pts.push(v);pos.push(v.x,v.y,v.z);col.push(baseCol.r,baseCol.g,baseCol.b);base.push(0.5+Math.random()*0.3);}
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('color',new THREE.Float32BufferAttribute(col.slice(),3));
+    const points=new THREE.Points(g,new THREE.PointsMaterial({size:6,transparent:true,opacity:.9,vertexColors:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+    const edges=[]; const lp=[]; const lc=[];
+    for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){if(pts[i].distanceTo(pts[j])<300){edges.push([i,j]);lp.push(pts[i].x,pts[i].y,pts[i].z,pts[j].x,pts[j].y,pts[j].z);lc.push(0,0,0,0,0,0);}}
+    const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(lp,3)); lg.setAttribute('color',new THREE.Float32BufferAttribute(lc,3));
+    const lines=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({transparent:true,opacity:.5,vertexColors:true,blending:THREE.AdditiveBlending}));
+    const lineCol=new THREE.Color(0x6d5cff);
+    const group=new THREE.Group();group.add(lines);group.add(points);scene.add(group);
+    const onResize=()=>{camera.aspect=W()/H();camera.updateProjectionMatrix();renderer.setSize(W(),H());}; window.addEventListener('resize',onResize);
+    const clock=new THREE.Clock(); const colAttr=g.getAttribute('color'); const lColAttr=lg.getAttribute('color');
+    let energy=0;
+    const animate=()=>{ this.raf=requestAnimationFrame(animate); if(document.hidden){return;} const t=clock.getElapsedTime();
+      const tgt=this._targetEnergy||0; energy+=(tgt-energy)*0.05;
+      const breathe=0.5+0.5*Math.sin(t*0.5);
+      group.rotation.y=t*(0.026+energy*0.05); group.rotation.x=Math.sin(t*0.12)*0.06;
+      for(let i=0;i<N;i++){ const glow=Math.min(1, base[i]*(0.55+0.2*breathe+energy*0.3)); colAttr.array[i*3]=baseCol.r*glow; colAttr.array[i*3+1]=baseCol.g*glow; colAttr.array[i*3+2]=baseCol.b*glow; }
+      colAttr.needsUpdate=true; points.material.size=6+energy*2.5;
+      for(let k=0;k<edges.length;k++){ const b=0.16*(0.5+0.35*breathe+energy*0.5); const bi=k*6; for(let q=0;q<6;q++)lColAttr.array[bi+q]=(q%3===0?lineCol.r:q%3===1?lineCol.g:lineCol.b)*b; }
+      lColAttr.needsUpdate=true; renderer.render(scene,camera);
+    }; animate(); this._three={renderer,onResize,el}; }
+
+  renderVals(){
+    const s=this.state, run=s.run;
+    const isAdmin=s.role==='admin';
+    this._targetEnergy=(s.screen==='run'&&(run.status==='processing'||run.status==='analyzing'))||s.syncScreenState==='running'||s.execRunning||s.autoPhase==='thinking'?1:(s.screen==='review'?0.5:0.12);
+    const identity=isAdmin?{name:'Maya Kaur',role:'QA Lead · Admin',initials:'MK',grad:'linear-gradient(135deg,#f59e0b,#f43f5e)'}:{name:'Diego Ramos',role:'QA Engineer',initials:'DR',grad:'linear-gradient(135deg,#22d3ee,#6366f1)'};
+
+    // ---- drawer nav ----
+    const activeSc = s.inRun ? '__run__' : s.screen;
+    const navStyle=(active)=>'display:flex;align-items:center;gap:13px;width:100%;padding:11px 12px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:'+(active?'700':'600')+';color:'+(active?'#ECECF1':'#a0a0b2')+';background:'+(active?'linear-gradient(135deg,rgba(139,92,246,.9),rgba(99,102,241,.75))':'transparent');
+    const drawerNav=this.navDefs.map(n=>{ const active=(n.id==='review')?false:(s.screen===n.id&&!s.inRun); const go=n.id==='review'?()=>this.gotoStage('review'):()=>this.navigate(n.id); return {label:n.label,badge:n.badge,icon:this.ic(n.icon,19),go,style:navStyle(active)}; });
+    const adminNav=this.adminDefs.map(n=>({label:n.label,icon:this.ic(n.icon,19),go:()=>this.navigate(n.id),style:navStyle(s.screen===n.id)}));
+
+    // ---- top bar ----
+    const titles={dashboard:['Dashboard','Overview'],projects:['Projects','3 connected'],project:[s.activeProject,'Project'],tickets:['Tickets','Azure DevOps · Surency'],ticket:[s.activeTicket,'Ticket'],runs:['Runs','5 total'],reports:['Reports','Suite analytics'],audit:['Audit Log','Workspace events'],settings:['Settings','Workspace'],'admin-users':['Team','User management'],'admin-creds':['Claude Credentials','Shared accounts']};
+    const stageNames={run:'Run overview',review:'Review Center',sync:'Sync',automation:'Automation',console:'Execution',evidence:'Evidence',comment:'Publish'};
+    let topTitle, topSub;
+    if(s.inRun){ topTitle=stageNames[s.screen]||'Run'; topSub=run.id+' · '+run.name; }
+    else { const tt=titles[s.screen]||['Q-Agent','']; topTitle=tt[0]; topSub=tt[1]; }
+
+    // top-right action
+    let topAction=this.openCreateRun, topActionIcon=this.ic('<path d="M12 5v14M5 12h14"/>',18), topActionStyle='width:40px;height:40px;flex-shrink:0;border-radius:12px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 6px 16px -5px rgba(139,92,246,.7)';
+    if(s.inRun){ topAction=this.exitRun; topActionIcon=this.ic('<path d="M18 6 6 18M6 6l12 12"/>',18); topActionStyle='width:40px;height:40px;flex-shrink:0;border-radius:12px;border:1px solid rgba(255,255,255,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;color:#c7c7d4;background:rgba(255,255,255,.05)'; }
+
+    // ---- pipeline stepper ----
+    const curStage=this.runStageMap[run.status]||0;
+    const scStageMap={run:1,review:2,sync:3,automation:4,console:5,evidence:6,comment:7};
+    const activeStageNum=scStageMap[s.screen]||1;
+    const stepper=this.pipeDefs.map((p,i)=>{ const num=i+1; const done=num<Math.max(curStage,activeStageNum)&&num<activeStageNum; const isActive=num===activeStageNum;
+      return {label:p.label,num, done:num<activeStageNum, notDone:!(num<activeStageNum), go:()=>this.gotoStage(p.id), activeFlag:isActive?'1':'0',
+        style:'display:flex;align-items:center;gap:6px;flex-shrink:0;padding:6px 12px 6px 7px;border-radius:20px;border:1px solid '+(isActive?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(isActive?'rgba(139,92,246,.18)':'rgba(255,255,255,.03)')+';color:'+(isActive?'#ECECF1':'#8b8b9e')+';font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap',
+        dotStyle:'width:19px;height:19px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;'+(num<activeStageNum?'background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff':isActive?'background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff':'background:rgba(255,255,255,.09);color:#8b8b9e')}; });
+
+    // ---- toast ----
+    const toastMap={success:['#6ee7b7','rgba(16,185,129,.16)','<path d="M20 6 9 17l-5-5"/>'],error:['#fb7185','rgba(244,63,94,.16)','<path d="M18 6 6 18M6 6l12 12"/>']};
+    const tm=s.toast?(toastMap[s.toast.type]||toastMap.success):toastMap.success;
+
+    // ---- dashboard ----
+    const heroRun=this.runsCatalog.find(r=>r.id==='RUN-206')||run;
+    const statusMeta={review:['Needs review','#fbbf24','rgba(251,191,36,.16)'],executing:['Executing','#67e8f9','rgba(34,211,238,.16)'],analyzing:['Analyzing','#a78bfa','rgba(139,92,246,.16)'],processing:['Processing','#a78bfa','rgba(139,92,246,.16)'],done:['Passed','#6ee7b7','rgba(16,185,129,.16)'],failed:['Failed','#fb7185','rgba(244,63,94,.16)'],sync:['Syncing','#67e8f9','rgba(34,211,238,.16)'],comment:['Publishing','#67e8f9','rgba(34,211,238,.16)']};
+    const hsm=statusMeta[run.status]||statusMeta.review;
+    const stats=[
+      {label:'Cases in review',value:'21',delta:'+21',deltaColor:'#6ee7b7',iconBg:'rgba(251,191,36,.14)',iconColor:'#fbbf24',icon:this.ic('<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',16)},
+      {label:'Pass rate',value:'94%',delta:'+2%',deltaColor:'#6ee7b7',iconBg:'rgba(16,185,129,.14)',iconColor:'#6ee7b7',icon:this.ic('<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',16)},
+      {label:'Cases generated',value:'2,840',delta:'this mo',deltaColor:'#8b8b9e',iconBg:'rgba(139,92,246,.14)',iconColor:'#a78bfa',icon:this.ic('<path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>',16)},
+      {label:'Avg runtime',value:'3.4s',delta:'-0.2s',deltaColor:'#6ee7b7',iconBg:'rgba(34,211,238,.14)',iconColor:'#67e8f9',icon:this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',16)},
+    ];
+    const trendData=[[88,6],[92,4],[85,9],[94,3],[90,7],[96,2],[94,4]]; const days=['M','T','W','T','F','S','S'];
+    const trendBars=trendData.map((d,i)=>{ const tot=d[0]+d[1]; return {day:days[i],passH:Math.round(d[0]/tot*100),failH:Math.round(d[1]/tot*100),hasFail:d[1]>0}; });
+    const recentRuns=this.runsCatalog.slice(0,4).map(r=>{ const sm=statusMeta[r.status]||statusMeta.review; const rate=r.cases?Math.round(r.pass/r.cases*100)+'%':'—'; return {id:r.id,name:r.name,meta:r.cases+' cases · '+r.tickets.length+' tickets',color:sm[1],rate:r.status==='analyzing'||r.status==='processing'?'···':rate,ago:r.ago,go:()=>this.enterRun(r.id)}; });
+    const activity=this.auditEvents.slice(0,5).map(e=>{ const c=this.auditCats[e.cat]||['','#8b8b9e','rgba(255,255,255,.06)']; return {actor:e.actor,action:e.action,target:e.target,ago:e.ts,badge:c[0].slice(0,2)||'··',color:c[1],bg:c[2]}; });
+
+    // ---- review counts (shared) ----
+    const rlist=this.runCaseList(); const gidS=(x)=>this.gid(x.tid,x.c.id);
+    const rApproved=rlist.filter(x=>s.approval[gidS(x)]==='approved').length;
+    const rRejected=rlist.filter(x=>s.approval[gidS(x)]==='rejected').length;
+    const rTotal=rlist.length; const rPending=rTotal-rApproved-rRejected;
+    // ---- action bar (review) ----
+    const showActionBar=s.inRun && s.screen==='review';
+    const barReviewed=rApproved+rRejected; const barPct=rTotal?Math.round(barReviewed/rTotal*100):0; const barCanContinue=rApproved>0;
+    const barContinueStyle='flex:1.35;padding:12px;border-radius:13px;border:none;font-family:inherit;font-size:13px;font-weight:800;color:#fff;cursor:'+(barCanContinue?'pointer':'not-allowed')+';background:'+(barCanContinue?'linear-gradient(135deg,#8b5cf6,#6366f1)':'rgba(255,255,255,.08)')+';opacity:'+(barCanContinue?'1':'.5');
+
+    // ---- run overview / processing ----
+    const procTotal=run.tickets.length;
+    const procRunning=(run.status==='processing'||run.status==='analyzing') && s.processingIndex<procTotal;
+    const procDoneCount=procRunning?s.processingIndex:procTotal;
+    const procPct=procTotal?Math.round(procDoneCount/procTotal*100):0;
+    const provMeta={ado:['A','#0078d4','#fff'],jira:['J','#2684ff','#fff'],github:['G','#e5e7eb','#12121a']};
+    const runTickets=run.tickets.map((tid,i)=>{ const t=this.tickets.find(x=>x.id===tid)||{id:tid,title:tid,provider:'ado',acCount:0}; const cases=this.getCases(tid).length; const done=!procRunning||i<s.processingIndex; const active=procRunning&&i===s.processingIndex; const pm=provMeta[t.provider]||provMeta.ado;
+      return {id:tid,title:t.title,ac:t.acCount,cases,done,active,queued:!done&&!active, provGlyph:pm[0],provColor:pm[1],provGlyphColor:pm[2],
+        statusLabel:done?cases+' cases':active?'Generating…':'Queued', statusColor:done?'#6ee7b7':active?'#a78bfa':'#6c6c7e',
+        go:()=>{ if(!procRunning) this.gotoStage('review'); }}; });
+    const procNotRunning=!procRunning;
+
+    // ---- review ----
+    const revStatePill=(st)=>st==='approved'?['#6ee7b7','rgba(16,185,129,.14)']:['#8b8b9e','rgba(255,255,255,.05)'];
+    const reviewTickets=run.tickets.map(tid=>{ const t=this.tickets.find(x=>x.id===tid)||{id:tid,title:tid,provider:'ado'}; const cases=this.getCases(tid).map(c=>this.mapCase(tid,c)); const appr=cases.filter(c=>c.status==='approved').length; const total=cases.length; const open=s.reviewOpen===tid; const pm=provMeta[t.provider]||provMeta.ado; const allAppr=appr===total;
+      return {id:tid,title:t.title,cases,total,appr,open, provGlyph:pm[0],provColor:pm[1],provGlyphColor:pm[2],
+        toggle:()=>this.toggleReview(tid), chevStyle:'transition:transform .25s;flex-shrink:0'+(open?';transform:rotate(90deg)':''),
+        approveTicket:()=>this.approveTicket(tid),
+        countStyle:'font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;color:'+(allAppr?'#6ee7b7':'#c4b5fd')+';background:'+(allAppr?'rgba(16,185,129,.14)':'rgba(139,92,246,.14)') }; });
+
+    // ---- sync ----
+    const syncSteps=['Creating test cases','Linking to work items','Updating work-item status'].map((label,i)=>{ const done=s.syncScreenState==='done'?true:i<s.syncStep; const active=s.syncScreenState==='running'&&i===s.syncStep; const pending=s.syncScreenState!=='done'&&i>s.syncStep&&!active; return {label, done, active, pending, labelColor:done?'#6ee7b7':active?'#ECECF1':'#6c6c7e'}; });
+    const syncDone=s.syncScreenState==='done', syncRunning=s.syncScreenState==='running', syncIdle=s.syncScreenState==='idle';
+    const syncApprovedCount=rApproved;
+    const syncResults= syncDone ? run.tickets.filter(tid=>s.linked[tid]).map(tid=>{ const t=this.tickets.find(x=>x.id===tid)||{}; const st=s.syncStatus[tid]||{}; const pm=provMeta[t.provider]||provMeta.ado; return {id:tid,title:t.title,kind:st.kind,linked:st.linked,count:(s.linked[tid]||[]).length,cases:s.linked[tid]||[],provGlyph:pm[0],provColor:pm[1],provGlyphColor:pm[2]}; }) : [];
+
+    // ---- automation ----
+    const approvedList=this.runCaseList().filter(x=>s.approval[gidS(x)]==='approved');
+    const autoThinking=s.autoPhase==='thinking';
+    const autoThinkSteps=['Reading approved test cases','Mapping steps to page objects','Generating Playwright specs'].map((l,i)=>({label:l,done:s.autoPhase==='done'||i<s.autoThinkStep,active:autoThinking&&i===s.autoThinkStep}));
+    const fnameOf=(tid,c)=>tid.toLowerCase()+'-'+c.id.toLowerCase()+(c.automation==='Manual'?'.md':'.spec.ts');
+    const autoFiles=approvedList.map(({tid,c})=>{ const gid=this.gid(tid,c.id); return {gid,name:fnameOf(tid,c),manual:c.automation==='Manual',active:s.autoSel===gid,select:()=>this.selectAuto(gid),
+      style:'flex-shrink:0;display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:600;white-space:nowrap;border:1px solid '+(s.autoSel===gid?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(s.autoSel===gid?'rgba(139,92,246,.16)':'rgba(255,255,255,.03)')+';color:'+(s.autoSel===gid?'#ECECF1':'#8b8b9e')}; });
+    let selPair=approvedList.find(x=>this.gid(x.tid,x.c.id)===s.autoSel)||approvedList[0];
+    let autoCodeHtml={__html:''}, autoSelName='', autoSelManual=false;
+    if(selPair){ const code=this.genCode(selPair.tid,selPair.c); this._currentCode=code; autoCodeHtml=this.highlight(code); autoSelName=fnameOf(selPair.tid,selPair.c); autoSelManual=selPair.c.automation==='Manual'; }
+    const autoDone=s.autoPhase==='done';
+
+    // ---- execution ----
+    const execList=this.runCaseList().filter(({c})=>c.automation!=='Manual');
+    const execMeta={pending:['#6c6c7e','Queued','rgba(255,255,255,.05)'],running:['#a78bfa','Running','rgba(139,92,246,.14)'],pass:['#6ee7b7','Passed','rgba(16,185,129,.14)'],fail:['#fb7185','Failed','rgba(244,63,94,.14)']};
+    const execRows=execList.map(({tid,c})=>{ const gid=this.gid(tid,c.id); const st=s.execStatus[gid]||'pending'; const em=execMeta[st]; return {gid,cid:c.id,tid,title:c.title,statusColor:em[0],statusLabel:em[1],statusBg:em[2],running:st==='running',pass:st==='pass',fail:st==='fail',pending:st==='pending',dur:c.dur}; });
+    const passCount=execRows.filter(r=>r.pass).length, failCount=execRows.filter(r=>r.fail).length;
+    const execTotal=execRows.length, execRemaining=execTotal-passCount-failCount;
+    const execIdle=!s.execRunning&&!s.execDone;
+
+    // ---- evidence ----
+    const evReady=s.execDone||run.status==='evidence'||run.status==='comment'||run.status==='done';
+    const evTickets=run.tickets.map(tid=>{ const t=this.tickets.find(x=>x.id===tid)||{}; const pm=provMeta[t.provider]||provMeta.ado; const cs=this.getCases(tid).filter(c=>c.automation!=='Manual'); const fails=(tid==='SUR-1428')?1:0; return {id:tid,title:t.title,provGlyph:pm[0],provColor:pm[1],provGlyphColor:pm[2],pass:cs.length-fails,fail:fails,active:s.evidenceTicket===tid,select:()=>this.setEvidenceTicket(tid),
+      chipStyle:'flex-shrink:0;padding:8px 13px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;white-space:nowrap;border:1px solid '+(s.evidenceTicket===tid?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(s.evidenceTicket===tid?'rgba(139,92,246,.16)':'rgba(255,255,255,.03)')+';color:'+(s.evidenceTicket===tid?'#ECECF1':'#8b8b9e')}; });
+    const evTabDefs=[['screenshot','Screenshot'],['video','Video'],['trace','Trace'],['console','Console']];
+    const evTabs=evTabDefs.map(([id,label])=>({id,label,active:s.evidenceTab===id,select:()=>this.setEvidenceTab(id),
+      style:'flex:1;padding:9px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;border:none;background:'+(s.evidenceTab===id?'rgba(255,255,255,.1)':'transparent')+';color:'+(s.evidenceTab===id?'#ECECF1':'#8b8b9e')}));
+    const evActiveTicket=this.tickets.find(t=>t.id===s.evidenceTicket)||{};
+    const evArtifact={screenshot:'broker-list.png',video:'trace-video.webm',trace:'trace.zip',console:'console.log'}[s.evidenceTab];
+
+    // ---- comment / publish ----
+    const publishCards=run.tickets.map(tid=>{ const t=this.tickets.find(x=>x.id===tid)||{}; const pm=provMeta[t.provider]||provMeta.ado; const st=s.publish[tid]; const cs=this.getCases(tid).filter(c=>c.automation!=='Manual'); const fails=(tid==='SUR-1428')?1:0; return {id:tid,title:t.title,provGlyph:pm[0],provColor:pm[1],provGlyphColor:pm[2],kind:t.provider==='jira'?'Jira':'Azure DevOps',pass:cs.length-fails,fail:fails,
+      published:st==='published',failed:st==='failed',idle:!st,
+      statusLabel:st==='published'?'Published':st==='failed'?'Failed':'Ready',statusColor:st==='published'?'#6ee7b7':st==='failed'?'#fb7185':'#8b8b9e',statusBg:st==='published'?'rgba(16,185,129,.14)':st==='failed'?'rgba(244,63,94,.14)':'rgba(255,255,255,.05)'}; });
+    const anyFailed=publishCards.some(c=>c.failed);
+    const anyPublished=publishCards.some(c=>c.published);
+
+    // ---- tickets ----
+    const tkStatus={'Ready for QA':['#6ee7b7','rgba(16,185,129,.14)'],'In Progress':['#fbbf24','rgba(251,191,36,.14)'],'Blocked':['#fb7185','rgba(244,63,94,.14)']};
+    const q=s.ticketSearch.toLowerCase();
+    const ticketRows=this.tickets.filter(t=>!q||t.title.toLowerCase().includes(q)||t.id.toLowerCase().includes(q)).map(t=>{ const pm=provMeta[t.provider]||provMeta.ado; const sel=!!s.selected[t.id]; const sm=tkStatus[t.status]||['#8b8b9e','rgba(255,255,255,.06)']; return {id:t.id,title:t.title,priority:t.priority,prColor:this.prColor(t.priority),prBg:this.prBg(t.priority),status:t.status,statusColor:sm[0],statusBg:sm[1],sprint:t.sprint,acCount:t.acCount,provGlyph:pm[0],provColor:pm[1],provGlyphColor:pm[2],sel,
+      toggle:()=>this.toggleSel(t.id), open:()=>this.openTicket(t.id),
+      checkStyle:'width:24px;height:24px;flex-shrink:0;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px solid '+(sel?'transparent':'rgba(255,255,255,.18)')+';background:'+(sel?'linear-gradient(135deg,#8b5cf6,#6366f1)':'transparent')}; });
+    const selCount=Object.keys(s.selected).filter(k=>s.selected[k]).length;
+
+    // ---- ticket detail ----
+    const activeTk=this.tickets.find(t=>t.id===s.activeTicket)||this.tickets[0];
+    const tkpm=provMeta[activeTk.provider]||provMeta.ado; const tksm=tkStatus[activeTk.status]||['#8b8b9e','rgba(255,255,255,.06)'];
+    const acList=this.acStatements.map((t,i)=>({n:i+1,text:t}));
+
+    // ---- runs board ----
+    const runsFilterDefs=[['all','All'],['active','Active'],['done','Passed'],['failed','Failed']];
+    const runsFilterChips=runsFilterDefs.map(([id,label])=>({id,label,active:s.runsFilter===id,go:()=>this.setRunsFilter(id),
+      style:'flex-shrink:0;padding:8px 15px;border-radius:20px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;white-space:nowrap;border:1px solid '+(s.runsFilter===id?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(s.runsFilter===id?'rgba(139,92,246,.16)':'rgba(255,255,255,.03)')+';color:'+(s.runsFilter===id?'#ECECF1':'#8b8b9e')}));
+    const runsActive=(r)=>!(r.status==='done'||r.status==='failed');
+    const runsBoard=this.runsCatalog.filter(r=>{ if(s.runsFilter==='all')return true; if(s.runsFilter==='active')return runsActive(r); if(s.runsFilter==='done')return r.status==='done'; if(s.runsFilter==='failed')return r.status==='failed'; return true; }).map(r=>{ const sm=statusMeta[r.status]||statusMeta.review; const rate=r.cases?Math.round(r.pass/r.cases*100)+'%':'—'; const prog=r.cases?Math.round((r.pass+r.fail)/r.cases*100):(this.runStageMap[r.status]/7*100); return {id:r.id,name:r.name,scope:r.scope,statusLabel:sm[0],statusColor:sm[1],statusBg:sm[2],cases:r.cases,tickets:r.tickets.length,framework:r.framework,env:r.env,ago:r.ago,rate,prog,active:runsActive(r), go:()=>this.enterRun(r.id),
+      showRate:r.status==='done'||r.status==='failed'}; });
+    const runsStats={total:this.runsCatalog.length, active:this.runsCatalog.filter(runsActive).length};
+
+    // ---- create run sheet ----
+    const scopeOptions=[['selected','Selected tickets',selCount+' selected'],['sprint','Entire Sprint 24','5 tickets'],['assigned','My assigned','3 tickets']];
+    const crScope=scopeOptions.map(([id,label,sub])=>({id,label,sub,active:s.runScope===id,go:()=>this.setRunScope(id),
+      style:'display:flex;align-items:center;gap:11px;width:100%;padding:13px;border-radius:13px;cursor:pointer;font-family:inherit;text-align:left;border:1px solid '+(s.runScope===id?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(s.runScope===id?'rgba(139,92,246,.12)':'rgba(255,255,255,.02)'),
+      dot:'width:20px;height:20px;flex-shrink:0;border-radius:50%;border:'+(s.runScope===id?'6px solid #8b5cf6':'2px solid rgba(255,255,255,.2)')}));
+    const fwOptions=['Playwright','Selenium','Cypress'].map(f=>({label:f,active:s.runFramework===f,go:()=>this.setRunFramework(f),style:'flex:1;padding:10px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;border:1px solid '+(s.runFramework===f?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(s.runFramework===f?'rgba(139,92,246,.14)':'transparent')+';color:'+(s.runFramework===f?'#ECECF1':'#8b8b9e')}));
+    const envOptions=['Staging','Production','Local'].map(e=>({label:e,active:s.runEnv===e,go:()=>this.setRunEnv(e),style:'flex:1;padding:10px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;border:1px solid '+(s.runEnv===e?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(s.runEnv===e?'rgba(139,92,246,.14)':'transparent')+';color:'+(s.runEnv===e?'#ECECF1':'#8b8b9e')}));
+
+    // ---- projects ----
+    const projStatusMeta={ready:['Indexed','#6ee7b7','rgba(16,185,129,.14)'],needs_refresh:['Needs refresh','#fbbf24','rgba(251,191,36,.14)'],not_indexed:['Not indexed','#8b8b9e','rgba(255,255,255,.06)']};
+    const projectsView=this.projectsData.map(p=>{ const sm=projStatusMeta[p.status]; return {name:p.name,provider:p.provider,provGlyph:p.provGlyph,provColor:p.provColor,tickets:p.tickets,runs:p.runs,rate:p.rate,confidence:p.confidence,statusLabel:sm[0],statusColor:sm[1],statusBg:sm[2],indexed:p.status==='ready',notIndexed:p.status!=='ready', open:()=>this.openProject(p.name), confColor:p.confidence>=90?'#6ee7b7':p.confidence>=60?'#fbbf24':'#8b8b9e'}; });
+
+    // ---- project detail ----
+    const proj=this.projectsData.find(p=>p.name===s.activeProject)||this.projectsData[0];
+    const projSm=projStatusMeta[proj.status];
+    const projStack=proj.stack.map(x=>({label:x}));
+    const projIndexed=proj.status==='ready';
+
+    // ---- reports ----
+    const flaky=[{name:'SUR-1428 · TC-06',sub:'Ellipsis on inactive agency',rate:'82%',rateColor:'#fbbf24'},{name:'SUR-1402 · TC-03',sub:'Confirm deactivation toast',rate:'91%',rateColor:'#6ee7b7'},{name:'SUR-1390 · TC-01',sub:'30-day reminder email',rate:'95%',rateColor:'#6ee7b7'}];
+    const reportsStats=[{label:'Total runs',value:'5',color:'#ECECF1'},{label:'Avg pass rate',value:'94%',color:'#6ee7b7'},{label:'Cases run',value:'358',color:'#ECECF1'},{label:'Avg runtime',value:'3.4s',color:'#67e8f9'}];
+
+    // ---- audit ----
+    const auditCatChips=[['all','All']].concat(Object.keys(this.auditCats).map(k=>[k,this.auditCats[k][0]])).map(([id,label])=>({id,label,active:s.auditCat===id,go:()=>this.setAuditCat(id),
+      style:'flex-shrink:0;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;white-space:nowrap;border:1px solid '+(s.auditCat===id?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(s.auditCat===id?'rgba(139,92,246,.16)':'rgba(255,255,255,.03)')+';color:'+(s.auditCat===id?'#ECECF1':'#8b8b9e')}));
+    const aq=s.auditSearch.toLowerCase();
+    const auditStatusColor={success:'#6ee7b7',warning:'#fbbf24',error:'#fb7185'};
+    const auditRows=this.auditEvents.filter(e=>(s.auditCat==='all'||e.cat===s.auditCat)&&(!aq||(e.action+e.target+e.actor).toLowerCase().includes(aq))).map(e=>{ const c=this.auditCats[e.cat]||['','#8b8b9e','rgba(255,255,255,.06)']; return {id:e.id,actor:e.actor,action:e.action,target:e.target,meta:e.meta,ts:e.ts,day:e.day,catLabel:c[0],catColor:c[1],catBg:c[2],statusColor:auditStatusColor[e.status]||'#8b8b9e',isAi:e.actor==='Q-Agent'}; });
+
+    // ---- settings ----
+    const integrations=[{glyph:'A',color:'#0078d4',glyphColor:'#fff',name:'Azure DevOps',sub:'surency · Surency Platform',connected:true,lastSync:'4 min ago'},{glyph:'J',color:'#2684ff',glyphColor:'#fff',name:'Jira',sub:'Claims Cloud · not connected',connected:false,lastSync:'—'},{glyph:'G',color:'#e5e7eb',glyphColor:'#12121a',name:'GitHub',sub:'surency-eng · surency-web',connected:true,lastSync:'12 min ago'}].map(i=>({...i,statusLabel:i.connected?'Connected':'Connect',statusColor:i.connected?'#6ee7b7':'#a78bfa',statusBg:i.connected?'rgba(16,185,129,.14)':'rgba(139,92,246,.14)'}));
+    const settingToggles=[['retryFlaky','Retry flaky tests','Re-run failed tests up to 2×'],['screenshotOnFail','Screenshot on failure','Capture on every failed test'],['video','Record video','Record video for each test']].map(([k,label,sub])=>{ const on=!!s.settings[k]; return {k,label,sub,on,toggle:()=>this.toggleSetting(k),
+      trackStyle:'width:46px;height:27px;border-radius:20px;position:relative;flex-shrink:0;cursor:pointer;transition:background .2s;border:none;background:'+(on?'linear-gradient(135deg,#8b5cf6,#6366f1)':'rgba(255,255,255,.12)'),
+      knobStyle:'position:absolute;top:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:left .2s;left:'+(on?'22px':'3px')}; });
+    const credShared=s.credSource==='shared';
+    const credSegStyle=(active)=>'flex:1;padding:11px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;border:1px solid '+(active?'rgba(139,92,246,.5)':'rgba(255,255,255,.08)')+';background:'+(active?'rgba(139,92,246,.16)':'transparent')+';color:'+(active?'#ECECF1':'#8b8b9e');
+
+    // ---- admin users ----
+    const usersView=s.users.map(u=>({...u, roleColor:u.role==='Admin'?'#c4b5fd':'#8b8b9e', roleBg:u.role==='Admin'?'rgba(139,92,246,.14)':'rgba(255,255,255,.05)', statusColor:u.status==='active'?'#6ee7b7':u.status==='invited'?'#fbbf24':'#6c6c7e', statusLabel:u.status.charAt(0).toUpperCase()+u.status.slice(1), dim:u.status==='deactivated'}));
+    const userStatsTotal=s.users.length, userStatsActive=s.users.filter(u=>u.status==='active').length;
+
+    // ---- admin creds ----
+    const credsView=s.sharedCreds.map(c=>({...c, subLabel:c.subscription==='max'?'Max':c.subscription==='pro'?'Pro':c.subscription, expColor:c.daysLeft<=3?'#fb7185':c.daysLeft<=14?'#fbbf24':'#6ee7b7', expLabel:c.daysLeft+' days left'}));
+
+    return {
+      bgRef:this.bgRef, stepRef:this.stepRef,
+      // projects
+      isProjects:s.screen==='projects'&&!s.inRun, projectsView,
+      // project detail
+      isProject:s.screen==='project'&&!s.inRun, projName:proj.name, projProvider:proj.provider, projStatusLabel:projSm[0], projStatusColor:projSm[1], projStatusBg:projSm[2], projConfidence:proj.confidence, projConfColor:proj.confidence>=90?'#6ee7b7':proj.confidence>=60?'#fbbf24':'#8b8b9e', projRepo:proj.repo, projLastIndexed:proj.lastIndexed, projFramework:proj.framework, projTickets:proj.tickets, projPageObjects:proj.pageObjects, projFixtures:proj.fixtures, projStack, projIndexed, projNotIndexed:!projIndexed, projGoTickets:()=>this.navigate('tickets'),
+      // reports
+      isReports:s.screen==='reports'&&!s.inRun, reportsStats, flaky,
+      // audit
+      isAudit:s.screen==='audit'&&!s.inRun, auditCatChips, auditRows, auditSearch:s.auditSearch, onAuditSearch:this.onAuditSearch, auditEmpty:auditRows.length===0,
+      // settings
+      isSettings:s.screen==='settings'&&!s.inRun, integrations, settingToggles, credShared, credSegSharedStyle:credSegStyle(credShared), credSegPersonalStyle:credSegStyle(!credShared), setCredShared:()=>this.setCredSource('shared'), setCredPersonal:()=>this.setCredSource('personal'), parallel:s.settings.parallel, setParallel:this.setParallel,
+      // admin
+      isAdminUsers:s.screen==='admin-users'&&!s.inRun, usersView, userStatsTotal, userStatsActive,
+      isAdminCreds:s.screen==='admin-creds'&&!s.inRun, credsView,
+      // tickets
+      isTickets:s.screen==='tickets'&&!s.inRun, ticketRows, selCount, ticketSearch:s.ticketSearch, onSearch:this.onSearch, hasSel:selCount>0, openCreateRunFromSel:this.openCreateRun,
+      // ticket detail
+      isTicket:s.screen==='ticket'&&!s.inRun, tkId:activeTk.id, tkTitle:activeTk.title, tkStatusLabel:activeTk.status, tkStatusColor:tksm[0], tkStatusBg:tksm[1], tkPriority:activeTk.priority, tkPrColor:this.prColor(activeTk.priority), tkPrBg:this.prBg(activeTk.priority), tkAssignee:activeTk.assignee, tkSprint:activeTk.sprint, tkProvGlyph:tkpm[0], tkProvColor:tkpm[1], tkProvGlyphColor:tkpm[2], tkDesc:this.detail.desc, tkNote:this.detail.note, acList, acCount:activeTk.acCount, tkPrs:this.detail.prs, tkComments:this.detail.comments, tkGenerate:this.openCreateRun,
+      // runs
+      isRuns:s.screen==='runs'&&!s.inRun, runsFilterChips, runsBoard, runsStatsTotal:runsStats.total, runsStatsActive:runsStats.active, runsEmpty:runsBoard.length===0,
+      // create run sheet
+      createRunOpen:s.createRunOpen, closeCreateRun:this.closeCreateRun, crScope, fwOptions, envOptions, runWorkers:s.runWorkers, setWorkers:this.setWorkers, confirmCreateRun:this.confirmCreateRun,
+      // automation
+      isAutomation:s.inRun&&s.screen==='automation', autoThinking, autoDone, autoThinkSteps, autoFiles, autoCodeHtml, autoSelName, autoSelManual, copyCode:this.copyCode, runExecution:this.runExecution,
+      // execution
+      isConsole:s.inRun&&s.screen==='console', execRows, execIdle, execRunning:s.execRunning, execDone:s.execDone, execProgress:s.execProgress, passCount, failCount, execTotal, execRemaining, goEvidence:()=>this.gotoStage('evidence'),
+      // evidence
+      isEvidence:s.inRun&&s.screen==='evidence', evReady, evTickets, evTabs, evArtifact, evActiveTicketTitle:evActiveTicket.title, goComment:()=>this.gotoStage('comment'),
+      // comment
+      isComment:s.inRun&&s.screen==='comment', publishCards, publishAll:this.publishAll, publishing:s.publishing, notPublishing:!s.publishing, retryFailed:this.retryFailed, anyFailed, anyPublished,
+      // run overview
+      isRun:s.inRun&&s.screen==='run', procTotal, procRunning, procNotRunning, procDoneCount, procPct,
+      procHeadline:procRunning?'Q-Agent is analyzing your tickets':'Analysis complete — cases ready',
+      procSub:procRunning?'Reading test cases from '+run.framework+' context…':rApproved+' approved · review or continue below',
+      runTickets, goReviewStage:()=>this.gotoStage('review'),
+      // review
+      isReview:s.inRun&&s.screen==='review', reviewTickets, rApproved, rRejected, rPending, rTotal,
+      approveAllRun:this.approveAllRun,
+      // sync
+      isSync:s.inRun&&s.screen==='sync', syncSteps, syncDone, syncRunning, syncIdle, syncApprovedCount, syncResults,
+      createTestCases:this.createTestCases, createAndLink:this.createAndLink, goAutomation:this.genAutomation,
+      menuOpen:s.menuOpen, openMenu:this.openMenu, closeMenu:this.closeMenu,
+      inRun:s.inRun, screen:s.screen,
+      topTitle, topSub, topAction, topActionIcon, topActionStyle,
+      stepper,
+      navHeading:s.inRun?'PIPELINE':'WORKSPACE', drawerNav, showAdmin:isAdmin&&!s.inRun, adminNav,
+      exitRun:this.exitRun, runCtxId:run.id, heroName:run.name, heroMeta:run.workers+' workers · '+run.framework+' · '+run.env,
+      heroStatusBg:hsm[2], heroStatusColor:hsm[1], heroStatusLabel:hsm[0],
+      identityName:identity.name, identityRole:identity.role, identityInitials:identity.initials, identityGrad:identity.grad,
+      toggleRole:this.toggleRole, roleSwitchLabel:isAdmin?'Admin':'Member',
+      toast:s.toast, toastMsg:s.toast&&s.toast.msg, toastSub:s.toast&&s.toast.sub, toastIcon:this.ic(tm[2],16), toastIconColor:tm[0], toastIconBg:tm[1],
+      showActionBar, barReviewed, barPct, barCanContinue, barContinueStyle, goSyncScreen:()=>this.gotoStage('sync'),
+      // dashboard
+      isDashboard:s.screen==='dashboard'&&!s.inRun,
+      firstName:identity.name.split(' ')[0], activeProject:s.activeProject,
+      heroId:run.id, heroGo:()=>this.enterRun(run.id), heroCta:'Continue where you left off',
+      stats, trendBars, recentRuns, activity, goRuns:this.goRuns,
+    };
+  }
+}
+</script>
+</body>
+</html>

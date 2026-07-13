@@ -23,6 +23,8 @@ from app.config import settings
 from app.db import get_db
 from app.deps_auth import current_user
 from app.logging import logger
+from app.models.agent_device import AgentDevice
+from app.models.execution import Execution, ExecutionResult
 from app.models.run import Run, RunTicket
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
@@ -35,6 +37,7 @@ from app.services import (
     project_config_service,
     run_context,
     run_control,
+    settings_store,
     spec_examples,
     spec_service,
 )
@@ -575,6 +578,43 @@ def heal_case_spec(
     if run.status == "executing":
         raise HTTPException(status_code=409, detail="Run is executing — wait for it to finish")
 
+    # Where the heal's Playwright runs. The server image ships no Playwright, so on
+    # a local-agent deployment the heal LOOP must run on the paired device: queue a
+    # single-case heal Execution the agent claims via /agent/jobs/next (it then
+    # drives run→/heal/fix→re-run and posts /heal/finalize). Server-target keeps the
+    # in-process loop.
+    target = settings_store.load_settings().get("executionTarget", "server")
+    if target == "local-agent":
+        has_device = (
+            db.query(AgentDevice)
+            .filter(AgentDevice.owner_id == run.owner_id, AgentDevice.revoked_at.is_(None))
+            .first()
+            is not None
+        )
+        if not has_device:
+            raise HTTPException(status_code=409, detail="No local agent paired — start your local agent")
+        execution = Execution(
+            run_id=run.id, status="queued", target="local-agent",
+            env=run.env, browser=run.browser, workers=1, total=1,
+            heal_case_id=case.id,
+        )
+        db.add(execution)
+        db.flush()
+        db.add(
+            ExecutionResult(
+                execution_id=execution.id, test_case_id=case.id,
+                ticket_external_id=case.ticket_external_id, case_code=case.code,
+                title=case.title, status="pending",
+            )
+        )
+        spec.status = "running"
+        db.commit()
+        audit_service.record(
+            category="ai", actor_type="ai", action="Self-healed spec (local agent)",
+            target=f"{case.ticket_external_id} · {case.code}",
+        )
+        return {"started": True, "maxAttempts": settings.heal_max_attempts, "mode": "local-agent"}
+
     if not playwright_runner.start_heal(case_id, run.id):
         raise HTTPException(
             status_code=409, detail="Another case in this run is already self-healing"
@@ -583,7 +623,7 @@ def heal_case_spec(
         category="ai", actor_type="ai", action="Self-healed spec",
         target=f"{case.ticket_external_id} · {case.code}",
     )
-    return {"started": True, "maxAttempts": settings.heal_max_attempts}
+    return {"started": True, "maxAttempts": settings.heal_max_attempts, "mode": "server"}
 
 
 @router.get("/cases/{case_id}/spec/heal/status")
