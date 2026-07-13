@@ -278,6 +278,53 @@ def test_list_tickets_filters_by_area_path_with_backslash(client, db_session):
     assert ids == {"1", "2"}  # the node itself + its child, not the sibling
 
 
+def test_delete_ticket_removes_row(client, db_session):
+    """DELETE /tickets/{external_id} removes the row locally and returns 204."""
+    from app.models.ticket import Ticket
+
+    db_session.add(Ticket(external_id="1", provider_kind="ado", title="A", status="Done", priority="Low"))
+    db_session.commit()
+
+    resp = client.delete("/tickets/1")
+    assert resp.status_code == 204
+
+    db_session.expire_all()
+    assert db_session.query(Ticket).filter(Ticket.external_id == "1").first() is None
+
+
+def test_delete_ticket_not_found_404(client):
+    """Deleting a non-existent ticket 404s, matching GET detail's convention."""
+    resp = client.delete("/tickets/does-not-exist")
+    assert resp.status_code == 404
+
+
+def test_bulk_delete_tickets_returns_count(client, db_session):
+    """POST /tickets/delete removes all matching rows and returns the count;
+    unknown ids are ignored (no error)."""
+    from app.models.ticket import Ticket
+
+    for i in range(3):
+        db_session.add(
+            Ticket(external_id=str(i), provider_kind="ado", title=f"T{i}", status="Done", priority="Low")
+        )
+    db_session.commit()
+
+    resp = client.post("/tickets/delete", json={"externalIds": ["0", "1", "nope"]})
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 2
+
+    db_session.expire_all()
+    remaining = {t.external_id for t in db_session.query(Ticket).all()}
+    assert remaining == {"2"}
+
+
+def test_bulk_delete_tickets_empty_is_noop(client):
+    """An empty id list deletes nothing and returns deleted=0."""
+    resp = client.post("/tickets/delete", json={"externalIds": []})
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 0
+
+
 @respx.mock
 def test_projects_refresh_upserts_from_connected_providers(client):
     connection_id = _configure_ado(client)

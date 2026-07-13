@@ -6,6 +6,8 @@ Endpoints to implement:
                                                                 priority, epic, q, page, page_size)
   GET  /tickets/{external_id}        -> TicketDetailOut
   POST /tickets/sync                 -> SyncResult           (body: SyncRequest; live adapter pull)
+  POST /tickets/delete               -> TicketDeleteResult   (body: TicketDeleteRequest; local bulk delete)
+  DELETE /tickets/{external_id}      -> 204                  (local delete of a single ticket)
 """
 
 from __future__ import annotations
@@ -22,6 +24,8 @@ from app.schemas import (
     LinkedTestCaseOut,
     SyncRequest,
     SyncResult,
+    TicketDeleteRequest,
+    TicketDeleteResult,
     TicketDetailOut,
     TicketOut,
     TicketPageOut,
@@ -244,3 +248,57 @@ def sync_tickets(
     )
 
     return SyncResult(synced=len(synced), tickets=[TicketOut.model_validate(t) for t in synced])
+
+
+@router.post("/delete", response_model=TicketDeleteResult)
+def delete_tickets(
+    body: TicketDeleteRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> TicketDeleteResult:
+    """Bulk local-delete the tickets whose external ids are given.
+
+    LOCAL only — this removes only the caller's own ``Ticket`` rows and never
+    calls the provider, so a re-sync restores them. Deleting a ``Ticket`` is
+    referentially safe: ``RunTicket`` (and test cases, executions, comments,
+    linked cases, Claude usage) reference a work item by its ``ticket_external_id``
+    string snapshot, not by a foreign key to ``tickets.id`` — so runs keep their
+    history intact and no integrity constraint is violated. Ids that don't match
+    any owned ticket are silently ignored; ``deleted`` reflects the rows removed.
+    """
+    ids = [i for i in body.external_ids if i]
+    if not ids:
+        return TicketDeleteResult(deleted=0)
+
+    tickets = owned(db.query(Ticket), Ticket, user).filter(Ticket.external_id.in_(ids)).all()
+    for ticket in tickets:
+        db.delete(ticket)
+    db.commit()
+
+    if tickets:
+        audit_service.record(
+            category="sync", action="Removed tickets",
+            target=f"{len(tickets)} work items",
+            meta=", ".join(t.external_id for t in tickets),
+        )
+    return TicketDeleteResult(deleted=len(tickets))
+
+
+@router.delete("/{external_id}", status_code=204)
+def delete_ticket(
+    external_id: str, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> None:
+    """Local-delete a single ticket by its external id (404 if not found).
+
+    LOCAL only — never calls the provider (a re-sync restores it). Scoped to
+    ``user`` like the list/detail endpoints. See ``delete_tickets`` for why
+    removing a ``Ticket`` row is referentially safe.
+    """
+    ticket = owned(db.query(Ticket), Ticket, user).filter(Ticket.external_id == external_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket '{external_id}' not found")
+    db.delete(ticket)
+    db.commit()
+    audit_service.record(
+        category="sync", action="Removed ticket", target=external_id,
+    )

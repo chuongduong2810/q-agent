@@ -416,6 +416,20 @@ class SyncResult(ApiModel):
     tickets: list[TicketOut] = Field(default_factory=list)
 
 
+class TicketDeleteRequest(ApiModel):
+    """Body for bulk local-delete (``POST /tickets/delete``): the external ids to
+    remove. Deletion is LOCAL only — it never calls the provider, so a re-sync
+    restores the tickets."""
+
+    external_ids: list[str] = Field(default_factory=list)
+
+
+class TicketDeleteResult(ApiModel):
+    """Result of a bulk local-delete: how many Ticket rows were removed."""
+
+    deleted: int
+
+
 # ---------------------------------------------------------------- Test cases
 class TestStep(ApiModel):
     a: str = ""
