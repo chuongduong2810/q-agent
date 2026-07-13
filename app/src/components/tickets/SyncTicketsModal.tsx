@@ -171,6 +171,7 @@ export function SyncTicketsModal({
                     placeholder={configuredProject ?? "Select project"}
                     onChange={setProject}
                     emptyLabel="No projects found"
+                    fullWidth
                   />
                 </Field>
                 <Field label={isAdo ? "Iteration" : "Sprint"}>
@@ -180,6 +181,7 @@ export function SyncTicketsModal({
                     placeholder="All open items"
                     onChange={setSprintPath}
                     emptyLabel="No sprints found"
+                    fullWidth
                   />
                 </Field>
               </div>
@@ -198,22 +200,22 @@ export function SyncTicketsModal({
                 <div className="grid grid-cols-1 gap-x-2.5 gap-y-3 md:grid-cols-2">
                   {sprintOptions.length > 0 && (
                     <Field label="Sprint">
-                      <Select value={sprintPath} options={sprintOptions} placeholder="Any" onChange={setSprintPath} />
+                      <Select value={sprintPath} options={sprintOptions} placeholder="Any" onChange={setSprintPath} fullWidth />
                     </Field>
                   )}
                   {isAdo && areaOptions.length > 0 && (
                     <Field label="Area path">
-                      <Select value={areaPath} options={areaOptions} placeholder="Any" onChange={setAreaPath} />
+                      <Select value={areaPath} options={areaOptions} placeholder="Any" onChange={setAreaPath} fullWidth />
                     </Field>
                   )}
                   {stateOptions.length > 0 && (
                     <Field label={isAdo ? "States" : "Status"}>
-                      <MultiSelect values={states} options={stateOptions} placeholder="Any" onChange={setStates} />
+                      <MultiSelect values={states} options={stateOptions} placeholder="Any" onChange={setStates} fullWidth />
                     </Field>
                   )}
                   {typeOptions.length > 0 && (
                     <Field label={isAdo ? "Work item types" : "Issue type"}>
-                      <MultiSelect values={workItemTypes} options={typeOptions} placeholder="Any" onChange={setWorkItemTypes} />
+                      <MultiSelect values={workItemTypes} options={typeOptions} placeholder="Any" onChange={setWorkItemTypes} fullWidth />
                     </Field>
                   )}
                 </div>

@@ -17,12 +17,17 @@ export function DropdownShell({
   onClear,
   children,
   minWidth = 200,
+  fullWidth = false,
 }: {
   active: boolean;
   label: ReactNode;
   onClear?: () => void;
   children: (close: () => void) => ReactNode;
   minWidth?: number;
+  /** Stretch the trigger to fill its container (label flex-grows, the
+   * chevron/clear pins right) — used in stacked forms like the Sync dialog so
+   * controls fill the row instead of leaving blank space. */
+  fullWidth?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -60,19 +65,22 @@ export function DropdownShell({
   }, [open]);
 
   return (
-    <div className="relative">
+    <div className={cn("relative", fullWidth && "w-full")}>
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex h-9 cursor-pointer items-center gap-2 rounded-[11px] border px-[13px] text-[12.5px] font-semibold transition-colors"
+        className={cn(
+          "flex h-9 cursor-pointer items-center gap-2 rounded-[11px] border px-[13px] text-[12.5px] font-semibold transition-colors",
+          fullWidth && "w-full",
+        )}
         style={
           active
             ? { background: "rgba(139,92,246,.2)", borderColor: "rgba(139,92,246,.35)", color: "#fff" }
             : { background: "rgba(255,255,255,.05)", borderColor: "rgba(255,255,255,.09)", color: "#dcdce4" }
         }
       >
-        <span className="max-w-[180px] truncate">{label}</span>
+        <span className={cn("truncate", fullWidth ? "flex-1 text-left" : "max-w-[180px]")}>{label}</span>
         {active && onClear ? (
           <X
             size={13}
@@ -111,6 +119,7 @@ export function Select({
   onChange,
   allowClear = true,
   emptyLabel,
+  fullWidth = false,
 }: {
   value: string | null;
   options: Option[];
@@ -118,6 +127,7 @@ export function Select({
   onChange: (value: string | null) => void;
   allowClear?: boolean;
   emptyLabel?: string;
+  fullWidth?: boolean;
 }) {
   const selected = options.find((o) => o.value === value) ?? null;
   return (
@@ -125,6 +135,7 @@ export function Select({
       active={!!selected}
       label={selected ? selected.label : placeholder}
       onClear={allowClear ? () => onChange(null) : undefined}
+      fullWidth={fullWidth}
     >
       {(close) => (
         <>
@@ -166,11 +177,13 @@ export function MultiSelect({
   options,
   placeholder,
   onChange,
+  fullWidth = false,
 }: {
   values: string[];
   options: Option[];
   placeholder: string;
   onChange: (values: string[]) => void;
+  fullWidth?: boolean;
 }) {
   const set = new Set(values);
   const label =
@@ -189,6 +202,7 @@ export function MultiSelect({
       active={values.length > 0}
       label={label}
       onClear={values.length ? () => onChange([]) : undefined}
+      fullWidth={fullWidth}
     >
       {() => (
         <>
