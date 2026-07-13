@@ -238,32 +238,45 @@ export function Automation() {
     const spec = p.spec;
     if (spec == null) return;
     const prevCode = prevCodeByCase[p.caseId];
-    // Always give completion feedback — a regeneration can take minutes, so
-    // every outcome must visibly resolve, not just a clean diff.
-    if (spec.status === "blocked") {
-      toast.error("Regeneration rejected by the quality gate — kept the previous spec.", {
-        description:
-          "The generated spec still used placeholders or ungrounded references. Refresh the project Knowledge Base, then regenerate.",
+    const isBlocked = spec.status === "blocked";
+    const didChange = prevCode != null && spec.code !== prevCode;
+    let count = 0;
+
+    // Show the inline diff whenever the code actually changed — even when the
+    // result is still blocked, so the reviewer can see what this attempt did
+    // differently (the banner tones amber + says "still blocked" in that case).
+    if (didChange) {
+      const diff = diffLines(prevCode, spec.code);
+      count = diff.count;
+      const nextLines = spec.code.split("\n");
+      const added = [...diff.changed].map((i) => nextLines[i] ?? "");
+      const tags = deriveTags(added, diff.removed);
+      const nextVersion = (versionByCase[p.caseId] ?? 1) + 1;
+      setVersionByCase((prev) => ({ ...prev, [p.caseId]: nextVersion }));
+      setRegenResult({
+        caseId: p.caseId,
+        prevCode,
+        changed: diff.changed,
+        count,
+        tags,
+        version: nextVersion,
       });
-      return;
     }
-    if (prevCode == null) {
-      // Lost the pre-regen code (e.g. page reloaded mid-run) — can't diff.
-      toast.success("Regeneration finished.");
-      return;
+
+    // Completion feedback for every outcome — a regeneration can take minutes.
+    if (isBlocked) {
+      toast.error("Regeneration is still blocked by the quality gate.", {
+        description: didChange
+          ? "See the highlighted changes below. To unblock, refresh the project Knowledge Base, then regenerate."
+          : "It still used placeholders/ungrounded references. Refresh the project Knowledge Base, then regenerate.",
+      });
+    } else if (!didChange) {
+      toast.message(
+        prevCode == null ? "Regeneration finished." : "Regeneration finished — no changes.",
+      );
+    } else {
+      toast.success(`Regenerated · ${count} line${count === 1 ? "" : "s"} changed`);
     }
-    if (spec.code === prevCode) {
-      toast.message("Regeneration finished — no changes.");
-      return;
-    }
-    const { changed, count, removed } = diffLines(prevCode, spec.code);
-    const nextLines = spec.code.split("\n");
-    const added = [...changed].map((i) => nextLines[i] ?? "");
-    const tags = deriveTags(added, removed);
-    const nextVersion = (versionByCase[p.caseId] ?? 1) + 1;
-    setVersionByCase((prev) => ({ ...prev, [p.caseId]: nextVersion }));
-    setRegenResult({ caseId: p.caseId, prevCode, changed, count, tags, version: nextVersion });
-    toast.success(`Regenerated · ${count} line${count === 1 ? "" : "s"} changed`);
   });
 
   // Self-heal state for the selected spec. Poll the server so "Healing…"
@@ -491,6 +504,7 @@ export function Automation() {
               count={regenResult.count}
               tags={regenResult.tags}
               reverting={updateSpec.isPending}
+              blocked={isBlocked}
               onFeedback={() => setFeedbackSignal((n) => n + 1)}
               onRevert={() => {
                 if (!selectedSpec) return;

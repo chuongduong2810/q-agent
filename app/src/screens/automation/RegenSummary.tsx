@@ -47,6 +47,7 @@ export function RegenSummary({
   count,
   tags,
   reverting,
+  blocked = false,
   onFeedback,
   onRevert,
 }: {
@@ -54,18 +55,26 @@ export function RegenSummary({
   count: number;
   tags: string[];
   reverting: boolean;
+  /** The regenerated spec still failed the quality gate — tone the banner amber
+   * and say so, rather than implying a clean success. */
+  blocked?: boolean;
   onFeedback: () => void;
   onRevert: () => void;
 }) {
+  const accent = blocked ? "251,191,36" : "16,185,129"; // amber when still blocked, else green
   return (
     <div
       className="flex flex-col gap-3 rounded-2xl border p-4 md:flex-row md:items-center"
-      style={{ borderColor: "rgba(16,185,129,.32)", background: "rgba(16,185,129,.06)" }}
+      style={{ borderColor: `rgba(${accent},.32)`, background: `rgba(${accent},.06)` }}
     >
       <div className="min-w-0 md:flex-1">
-        <div className="flex items-center gap-2 text-[13.5px] font-bold text-emerald-200">
+        <div
+          className="flex items-center gap-2 text-[13.5px] font-bold"
+          style={{ color: blocked ? "#fcd34d" : "#a7f3d0" }}
+        >
           <RotateCcw size={14} strokeWidth={2.4} className="shrink-0" />
-          Regenerated to v{version} · {count} line{count === 1 ? "" : "s"} changed
+          Regenerated to v{version}
+          {blocked ? " · still blocked" : ""} · {count} line{count === 1 ? "" : "s"} changed
         </div>
         {tags.length > 0 && (
           <div className="mt-1 text-xs leading-relaxed text-muted">Applied: {tags.join(", ")}</div>
