@@ -154,6 +154,14 @@ export const useTestConnection = (id: number) => {
   });
 };
 
+export const useConnectionProjects = (id: number | null) =>
+  useQuery({
+    queryKey: queryKeys.connectionProjects(id ?? 0),
+    queryFn: () => api.connectionProjects(id as number),
+    enabled: id != null,
+    staleTime: 60_000,
+  });
+
 export const useConnectionSprints = (id: number | null) =>
   useQuery({
     queryKey: queryKeys.connectionSprints(id ?? 0),

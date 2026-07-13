@@ -1,25 +1,18 @@
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect, Select } from "@/components/ui/Dropdown";
 import { PROVIDER_META } from "@/components/settings/providerMeta";
 import {
+  useConnectionProjects,
   useConnectionSprints,
   useConnectionWorkItemMetadata,
   useSyncTickets,
 } from "@/hooks/queries";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import type { ProviderKind, SyncRequest } from "@/types/api";
-
-type SyncMode = "sprint" | "assigned" | "all";
-
-/** Basic-tab scope options — each maps to a backend sync `mode`. */
-const SCOPES: { id: SyncMode; label: string; sub: string }[] = [
-  { id: "sprint", label: "Active sprint", sub: "Pull the current sprint's tickets" },
-  { id: "assigned", label: "My assigned", sub: "Everything assigned to you" },
-  { id: "all", label: "All open tickets", sub: "Every open item in the project" },
-];
 
 const segStyle = (on: boolean) =>
   "flex-1 rounded-[9px] border-none px-2 py-[9px] text-[12.5px] font-semibold cursor-pointer " +
@@ -29,30 +22,37 @@ const segStyle = (on: boolean) =>
 
 /**
  * Sync-tickets dialog (Basic / Advanced), matching the design's provider-aware
- * modal. Basic picks a scope (mode); Advanced filters by fields that are
- * **reflected by the selected connection's provider** — the options come from
- * `/connections/{id}/work-item-metadata` + `/sprints`, so ADO shows area
- * path / states / work-item types, Jira shows its statuses / issue types, etc.
- * Fields with no options for the provider are hidden.
+ * modal. Basic picks a Project + Sprint/Iteration (an iteration scopes to that
+ * sprint, else the project's open items are pulled); Advanced filters by fields
+ * that are **reflected by the selected connection's provider** — the options
+ * come from `/connections/{id}/work-item-metadata` + `/sprints`, so ADO shows
+ * area path / states / work-item types, Jira shows its statuses / issue types,
+ * etc. Fields with no options for the provider are hidden. On mobile (below
+ * `md`) the dialog is a bottom sheet; on desktop a centered modal.
  */
 export function SyncTicketsModal({
   connectionId,
   providerKind,
+  configuredProject,
   sourceLabel,
   onClose,
 }: {
   connectionId: number | null;
   providerKind?: ProviderKind;
+  /** The connection's configured default project — the Basic tab's initial pick. */
+  configuredProject?: string;
   sourceLabel: string;
   onClose: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState<"basic" | "advanced">("basic");
-  const [mode, setMode] = useState<SyncMode>("sprint");
+  const [project, setProject] = useState<string | null>(configuredProject ?? null);
   const [sprintPath, setSprintPath] = useState<string | null>(null);
   const [areaPath, setAreaPath] = useState<string | null>(null);
   const [states, setStates] = useState<string[]>([]);
   const [workItemTypes, setWorkItemTypes] = useState<string[]>([]);
 
+  const { data: projects } = useConnectionProjects(connectionId);
   const { data: metadata } = useConnectionWorkItemMetadata(connectionId);
   const { data: sprints } = useConnectionSprints(connectionId);
   const sync = useSyncTickets();
@@ -60,6 +60,12 @@ export function SyncTicketsModal({
   const meta = providerKind ? PROVIDER_META[providerKind] : null;
   const isAdo = providerKind === "ado";
 
+  // Default the Project pick to the connection's configured project once known.
+  useEffect(() => {
+    if (project == null && configuredProject) setProject(configuredProject);
+  }, [project, configuredProject]);
+
+  const projectOptions = (projects ?? []).map((p) => ({ value: p.name, label: p.name }));
   const sprintOptions = (sprints ?? []).map((s) => ({ value: s.path, label: s.name }));
   const areaOptions = (metadata?.areaPaths ?? []).map((a) => ({ value: a.path, label: a.name, hint: a.path }));
   const stateOptions = (metadata?.states ?? []).map((s) => ({ value: s, label: s }));
@@ -77,8 +83,10 @@ export function SyncTicketsModal({
     const req: SyncRequest = {
       connectionId: connectionId ?? undefined,
       providerKind,
-      // A specific sprint chosen in Advanced is inherently sprint-scoped.
-      mode: sprintPath ? "sprint" : mode,
+      project: project ?? undefined,
+      // A chosen sprint/iteration is sprint-scoped; otherwise pull the project's
+      // open items (also the Advanced fallback when no sprint is picked).
+      mode: sprintPath ? "sprint" : "all",
       sprint: sprintName,
       sprintPath: sprintPath ?? undefined,
       areaPath: isAdo ? areaPath ?? undefined : undefined,
@@ -97,18 +105,31 @@ export function SyncTicketsModal({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-5"
+      className={
+        "fixed inset-0 z-50 flex justify-center " +
+        (isMobile ? "items-end" : "items-center p-5")
+      }
       style={{ background: "rgba(6,6,10,.62)", backdropFilter: "blur(7px)" }}
     >
       <motion.div
         onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
-        className="w-[min(560px,94vw)] overflow-hidden rounded-[22px] border border-white/[0.11]"
+        // Mobile: a bottom sheet that slides up. Desktop: a centered scale-in card.
+        initial={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.96 }}
+        animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1 }}
+        transition={isMobile ? { duration: 0.32, ease: [0.2, 0.8, 0.2, 1] } : { duration: 0.22, ease: "easeOut" }}
+        className={
+          isMobile
+            ? "flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[26px] border-x border-t border-white/[0.11]"
+            : "w-[min(560px,94vw)] overflow-hidden rounded-[22px] border border-white/[0.11]"
+        }
         style={{ background: "rgba(22,22,30,.94)", backdropFilter: "blur(40px)", boxShadow: "0 40px 90px -20px rgba(0,0,0,.8)" }}
       >
-        <div className="flex items-center gap-3 border-b border-white/[0.07] p-[20px_24px]">
+        {isMobile && (
+          <div className="flex shrink-0 justify-center pt-2.5">
+            <span className="h-1 w-10 rounded-full bg-white/25" />
+          </div>
+        )}
+        <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.07] p-[20px_24px]">
           <div
             className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[11px] text-[15px] font-black"
             style={{ background: meta?.color ?? "#8b5cf6", color: meta?.glyphColor ?? "#fff" }}
@@ -121,7 +142,7 @@ export function SyncTicketsModal({
           </div>
         </div>
 
-        <div className="p-[16px_24px_4px]">
+        <div className="shrink-0 p-[16px_24px_4px]">
           <div className="flex gap-1.5 rounded-[11px] border border-white/[0.07] bg-white/[0.04] p-1">
             <button className={segStyle(tab === "basic")} onClick={() => setTab("basic")}>
               Basic
@@ -132,38 +153,40 @@ export function SyncTicketsModal({
           </div>
         </div>
 
-        <div className="max-h-[56vh] overflow-y-auto p-[16px_24px_20px]">
+        <div
+          className={
+            (isMobile ? "flex-1" : "max-h-[56vh]") + " overflow-y-auto p-[16px_24px_20px]"
+          }
+        >
           {tab === "basic" ? (
             <>
               <div className="mb-2.5 text-[11px] font-bold tracking-[0.06em] text-[#6c6c7e]">
                 WHAT TO PULL
               </div>
-              <div className="flex flex-col gap-2">
-                {SCOPES.map((o) => {
-                  const on = mode === o.id;
-                  return (
-                    <div
-                      key={o.id}
-                      onClick={() => setMode(o.id)}
-                      className="flex cursor-pointer items-center gap-3 rounded-[12px] border p-[13px]"
-                      style={{
-                        borderColor: on ? "rgba(139,92,246,.4)" : "rgba(255,255,255,.08)",
-                        background: on ? "rgba(139,92,246,.1)" : "rgba(255,255,255,.03)",
-                      }}
-                    >
-                      <div
-                        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2"
-                        style={{ borderColor: on ? "#8b5cf6" : "rgba(255,255,255,.2)" }}
-                      >
-                        {on && <span className="h-2 w-2 rounded-full bg-[#8b5cf6]" />}
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-[14px] font-semibold">{o.label}</div>
-                        <div className="text-[12px] text-ink-dim">{o.sub}</div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-1 gap-x-2.5 gap-y-3 md:grid-cols-2">
+                <Field label="Project">
+                  <Select
+                    value={project}
+                    options={projectOptions}
+                    placeholder={configuredProject ?? "Select project"}
+                    onChange={setProject}
+                    emptyLabel="No projects found"
+                  />
+                </Field>
+                <Field label={isAdo ? "Iteration" : "Sprint"}>
+                  <Select
+                    value={sprintPath}
+                    options={sprintOptions}
+                    placeholder="All open items"
+                    onChange={setSprintPath}
+                    emptyLabel="No sprints found"
+                  />
+                </Field>
+              </div>
+              <div className="mt-3 text-[12px] text-ink-dim">
+                {sprintPath
+                  ? "Pulls the chosen iteration's tickets."
+                  : "No iteration chosen — pulls the project's open items."}
               </div>
             </>
           ) : (
@@ -172,7 +195,7 @@ export function SyncTicketsModal({
                 FILTER BY FIELD
               </div>
               {hasAdvancedFields ? (
-                <div className="grid grid-cols-2 gap-x-2.5 gap-y-3">
+                <div className="grid grid-cols-1 gap-x-2.5 gap-y-3 md:grid-cols-2">
                   {sprintOptions.length > 0 && (
                     <Field label="Sprint">
                       <Select value={sprintPath} options={sprintOptions} placeholder="Any" onChange={setSprintPath} />
@@ -204,7 +227,10 @@ export function SyncTicketsModal({
           )}
         </div>
 
-        <div className="flex items-center gap-2.5 border-t border-white/[0.07] p-[16px_24px]">
+        <div
+          className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] p-[16px_24px]"
+          style={isMobile ? { paddingBottom: "calc(16px + env(safe-area-inset-bottom))" } : undefined}
+        >
           <span className="flex-1 text-[11.5px] text-[#7a7a8c]">Credentials stay encrypted</span>
           <Button variant="glass" onClick={onClose} disabled={sync.isPending}>
             Cancel

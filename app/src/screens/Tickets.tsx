@@ -16,13 +16,8 @@ import {
   useTickets,
 } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
-import { useUI, type TicketFilter } from "@/store/ui";
+import { useUI } from "@/store/ui";
 import type { ConnectionOut, ProviderKind, TicketFilters, TicketOut } from "@/types/api";
-
-const FILTERS: { id: TicketFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "mine", label: "My tickets" },
-];
 
 const PRIORITY_OPTIONS = ["High", "Medium", "Low"].map((p) => ({ value: p, label: p }));
 
@@ -111,8 +106,6 @@ function ConnectionSelect({
 }
 
 export function Tickets() {
-  const ticketFilter = useUI((s) => s.ticketFilter);
-  const setTicketFilter = useUI((s) => s.setTicketFilter);
   const ticketSearch = useUI((s) => s.ticketSearch);
   const setTicketSearch = useUI((s) => s.setTicketSearch);
   const selected = useUI((s) => s.selected);
@@ -178,7 +171,6 @@ export function Tickets() {
   const filters: TicketFilters = {
     connectionId: connectionId ?? undefined,
     providerKind: selectedConn?.kind,
-    assignee: ticketFilter === "mine" && userName ? userName : undefined,
     sprint: selectedSprint?.name,
     areaPath: isAdo ? areaPath || undefined : undefined,
     states: states.length ? states.join(",") : undefined,
@@ -249,24 +241,6 @@ export function Tickets() {
           </div>
 
           <div className="flex items-center gap-[9px] md:contents">
-            {FILTERS.filter((f) => f.id !== "mine" || !!userName).map((f) => {
-              const active = ticketFilter === f.id;
-              return (
-                <button
-                  key={f.id}
-                  onClick={() => setTicketFilter(f.id)}
-                  className="cursor-pointer rounded-[11px] px-[13px] py-2 text-[12.5px] font-semibold transition-colors"
-                  style={
-                    active
-                      ? { background: "linear-gradient(135deg,#8b5cf6,#6366f1)", border: "1px solid transparent", color: "#fff" }
-                      : { background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.09)", color: "#dcdce4" }
-                  }
-                >
-                  {f.label}
-                </button>
-              );
-            })}
-
             <div className="ml-auto flex items-center gap-[9px]">
               <Button variant="glass" onClick={() => setSyncOpen(true)}>
                 <RefreshCw size={13} />
@@ -397,6 +371,7 @@ export function Tickets() {
         <SyncTicketsModal
           connectionId={connectionId}
           providerKind={selectedConn?.kind}
+          configuredProject={selectedConn?.config.project}
           sourceLabel={syncSourceLabel}
           onClose={() => setSyncOpen(false)}
         />

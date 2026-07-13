@@ -5,6 +5,7 @@ export const queryKeys = {
   aiStats: ["aiStats"] as const,
   claudeCredentialsStatus: ["claudeCredentials", "status"] as const,
   providers: ["providers"] as const,
+  connectionProjects: (id: number) => ["connections", id, "projects"] as const,
   connectionSprints: (id: number) => ["connections", id, "sprints"] as const,
   connectionWorkItemMetadata: (id: number) =>
     ["connections", id, "work-item-metadata"] as const,

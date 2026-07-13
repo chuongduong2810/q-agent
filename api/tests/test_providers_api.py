@@ -164,6 +164,43 @@ def test_sprints_endpoint_rejects_repository_only_connection(client):
     assert client.get(f"/connections/{conn['id']}/sprints").status_code == 400
 
 
+def test_projects_endpoint_rejects_repository_only_connection(client):
+    conn = _create(client, "github")
+    # /projects is a work-item-capability route; GitHub has no work-item capability.
+    assert client.get(f"/connections/{conn['id']}/projects").status_code == 400
+
+
+@respx.mock
+def test_projects_endpoint_lists_org_projects(client):
+    """A configured ADO connection lists its org's projects for the Sync dialog."""
+    conn = _create(client, "ado")
+    client.put(
+        f"/connections/{conn['id']}",
+        json={
+            "config": {"orgUrl": "https://dev.azure.com/myorg", "project": "MyProj"},
+            "secrets": {"pat": "secret-pat"},
+        },
+    )
+    respx.get("https://dev.azure.com/myorg/_apis/projects").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "count": 2,
+                "value": [
+                    {"id": "p1", "name": "MyProj", "state": "wellFormed"},
+                    {"id": "p2", "name": "OtherProj", "state": "wellFormed"},
+                ],
+            },
+        )
+    )
+
+    resp = client.get(f"/connections/{conn['id']}/projects")
+    assert resp.status_code == 200
+    projects = resp.json()
+    assert [p["name"] for p in projects] == ["MyProj", "OtherProj"]
+    assert projects[0]["externalId"] == "p1"
+
+
 def test_settings_default_and_update(client):
     resp = client.get("/settings")
     assert resp.status_code == 200

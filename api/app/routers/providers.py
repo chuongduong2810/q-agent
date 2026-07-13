@@ -44,6 +44,7 @@ from app.schemas import (
     AvailableReposOut,
     ConnectionCreate,
     ConnectionOut,
+    ConnectionProjectOut,
     ConnectionUpdate,
     ProviderGroupOut,
     SettingsOut,
@@ -266,6 +267,30 @@ def list_connection_sprints(
         logger.warning("Sprint list for connection {} unavailable: {}", connection_id, exc)
         return []
     return [SprintOut.model_validate(s) for s in sprints]
+
+
+@router.get("/connections/{connection_id}/projects", response_model=list[ConnectionProjectOut])
+def list_connection_projects(
+    connection_id: int,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> list[ConnectionProjectOut]:
+    """Projects visible under a work-item connection's org (Sync dialog dropdown).
+
+    Lets a sync target a project other than the connection's configured default.
+    Resilient: an unconfigured/unsupported connection yields an empty list so the
+    project picker degrades gracefully rather than erroring the UI.
+    """
+    conn = _get_connection_or_404(db, connection_id, user)
+    _require_capability(conn, WORK_ITEM)
+    decrypted = {key: crypto.decrypt(value) for key, value in (conn.secrets or {}).items()}
+    try:
+        adapter = get_adapter(conn.kind, conn.config or {}, decrypted)
+        projects = adapter.list_projects()
+    except Exception as exc:  # noqa: BLE001 - never error the picker on an upstream hiccup
+        logger.warning("Project list for connection {} unavailable: {}", connection_id, exc)
+        return []
+    return [ConnectionProjectOut.model_validate(p) for p in projects]
 
 
 @router.get("/connections/{connection_id}/work-item-metadata", response_model=WorkItemMetadataOut)
