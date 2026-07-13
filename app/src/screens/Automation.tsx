@@ -235,10 +235,27 @@ export function Automation() {
       return;
     }
     qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
-    const prevCode = prevCodeByCase[p.caseId];
     const spec = p.spec;
-    if (prevCode == null || spec == null) return;
-    if (spec.code === prevCode || spec.status === "blocked") return;
+    if (spec == null) return;
+    const prevCode = prevCodeByCase[p.caseId];
+    // Always give completion feedback — a regeneration can take minutes, so
+    // every outcome must visibly resolve, not just a clean diff.
+    if (spec.status === "blocked") {
+      toast.error("Regeneration rejected by the quality gate — kept the previous spec.", {
+        description:
+          "The generated spec still used placeholders or ungrounded references. Refresh the project Knowledge Base, then regenerate.",
+      });
+      return;
+    }
+    if (prevCode == null) {
+      // Lost the pre-regen code (e.g. page reloaded mid-run) — can't diff.
+      toast.success("Regeneration finished.");
+      return;
+    }
+    if (spec.code === prevCode) {
+      toast.message("Regeneration finished — no changes.");
+      return;
+    }
     const { changed, count, removed } = diffLines(prevCode, spec.code);
     const nextLines = spec.code.split("\n");
     const added = [...changed].map((i) => nextLines[i] ?? "");
@@ -246,6 +263,7 @@ export function Automation() {
     const nextVersion = (versionByCase[p.caseId] ?? 1) + 1;
     setVersionByCase((prev) => ({ ...prev, [p.caseId]: nextVersion }));
     setRegenResult({ caseId: p.caseId, prevCode, changed, count, tags, version: nextVersion });
+    toast.success(`Regenerated · ${count} line${count === 1 ? "" : "s"} changed`);
   });
 
   // Self-heal state for the selected spec. Poll the server so "Healing…"
