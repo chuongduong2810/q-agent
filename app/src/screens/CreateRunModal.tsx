@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ALL_TICKETS_PAGE_SIZE, useCreateRun, useTickets } from "@/hooks/queries";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useAuth } from "@/store/auth";
 import { useUI } from "@/store/ui";
 
@@ -29,6 +30,7 @@ export function CreateRunModal() {
   const navigate = useNavigate();
   const selectedSprint = useUI((s) => s.selectedSprint);
 
+  const isMobile = useIsMobile();
   const { data: ticketsPage } = useTickets({ pageSize: ALL_TICKETS_PAGE_SIZE });
   const tickets = ticketsPage?.items;
   const user = useAuth((s) => s.user);
@@ -89,28 +91,41 @@ export function CreateRunModal() {
   return (
     <div
       onClick={closeCreateRun}
-      className="fixed inset-0 z-50 flex items-center justify-center p-5"
+      className={
+        "fixed inset-0 z-50 flex justify-center " +
+        (isMobile ? "items-end" : "items-center p-5")
+      }
       style={{ background: "rgba(6,6,10,.62)", backdropFilter: "blur(7px)" }}
     >
       <motion.div
         onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
-        className="w-[min(600px,94vw)] overflow-hidden rounded-[22px] border border-white/[0.11]"
+        // Mobile: a bottom sheet that slides up. Desktop: a centered scale-in card.
+        initial={isMobile ? { y: "100%" } : { opacity: 0, scale: 0.96 }}
+        animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1 }}
+        transition={isMobile ? { duration: 0.32, ease: [0.2, 0.8, 0.2, 1] } : { duration: 0.22, ease: "easeOut" }}
+        className={
+          isMobile
+            ? "flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[26px] border-x border-t border-white/[0.11]"
+            : "w-[min(600px,94vw)] overflow-hidden rounded-[22px] border border-white/[0.11]"
+        }
         style={{ background: "rgba(22,22,30,.94)", backdropFilter: "blur(40px)", boxShadow: "0 40px 90px -20px rgba(0,0,0,.8)" }}
       >
-        <div className="flex items-center gap-3 border-b border-white/[0.07] p-[20px_24px]">
+        {isMobile && (
+          <div className="flex shrink-0 justify-center pt-2.5">
+            <span className="h-1 w-10 rounded-full bg-white/25" />
+          </div>
+        )}
+        <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.07] p-[20px_24px]">
           <div className="accent-gradient flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[11px]">
             <Plus size={18} color="#fff" strokeWidth={2.4} />
           </div>
           <div className="flex-1">
-            <div className="text-[17px] font-extrabold">Create a Run</div>
+            <div className="text-[17px] font-extrabold">{isMobile ? "New run" : "Create a Run"}</div>
             <div className="text-[12px] text-ink-dim">A batch QA session across one or many tickets</div>
           </div>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto p-[22px_24px]">
+        <div className={isMobile ? "flex-1 overflow-y-auto p-[20px]" : "max-h-[60vh] overflow-y-auto p-[22px_24px]"}>
           <div className="mb-2.5 text-[12px] font-semibold text-[#9494a6]">SCOPE</div>
           <div className="mb-5 flex flex-col gap-2">
             {scopeOptions.map((o) => {
@@ -141,7 +156,7 @@ export function CreateRunModal() {
             })}
           </div>
 
-          <div className="mb-5 grid grid-cols-2 gap-4">
+          <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <div className="mb-2.5 text-[12px] font-semibold text-[#9494a6]">FRAMEWORK</div>
               <div className="flex gap-2">
@@ -183,20 +198,39 @@ export function CreateRunModal() {
           </div>
         </div>
 
-        <div className="flex items-center gap-[10px] border-t border-white/[0.07] p-[16px_24px]">
-          <span className="flex-1 text-[12.5px] text-ink-dim">{createSummary}</span>
-          <Button variant="glass" onClick={closeCreateRun}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleStart}
-            disabled={createRun.isPending || !canStart}
-            title={!canStart ? "Select at least one ticket to run" : undefined}
+        {isMobile ? (
+          <div
+            className="flex shrink-0 flex-col gap-2.5 border-t border-white/[0.07] p-[16px_20px]"
+            style={{ paddingBottom: "calc(16px + env(safe-area-inset-bottom))" }}
           >
-            {createRun.isPending ? "Starting…" : "Start Run"}
-          </Button>
-        </div>
+            <span className="text-center text-[12.5px] text-ink-dim">{createSummary}</span>
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full"
+              onClick={handleStart}
+              disabled={createRun.isPending || !canStart}
+              title={!canStart ? "Select at least one ticket to run" : undefined}
+            >
+              {createRun.isPending ? "Starting…" : "Start run"}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-[10px] border-t border-white/[0.07] p-[16px_24px]">
+            <span className="flex-1 text-[12.5px] text-ink-dim">{createSummary}</span>
+            <Button variant="glass" onClick={closeCreateRun}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleStart}
+              disabled={createRun.isPending || !canStart}
+              title={!canStart ? "Select at least one ticket to run" : undefined}
+            >
+              {createRun.isPending ? "Starting…" : "Start Run"}
+            </Button>
+          </div>
+        )}
       </motion.div>
     </div>
   );
