@@ -50,6 +50,23 @@ _ROBUSTNESS_RULES = (
     "use page.waitForTimeout(...) or any other arbitrary hard-coded wait."
 )
 
+# Auth policy shared by generation, self-heal, and chat-edit prompts (#291).
+# Authentication is handled OUTSIDE the spec — by the run's saved manual-login
+# session (storageState) and the real test-account credentials injected in the
+# project context. So the spec must never mock/bypass auth, and must never
+# narrate its auth strategy (the old "Auth note" boilerplate).
+_AUTH_POLICY = (
+    "Authentication is already handled for you: the run uses the project's saved "
+    "manual-login session together with the real test-account credentials in the "
+    "project context. Test the app as a real authenticated user. Do NOT mock, "
+    "stub, intercept, or bypass authentication — never route-mock identity/session "
+    "endpoints (e.g. GET /api/sessions/me, /api/sessions/permissions), never assume "
+    "environment flags such as VITE_BYPASS_AUTH, and never fabricate a storageState. "
+    "Log in inline with the real credentials, or rely on the saved session. Do NOT "
+    "emit meta-commentary or an \"Auth note\" explaining auth strategy, mocking "
+    "decisions, or environment assumptions; keep comments to brief step annotations."
+)
+
 
 def _render_examples(examples: list[dict] | None) -> str:
     """Render up to 2 proven passing specs as a reference block for the prompt.
@@ -193,7 +210,7 @@ def _build_prompt(
         f"`test('{case.code} — {case.title}', async ({{ page }}) => {{ ... }})` block, "
         f"tagged with the Test Case ID ({case.code}) so results trace back to this case, "
         f"that encodes the precondition and each step as page actions/assertions. "
-        f"{_ROBUSTNESS_RULES}"
+        f"{_ROBUSTNESS_RULES} {_AUTH_POLICY}"
     )
 
 
@@ -255,7 +272,8 @@ def _build_fix_prompt(
         "assertions. Prefer robust locators (getByRole/getByLabel/getByText), "
         "web-first assertions (expect(locator).toBeVisible(), etc.), and explicit "
         "waits over arbitrary timeouts. Use the real grounded values above where "
-        "given. Do not invent unrelated behavior or weaken the test just to pass."
+        "given. Do not invent unrelated behavior or weaken the test just to pass. "
+        f"{_AUTH_POLICY}"
     )
 
 
@@ -333,7 +351,7 @@ def _build_chat_edit_prompt(
         "You are editing an existing Playwright test spec based on a reviewer's instruction.\n\n"
         f"{grounding}"
         f"{_render_references(references)}"
-        f"{_ROBUSTNESS_RULES}"
+        f"{_ROBUSTNESS_RULES} {_AUTH_POLICY}\n\n"
         f"Reviewer instruction:\n{instruction.strip()}\n\n"
         "Current spec:\n"
         f"```typescript\n{current_code.strip()}\n```\n\n"
