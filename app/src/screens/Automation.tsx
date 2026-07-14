@@ -300,26 +300,43 @@ export function Automation() {
   // Editor typewriter: when a chat edit lands, "type" the new spec code into the
   // code viewer (not just the chat reply), then release to the query-backed code.
   const reducedMotion = usePrefersReducedMotion();
-  const [editorType, setEditorType] = useState<{ caseId: number; full: string } | null>(null);
+  const [editorType, setEditorType] = useState<{ caseId: number; prev: string; full: string } | null>(
+    null,
+  );
   const [editorShown, setEditorShown] = useState("");
   useRunEvents((evt) => {
     if (evt.event === "automation.chat.reply") {
       const p = evt.payload as unknown as ChatReplyPayload;
-      setEditorType({ caseId: p.caseId, full: p.spec.code });
+      setEditorType({ caseId: p.caseId, prev: p.prevCode, full: p.spec.code });
     }
   });
   useEffect(() => {
     if (!editorType) return;
-    if (reducedMotion) {
-      setEditorShown(editorType.full);
+    const { prev, full } = editorType;
+    if (reducedMotion || prev === full) {
+      setEditorShown(full);
       return;
     }
-    let i = 0;
-    setEditorShown("");
+    // Re-type only the changed span: keep the common prefix + suffix visible and
+    // animate just the middle region that actually changed — not the whole spec.
+    const maxHead = Math.min(prev.length, full.length);
+    let head = 0;
+    while (head < maxHead && prev[head] === full[head]) head++;
+    let tail = 0;
+    const maxTail = maxHead - head;
+    while (tail < maxTail && prev[prev.length - 1 - tail] === full[full.length - 1 - tail]) tail++;
+    const changedEnd = full.length - tail; // exclusive end of the changed middle
+    let i = head;
+    // Prefix + (empty middle) + suffix; the middle grows in below.
+    setEditorShown(full.slice(0, head) + full.slice(changedEnd));
+    if (i >= changedEnd) {
+      setEditorShown(full);
+      return;
+    }
     const id = setInterval(() => {
-      i = Math.min(i + 12, editorType.full.length);
-      setEditorShown(editorType.full.slice(0, i));
-      if (i >= editorType.full.length) clearInterval(id);
+      i = Math.min(i + 12, changedEnd);
+      setEditorShown(full.slice(0, i) + full.slice(changedEnd));
+      if (i >= changedEnd) clearInterval(id);
     }, 16);
     return () => clearInterval(id);
   }, [editorType, reducedMotion]);
