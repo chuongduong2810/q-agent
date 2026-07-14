@@ -56,6 +56,9 @@ export function SpecChatPanel({ runId, spec }: Props) {
   const [model, setModel] = useState<string>(AI_MODEL_OPTIONS[1]?.value ?? "");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Message ids whose reply has already typed out once — so closing + reopening
+  // the panel shows them in full instantly (no re-typing of old messages).
+  const revealedRef = useRef<Set<string>>(new Set());
 
   // @-mention: the run's specs the reviewer can embed as context. `mention` is the
   // active token (the text after the last "@") + where it starts, or null.
@@ -216,7 +219,14 @@ export function SpecChatPanel({ runId, spec }: Props) {
                 m.role === "user" ? (
                   <UserBubble key={m.id} text={m.text} />
                 ) : (
-                  <AssistantMessage key={m.id} m={m} onUndo={() => undo(m)} onReapply={() => reapply(m)} />
+                  <AssistantMessage
+                    key={m.id}
+                    m={m}
+                    animate={!revealedRef.current.has(m.id)}
+                    onRevealed={() => revealedRef.current.add(m.id)}
+                    onUndo={() => undo(m)}
+                    onReapply={() => reapply(m)}
+                  />
                 ),
               )}
             </div>
@@ -317,14 +327,21 @@ function UserBubble({ text }: { text: string }) {
 
 function AssistantMessage({
   m,
+  animate,
+  onRevealed,
   onUndo,
   onReapply,
 }: {
   m: ChatMessage;
+  animate: boolean;
+  onRevealed: () => void;
   onUndo: () => void;
   onReapply: () => void;
 }) {
-  const { shown, done } = useTypewriter(m.thinking ? "" : m.text);
+  const { shown, done } = useTypewriter(m.thinking ? "" : m.text, animate);
+  useEffect(() => {
+    if (done && m.text) onRevealed();
+  }, [done, m.text, onRevealed]);
   return (
     <div className="flex gap-2.5">
       <span className="accent-gradient mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg">
@@ -370,8 +387,10 @@ function Dot() {
 function DiffSnippet({ prev, next }: { prev: string; next: string }) {
   const { changed, removed } = useMemo(() => diffLines(prev, next), [prev, next]);
   const nextLines = next.split("\n");
-  const added = nextLines.filter((_, i) => changed.has(i)).slice(0, 8);
-  const gone = removed.slice(0, 4);
+  // Only real, non-blank changes — a no-op edit (e.g. "Ping") must not render a
+  // stray empty "-"/"+" line.
+  const added = nextLines.filter((_, i) => changed.has(i) && nextLines[i].trim() !== "").slice(0, 8);
+  const gone = removed.filter((l) => l.trim() !== "").slice(0, 4);
   if (added.length === 0 && gone.length === 0) return null;
   return (
     <div className="overflow-x-auto rounded-lg border border-white/[0.08] bg-black/30 p-2 font-mono text-[11px] leading-relaxed">
@@ -393,10 +412,14 @@ function AppliedCard({ prev, next, onUndo }: { prev: string; next: string; onUnd
   const { count } = useMemo(() => diffLines(prev, next), [prev, next]);
   return (
     <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-[12px]">
-      <span className="text-success">Applied to spec · {count} line{count === 1 ? "" : "s"} changed</span>
-      <button onClick={onUndo} className="ml-auto flex items-center gap-1 text-ink-soft hover:text-ink" title="Undo">
-        <Undo2 size={13} /> Undo
-      </button>
+      <span className="text-success">
+        {count === 0 ? "Applied to spec · no changes" : `Applied to spec · ${count} line${count === 1 ? "" : "s"} changed`}
+      </span>
+      {count > 0 && (
+        <button onClick={onUndo} className="ml-auto flex items-center gap-1 text-ink-soft hover:text-ink" title="Undo">
+          <Undo2 size={13} /> Undo
+        </button>
+      )}
     </div>
   );
 }

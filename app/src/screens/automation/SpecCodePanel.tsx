@@ -47,6 +47,7 @@ export function SpecCodePanel({
   onStartHeal,
   onStartExecution,
   onOpenChat,
+  codeOverride,
 }: {
   selectedSpec: AutomationSpecOut | null;
   editing: boolean;
@@ -82,6 +83,9 @@ export function SpecCodePanel({
   onStartHeal: () => void;
   onStartExecution: () => void;
   onOpenChat: () => void;
+  /** When set, shown in the code viewer instead of the spec's code — used to
+   * "type out" a chat edit's new code before the query-backed code settles. */
+  codeOverride?: string;
 }) {
   return (
     <div
@@ -241,7 +245,7 @@ export function SpecCodePanel({
             }}
           >
             <CodeHighlight
-              code={selectedSpec.code}
+              code={codeOverride ?? selectedSpec.code}
               foldRanges={foldRanges}
               folded={folded}
               onToggle={toggleFold}
