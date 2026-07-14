@@ -22,7 +22,15 @@ export function RunContextHeader({ runId }: { runId: number }) {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  const stage = run ? (runStatusToStage[run.status] ?? 1) : 1;
+  // Stage number for the pill. Terminal statuses (failed/cancelled) don't map to
+  // a pipeline stage, so fall back to the stage the run failed AT (`failedStage`)
+  // rather than defaulting to 1 — otherwise a run that failed at, say, Evidence
+  // would misleadingly read "stage 1 of 9".
+  const stage = run
+    ? (runStatusToStage[run.status] ??
+        (run.failedStage ? runStatusToStage[run.failedStage] : undefined) ??
+        1)
+    : 1;
 
   return (
     <header className="glass-strong flex h-[56px] shrink-0 items-center gap-2.5 rounded-[18px] px-[18px]">
