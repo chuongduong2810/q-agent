@@ -87,3 +87,50 @@ def test_gate_spec_passes_clean_grounded_spec():
     }
     result = placeholder_gate.gate_spec(_clean_spec(), grounded)
     assert result["outcome"] == "passed"
+
+
+# --- template-literal goto() targets (parameterized routes) --------------------
+# A goto() built from grounded constants — `${BASE_URL}/employers/${ID}/...` — is
+# the idiomatic way to parameterize a route. It must not be mistaken for an
+# invented reference just because the raw string can't string-equal a concrete KB
+# route (the false positive that stuck specs in a regenerate loop).
+
+_PARAM_KNOWN = {
+    "routes": [{"path": "/employers/86923fff/groups/e1b71606"}],
+    "selectors": ["brokers-tab"],
+    "base_url": "https://portal.example.net",
+}
+
+
+def _param_spec(goto: str) -> str:
+    return (
+        "import { test, expect } from '@playwright/test';\n"
+        "const BASE_URL = 'https://portal.example.net';\n"
+        "const EMPLOYER_ID = '86923fff';\nconst GROUP_ID = 'e1b71606';\n"
+        "test('TC-01', async ({ page }) => {\n"
+        f"  await page.goto({goto});\n"
+        "  await expect(page.getByTestId('brokers-tab')).toBeVisible();\n"
+        "});\n"
+    )
+
+
+def test_gate_spec_passes_parameterized_template_route():
+    code = _param_spec("`${BASE_URL}/employers/${EMPLOYER_ID}/groups/${GROUP_ID}`")
+    assert placeholder_gate.gate_spec(code, _PARAM_KNOWN)["outcome"] == "passed"
+
+
+def test_gate_spec_passes_plain_absolute_url_with_base():
+    code = _param_spec("'https://portal.example.net/employers/86923fff/groups/e1b71606'")
+    assert placeholder_gate.gate_spec(code, _PARAM_KNOWN)["outcome"] == "passed"
+
+
+def test_gate_spec_rejects_invented_static_segment_in_template():
+    code = _param_spec("`${BASE_URL}/totally-made-up-screen`")
+    result = placeholder_gate.gate_spec(code, _PARAM_KNOWN)
+    assert result["outcome"] == "rejected"
+    assert any("made-up-screen" in f for f in result["findings"])
+
+
+def test_gate_spec_rejects_wrong_shape_parameterized_route():
+    code = _param_spec("`${BASE_URL}/vendors/${EMPLOYER_ID}`")
+    assert placeholder_gate.gate_spec(code, _PARAM_KNOWN)["outcome"] == "rejected"
