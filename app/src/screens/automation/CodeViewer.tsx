@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 const TS_KEYWORDS = new Set([
   "import", "export", "from", "const", "let", "var", "async", "await", "function",
@@ -107,7 +108,12 @@ function closerCharFor(line: string): string {
  * @param folded Set of opener line indices that are currently collapsed.
  * @param onToggle Toggles the fold state of the region opening at a line.
  * @param changedLines Optional 0-based indices of lines added/changed by the last
- *   regeneration — tinted green with a `+` gutter marker (folding is unaffected).
+ *   regeneration or chat edit — tinted green with a `+` gutter marker (folding is
+ *   unaffected).
+ * @param scrollToLine Optional 0-based line to scroll into view (the first changed
+ *   line of a chat edit). Scrolls when `scrollSignal` changes.
+ * @param scrollSignal Bumps per applied chat edit so a repeated `scrollToLine`
+ *   still re-triggers the scroll.
  */
 export function CodeHighlight({
   code,
@@ -115,15 +121,32 @@ export function CodeHighlight({
   folded,
   onToggle,
   changedLines,
+  scrollToLine,
+  scrollSignal,
 }: {
   code: string;
   foldRanges: FoldRange[];
   folded: Set<number>;
   onToggle: (start: number) => void;
   changedLines?: Set<number>;
+  scrollToLine?: number;
+  scrollSignal?: number;
 }) {
   const lines = code.split("\n");
   const endByStart = useMemo(() => new Map(foldRanges.map((r) => [r.start, r.end])), [foldRanges]);
+
+  // Scroll the first edited line into view when a chat edit lands. Keyed on
+  // scrollSignal (not scrollToLine) so consecutive edits touching the same line
+  // still re-scroll; instant under prefers-reduced-motion.
+  const reducedMotion = usePrefersReducedMotion();
+  const scrollTargetRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (scrollSignal === undefined || scrollToLine === undefined) return;
+    scrollTargetRef.current?.scrollIntoView({
+      block: "center",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+  }, [scrollSignal, scrollToLine, reducedMotion]);
 
   // Line indices hidden because they sit inside a currently-collapsed region.
   const hidden = useMemo(() => {
@@ -148,7 +171,12 @@ export function CodeHighlight({
           const isFolded = isFoldable && folded.has(i);
           const isChanged = changedLines?.has(i) ?? false;
           return (
-            <div key={i} className="flex" style={isChanged ? { background: "rgba(16,185,129,.10)" } : undefined}>
+            <div
+              key={i}
+              ref={i === scrollToLine ? scrollTargetRef : undefined}
+              className="flex"
+              style={isChanged ? { background: "rgba(16,185,129,.10)" } : undefined}
+            >
               <span
                 className="sticky left-0 z-10 flex select-none items-center gap-1 pl-4 pr-3"
                 style={{ background: isChanged ? "#0c1512" : gutterBg }}

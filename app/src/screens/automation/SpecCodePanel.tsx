@@ -49,6 +49,8 @@ export function SpecCodePanel({
   onStartExecution,
   onOpenChat,
   codeOverride,
+  scrollToLine,
+  scrollSignal,
 }: {
   selectedSpec: AutomationSpecOut | null;
   editing: boolean;
@@ -87,6 +89,12 @@ export function SpecCodePanel({
   /** When set, shown in the code viewer instead of the spec's code — used to
    * "type out" a chat edit's new code before the query-backed code settles. */
   codeOverride?: string;
+  /** 0-based line to scroll into view when a chat edit is applied (its first
+   * changed line). Paired with `scrollSignal`. */
+  scrollToLine?: number;
+  /** Bumps per applied chat edit so the viewer re-scrolls even when the first
+   * changed line index repeats across edits. */
+  scrollSignal?: number;
 }) {
   return (
     <div
@@ -253,6 +261,8 @@ export function SpecCodePanel({
               folded={folded}
               onToggle={toggleFold}
               changedLines={changedLines}
+              scrollToLine={scrollToLine}
+              scrollSignal={scrollSignal}
             />
           </div>
           {(generating || specRegenerating) && (

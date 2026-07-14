@@ -304,10 +304,26 @@ export function Automation() {
     null,
   );
   const [editorShown, setEditorShown] = useState("");
+  // Line-level change highlight + scroll target for the last chat edit typed into
+  // the editor (the chat "re-type" path, mirroring regenResult). `seq` bumps per
+  // edit so the viewer re-scrolls even when the first changed line is unchanged.
+  const [editResult, setEditResult] = useState<{
+    caseId: number;
+    changed: Set<number>;
+    firstLine: number | null;
+    seq: number;
+  } | null>(null);
   useRunEvents((evt) => {
     if (evt.event === "automation.chat.reply") {
       const p = evt.payload as unknown as ChatReplyPayload;
       setEditorType({ caseId: p.caseId, prev: p.prevCode, full: p.spec.code });
+      const diff = diffLines(p.prevCode, p.spec.code);
+      setEditResult((prev) => ({
+        caseId: p.caseId,
+        changed: diff.changed,
+        firstLine: diff.changed.size ? Math.min(...diff.changed) : null,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
     }
   });
   useEffect(() => {
@@ -427,6 +443,7 @@ export function Automation() {
   // never bleeds across specs.
   useEffect(() => {
     setRegenResult(null);
+    setEditResult(null);
   }, [selectedSpecCaseId]);
 
   // Regenerate the selected spec, optionally with a reviewer note. Captures the
@@ -605,9 +622,24 @@ export function Automation() {
             startExecutionPending={startExecution.isPending}
             copyLabel={copyLabel}
             changedLines={
-              regenResult && regenResult.caseId === selectedSpec?.testCaseId
-                ? regenResult.changed
+              // While the chat edit is still re-typing, codeOverride shows a
+              // compressed view (prefix+suffix, changed middle not yet typed), so
+              // editResult's line indices wouldn't line up — defer that highlight
+              // until the code settles. Reduced-motion has no override, so it shows
+              // immediately.
+              editResult && editResult.caseId === selectedSpec?.testCaseId && !editorCodeOverride
+                ? editResult.changed
+                : regenResult && regenResult.caseId === selectedSpec?.testCaseId
+                  ? regenResult.changed
+                  : undefined
+            }
+            scrollToLine={
+              editResult && editResult.caseId === selectedSpec?.testCaseId
+                ? editResult.firstLine ?? undefined
                 : undefined
+            }
+            scrollSignal={
+              editResult && editResult.caseId === selectedSpec?.testCaseId ? editResult.seq : undefined
             }
             regenVersion={selectedSpec ? versionByCase[selectedSpec.testCaseId] : undefined}
             feedbackSignal={feedbackSignal}
