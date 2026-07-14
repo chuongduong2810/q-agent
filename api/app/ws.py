@@ -24,6 +24,13 @@ class ProgressHub:
     def __init__(self) -> None:
         self._conns: dict[str, set[WebSocket]] = defaultdict(set)
         self._loop: asyncio.AbstractEventLoop | None = None
+        # Most recent event per run, so a client that connects mid-run is caught
+        # up immediately (see connect). Events are fire-and-forget: on a fresh run
+        # the pipeline thread publishes the early phase events before the client's
+        # socket finishes connecting, and without this replay they're lost — the
+        # run detail then looks frozen until the next event fires. Set synchronously
+        # in publish (not on the event loop) so there is no connect/publish race.
+        self._last: dict[str, dict[str, Any]] = {}
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -32,6 +39,14 @@ class ProgressHub:
         await ws.accept()
         self._conns[run_id].add(ws)
         logger.debug("WS connected run={} (total={})", run_id, len(self._conns[run_id]))
+        # Replay the last event so a client joining mid-run (or after a reload)
+        # renders the current phase without waiting for the next event.
+        last = self._last.get(run_id)
+        if last is not None:
+            try:
+                await ws.send_json(last)
+            except Exception:  # noqa: BLE001 - client gone before first send
+                self.disconnect(run_id, ws)
 
     def disconnect(self, run_id: str, ws: WebSocket) -> None:
         self._conns[run_id].discard(ws)
@@ -49,6 +64,9 @@ class ProgressHub:
     def publish(self, run_id: str, event: str, payload: dict[str, Any] | None = None) -> None:
         """Thread-safe publish of a progress event to a run's subscribers."""
         message = {"event": event, "runId": run_id, "payload": payload or {}}
+        # Cache before scheduling the broadcast so a client connecting between now
+        # and the broadcast still gets caught up via connect's replay.
+        self._last[run_id] = message
         if self._loop is None or self._loop.is_closed():
             return
         try:

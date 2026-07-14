@@ -284,7 +284,7 @@ def _process_run_ticket(db: Session, run: Run, run_ticket: RunTicket) -> None:
             build_combined_prompt(ticket, max_cases=max_cases, context=context),
             skill=TEST_CASE_GENERATOR,
             system=load_skill(REQUIREMENT_ANALYST),
-            label=f"Analyze+generate {ticket.external_id}",
+            label=f"Generate test cases: {ticket.external_id}",
         )
         if not isinstance(combined, dict):
             raise ClaudeError("Claude analyze+generate response was not a JSON object")
