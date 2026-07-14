@@ -154,6 +154,12 @@ export function SpecChatPanel({ runId, spec }: Props) {
     patch(m.id, { applied: true, reverted: false });
   };
 
+  // No dimming/blocking backdrop — the page (and the code editor) stay fully
+  // visible and bright behind the drawer, so the reviewer can WATCH the edited
+  // code type into the editor while chatting. Close via the X or Escape (a
+  // full-screen scrim would cover/darken the editor). The wrapper is
+  // pointer-events-none so only the drawer captures clicks; the editor behind
+  // stays interactive.
   return createPortal(
     <AnimatePresence>
       {chatOpen && spec && (
@@ -163,9 +169,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[1000]"
-          style={{ background: "rgba(4,4,8,.5)" }}
-          onClick={closeChat}
+          className="pointer-events-none fixed inset-0 z-[1000]"
         >
           <motion.aside
             key="chat-drawer"
@@ -173,8 +177,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
-            onClick={(e) => e.stopPropagation()}
-            className="absolute right-0 top-0 flex h-full w-[480px] max-w-[96vw] flex-col border-l border-white/[0.09]"
+            className="pointer-events-auto absolute right-0 top-0 flex h-full w-[480px] max-w-[96vw] flex-col border-l border-white/[0.09] shadow-[0_0_60px_-10px_rgba(0,0,0,.7)]"
             style={{ background: "#0e0e15" }}
           >
             {/* Header */}
