@@ -276,6 +276,11 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     let passed = 0;
     let failed = 0;
     const matched = new Set<string>();
+    // Evidence uploads are deferred until AFTER results + complete are posted:
+    // the browser has already closed when a test finishes, so the web should mark
+    // the case/run done immediately rather than waiting on (potentially multi-MB)
+    // video/trace/DOM uploads over the network.
+    const pendingEvidence: { ticket: string; caseCode: string; kind: string; filePath: string }[] = [];
     for (const spec of job.specs) {
       const entry = parsed.find((e) => path.basename(e.file) === spec.filename);
       if (!entry) continue;
@@ -289,21 +294,6 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
       });
       if (entry.status === "pass") passed++;
       else if (entry.status === "fail") failed++;
-
-      for (const att of entry.attachments) {
-        const filePath = path.isAbsolute(att.path) ? att.path : path.join(workDir, att.path);
-        if (!fs.existsSync(filePath)) continue;
-        const { ticket, caseCode } = identityFor(spec);
-        await api
-          .postEvidence(cfg, job.executionId, {
-            ticketExternalId: ticket,
-            caseCode,
-            kind: att.kind,
-            filePath,
-            filename: path.basename(filePath),
-          })
-          .catch((err) => console.error("postEvidence failed:", err));
-      }
 
       const { ticket, caseCode } = identityFor(spec);
       await api.postEvent(cfg, job.executionId, "exec.case.result", {
@@ -321,6 +311,12 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
         remaining: total - matched.size,
       });
       emit("progress", { progress, passed, failed, remaining: total - matched.size });
+
+      for (const att of entry.attachments) {
+        const filePath = path.isAbsolute(att.path) ? att.path : path.join(workDir, att.path);
+        if (!fs.existsSync(filePath)) continue;
+        pendingEvidence.push({ ticket, caseCode, kind: att.kind, filePath });
+      }
     }
 
     // Any spec Playwright didn't report on (e.g. run_error) is marked failed.
@@ -348,6 +344,21 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     const logText = (procOutput || runError || "").slice(-20000);
     await api.postComplete(cfg, job.executionId, { passed, failed, log: logText });
     emit("job-complete", { executionId: job.executionId, passed, failed });
+
+    // Now that the run is marked done, upload the (deferred) evidence artifacts.
+    // The web already reflects the outcome; these trail in the background and the
+    // Evidence step picks them up as they land.
+    for (const ev of pendingEvidence) {
+      await api
+        .postEvidence(cfg, job.executionId, {
+          ticketExternalId: ev.ticket,
+          caseCode: ev.caseCode,
+          kind: ev.kind,
+          filePath: ev.filePath,
+          filename: path.basename(ev.filePath),
+        })
+        .catch((err) => console.error("postEvidence failed:", err));
+    }
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }
