@@ -26,7 +26,8 @@ import {
 } from "@/hooks/queries";
 import { queryKeys } from "@/lib/queryKeys";
 import { useRunEvents } from "@/hooks/useRunEvents";
-import type { AutomationSpecOut, HealReport } from "@/types/api";
+import type { AutomationSpecOut, ChatReplyPayload, HealReport } from "@/types/api";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { normalizeSpecStatus, parseGateReport } from "./automation/specStatus";
 import { useAutomationEvents } from "./automation/useAutomationEvents";
 import { useThinkingSteps } from "./automation/useThinkingSteps";
@@ -295,6 +296,37 @@ export function Automation() {
   // heal execution completes, so the button always reconciles. The WS stream still
   // powers the detailed progress banner below.
   const healingThisCase = healSpec.isPending || (healStatusData?.healing ?? false);
+
+  // Editor typewriter: when a chat edit lands, "type" the new spec code into the
+  // code viewer (not just the chat reply), then release to the query-backed code.
+  const reducedMotion = usePrefersReducedMotion();
+  const [editorType, setEditorType] = useState<{ caseId: number; full: string } | null>(null);
+  const [editorShown, setEditorShown] = useState("");
+  useRunEvents((evt) => {
+    if (evt.event === "automation.chat.reply") {
+      const p = evt.payload as unknown as ChatReplyPayload;
+      setEditorType({ caseId: p.caseId, full: p.spec.code });
+    }
+  });
+  useEffect(() => {
+    if (!editorType) return;
+    if (reducedMotion) {
+      setEditorShown(editorType.full);
+      return;
+    }
+    let i = 0;
+    setEditorShown("");
+    const id = setInterval(() => {
+      i = Math.min(i + 12, editorType.full.length);
+      setEditorShown(editorType.full.slice(0, i));
+      if (i >= editorType.full.length) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  }, [editorType, reducedMotion]);
+  const editorCodeOverride =
+    editorType && editorType.caseId === selectedSpec?.testCaseId && editorShown.length < editorType.full.length
+      ? editorShown
+      : undefined;
 
   // "Run" stays in its loading state for the whole background execution, not
   // just the POST: true while the mutation is in flight, or while the latest
@@ -572,6 +604,7 @@ export function Automation() {
             onStartHeal={startHeal}
             onStartExecution={startExecutionAndView}
             onOpenChat={openChat}
+            codeOverride={editorCodeOverride}
           />
           {healReport && <HealTimeline report={healReport} />}
           </div>

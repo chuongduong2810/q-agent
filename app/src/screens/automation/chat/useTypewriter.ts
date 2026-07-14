@@ -11,8 +11,10 @@ import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
  * and whether the reveal has finished (drives the blinking caret / thinking dots).
  *
  * @param target The full text to reveal (empty string while the reply is pending).
+ * @param animate When false (e.g. a historical message re-shown after the panel
+ *   was closed and reopened), the full string appears instantly — no re-typing.
  */
-export function useTypewriter(target: string): { shown: string; done: boolean } {
+export function useTypewriter(target: string, animate = true): { shown: string; done: boolean } {
   const reduced = usePrefersReducedMotion();
   const [shown, setShown] = useState("");
   const iRef = useRef(0);
@@ -22,7 +24,7 @@ export function useTypewriter(target: string): { shown: string; done: boolean } 
     iRef.current = 0;
     setShown("");
     if (!target) return;
-    if (reduced) {
+    if (reduced || !animate) {
       setShown(target);
       return;
     }
@@ -32,7 +34,7 @@ export function useTypewriter(target: string): { shown: string; done: boolean } 
       if (iRef.current >= target.length) clearInterval(id);
     }, 16);
     return () => clearInterval(id);
-  }, [target, reduced]);
+  }, [target, reduced, animate]);
 
   return { shown, done: shown.length >= target.length };
 }
