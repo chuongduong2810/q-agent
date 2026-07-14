@@ -33,6 +33,7 @@ from app.services import (
     placeholder_gate,
     playwright_runner,
     run_context,
+    settings_store,
     spec_examples,
     spec_service,
 )
@@ -173,8 +174,14 @@ def _plan_fix(
         }
 
     # Gate against the KB PLUS the live captured DOM — a fix that uses real,
-    # observed routes/selectors is grounded, not invented (#265).
-    gate = placeholder_gate.gate_spec(fixed, _known_with_dom(known, dom_snapshot))
+    # observed routes/selectors is grounded, not invented (#265). Bypassed when
+    # the global quality gate is off (#gate-toggle) — the fix is then accepted as
+    # long as it did not weaken assertions (checked above; that anti-cheat stays).
+    gate = (
+        placeholder_gate.gate_spec(fixed, _known_with_dom(known, dom_snapshot))
+        if settings_store.gate_enabled()
+        else placeholder_gate.bypassed_result()
+    )
     if gate["outcome"] == "blocked":
         return {
             "action": "blocked",

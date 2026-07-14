@@ -160,6 +160,46 @@ def _review_critical_findings(review: dict) -> list[str]:
     ]
 
 
+def _gate_spec_or_bypass(
+    code: str, known: dict, owner_id: int, *, noun: str, fix_verb: str
+) -> tuple[dict, str]:
+    """Run the spec quality gate, or bypass it when the global toggle is off.
+
+    Shared by every spec-acceptance path (generation, manual edit, chat edit) so
+    they gate identically. When the workspace ``gateEnabled`` setting is off
+    (#gate-toggle) gating is skipped entirely — the placeholder/invented-reference
+    gate AND the ``playwright --list`` parse check — and the spec is accepted as
+    runnable via :func:`placeholder_gate.bypassed_result`. (The AI automation-reviewer
+    is skipped by the caller on a bypassed result.) Otherwise runs the deterministic
+    gate followed by the parse check, exactly as before.
+
+    Args:
+        code: The spec source to gate.
+        known: KB view (routes/selectors/base_url) the gate compares against.
+        owner_id: Run owner id, for the per-user ``playwright --list`` invocation.
+        noun: "generated spec" / "edited spec" — used in the parse-failure reason.
+        fix_verb: "Regenerate" / "Fix" — used in the parse-failure unblock action.
+
+    Returns:
+        ``(gate_report, outcome)`` where outcome is ``passed`` | ``blocked`` | ``rejected``.
+    """
+    if not settings_store.gate_enabled():
+        return placeholder_gate.bypassed_result(), "passed"
+    gate = placeholder_gate.gate_spec(code, known)
+    outcome = gate["outcome"]
+    # A spec Playwright cannot even parse/collect is treated like a rejection
+    # (best-effort: an unavailable CLI/timeout skips the check, never blocks).
+    if outcome == "passed" and not spec_service.playwright_list_ok(code, owner_id):
+        outcome = "rejected"
+        gate = {
+            "outcome": "rejected",
+            "findings": ["playwright --list parse failure"],
+            "reason": f"Playwright could not parse/collect the {noun}.",
+            "unblock_action": f"{fix_verb} the spec so it parses cleanly under Playwright.",
+        }
+    return gate, outcome
+
+
 def _generate_one(
     db: Session, run: Run, case: TestCase, reviewer_comment: str | None = None
 ) -> AutomationSpec:
@@ -220,25 +260,17 @@ def _generate_one(
         "selectors": context.get("selectors", []),
         "base_url": context.get("baseUrl", ""),
     }
-    gate = placeholder_gate.gate_spec(code, known)
-    outcome = gate["outcome"]
-    # A spec Playwright cannot even parse/collect is treated like a rejection
-    # (best-effort: an unavailable CLI/timeout skips the check, never blocks).
-    if outcome == "passed" and not spec_service.playwright_list_ok(code, run.owner_id):
-        outcome = "rejected"
-        gate = {
-            "outcome": "rejected",
-            "findings": ["playwright --list parse failure"],
-            "reason": "Playwright could not parse/collect the generated spec.",
-            "unblock_action": "Regenerate the spec so it parses cleanly under Playwright.",
-        }
+    gate, outcome = _gate_spec_or_bypass(
+        code, known, run.owner_id, noun="generated spec", fix_verb="Regenerate"
+    )
 
     # Deterministic gate passed -> ask automation-reviewer for a static review
     # (#181). Additive: a Critical finding is treated like a gate rejection; the
     # verdict/findings are persisted in gate_report either way so they surface
     # on the automation screen. Best-effort — a failed/unparseable review never
-    # blocks a spec the deterministic gate already passed.
-    if outcome == "passed":
+    # blocks a spec the deterministic gate already passed. Skipped when gating is
+    # bypassed (the whole gate, incl. this review, is off).
+    if outcome == "passed" and not gate.get("bypassed"):
         review = _run_automation_review(code, case, context)
         if review is not None:
             gate = dict(gate)
@@ -503,17 +535,9 @@ def update_case_spec(
         "selectors": context.get("selectors", []),
         "base_url": context.get("baseUrl", ""),
     }
-    gate = placeholder_gate.gate_spec(payload.code, known)
-    outcome = gate["outcome"]
-    # Mirror generation: a spec Playwright cannot parse/collect is not runnable.
-    if outcome == "passed" and not spec_service.playwright_list_ok(payload.code, run.owner_id):
-        outcome = "rejected"
-        gate = {
-            "outcome": "rejected",
-            "findings": ["playwright --list parse failure"],
-            "reason": "Playwright could not parse/collect the edited spec.",
-            "unblock_action": "Fix the spec so it parses cleanly under Playwright.",
-        }
+    gate, outcome = _gate_spec_or_bypass(
+        payload.code, known, run.owner_id, noun="edited spec", fix_verb="Fix"
+    )
     spec.gate_report = json.dumps(gate)
 
     if outcome == "passed":
@@ -623,16 +647,9 @@ def _run_spec_chat(run_id: int, case_id: int, message: str, message_id: str) -> 
                 "selectors": context.get("selectors", []),
                 "base_url": context.get("baseUrl", ""),
             }
-            gate = placeholder_gate.gate_spec(new_code, known)
-            outcome = gate["outcome"]
-            if outcome == "passed" and not spec_service.playwright_list_ok(new_code, run.owner_id):
-                outcome = "rejected"
-                gate = {
-                    "outcome": "rejected",
-                    "findings": ["playwright --list parse failure"],
-                    "reason": "Playwright could not parse/collect the edited spec.",
-                    "unblock_action": "Fix the spec so it parses cleanly under Playwright.",
-                }
+            gate, outcome = _gate_spec_or_bypass(
+                new_code, known, run.owner_id, noun="edited spec", fix_verb="Fix"
+            )
             spec.gate_report = json.dumps(gate)
             if outcome == "passed":
                 spec.path = str(

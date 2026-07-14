@@ -218,6 +218,23 @@ export function Settings() {
         )}
       </GlassCard>
 
+      <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">SPEC QUALITY GATE</div>
+      <GlassCard className="p-[22px]">
+        {settingsLoading || !draft ? (
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        ) : (
+          <ToggleRow
+            title="Gate generated specs"
+            description="Block specs with placeholders, invented routes/selectors or flaky patterns, and run the AI spec review. Turn off to accept every generated spec as runnable without gating."
+            checked={draft.gateEnabled}
+            onChange={(v) => set({ gateEnabled: v })}
+            bordered={false}
+          />
+        )}
+      </GlassCard>
+
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">AI MODEL</div>
       <GlassCard className="p-[22px]">
         {settingsLoading || !draft ? (

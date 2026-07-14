@@ -848,6 +848,45 @@ def test_generation_gate_blocked_vs_rejected(db_session, monkeypatch):
     assert _json.loads(spec2.gate_report)["outcome"] == "rejected"
 
 
+def test_generation_gate_disabled_accepts_spec_as_runnable(db_session, monkeypatch):
+    """With the global quality gate OFF, a spec that would normally be rejected
+    (placeholder + grounded KB) is fully bypassed: accepted as runnable, the file
+    is written, gate_report is marked bypassed, and the AI reviewer never runs."""
+    from app.routers import automation
+    from app.models.run import Run
+    from app.services import settings_store, spec_service
+
+    placeholder_spec = (
+        "import { test, expect } from '@playwright/test';\n\n"
+        "test('Login works', async ({ page }) => {\n"
+        "  await page.goto('/login'); // TODO real route\n"
+        "  await expect(page).toHaveTitle(/Login/);\n"
+        "});\n"
+    )
+    monkeypatch.setattr(spec_service, "generate_spec_code", lambda *a, **k: placeholder_spec)
+    grounded = {"routes": [{"path": "/login"}], "selectors": ["#user"], "baseUrl": "https://x"}
+    monkeypatch.setattr(spec_service, "build_case_context", lambda *a, **k: grounded)
+    monkeypatch.setattr(settings_store, "gate_enabled", lambda: False)
+
+    def _reviewer_must_not_run(*a, **k):
+        raise AssertionError("AI reviewer must not run when the gate is bypassed")
+
+    monkeypatch.setattr(automation, "_run_automation_review", _reviewer_must_not_run)
+
+    run, case = _seed_run_and_case(db_session)
+    spec = automation._generate_one(db_session, db_session.get(Run, run.id), case)
+    db_session.commit()
+
+    import json as _json
+
+    assert spec.status == "draft"
+    assert spec.block_reason == ""
+    assert _json.loads(spec.gate_report).get("bypassed") is True
+    from app.services.workspace_scope import scoped_specs_dir
+
+    assert (scoped_specs_dir(run.owner_id) / run.code / "1428-TC-01.spec.ts").exists()
+
+
 def test_automation_review_critical_finding_rejects_gate_passed_spec(db_session, monkeypatch):
     """A spec that passes the deterministic gate is still rejected when
     automation-reviewer (#181) flags a Critical finding — treated like a gate

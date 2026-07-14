@@ -1304,7 +1304,13 @@ def heal_spec(case_id: int) -> None:
                 break
 
             # Placeholder / invented-reference gate on the regenerated code.
-            gate = placeholder_gate.gate_spec(fixed, known)
+            # Bypassed when the global quality gate is off (#gate-toggle); the
+            # assertion-weakening anti-cheat above still applies.
+            gate = (
+                placeholder_gate.gate_spec(fixed, known)
+                if settings_store.gate_enabled()
+                else placeholder_gate.bypassed_result()
+            )
             if gate["outcome"] == "blocked":
                 # Missing-input: keep the previous spec, mark the spec blocked.
                 spec.status = "blocked"
