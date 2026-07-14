@@ -27,6 +27,12 @@ Navigation is **URL-driven** via `react-router-dom` (`app/src/router.tsx`, `crea
 - There is **no unit-test harness**. The gate is `npm run typecheck` (`tsc -b --noEmit`) + `npm run build`. Do not run `npm test` — the script doesn't exist.
 - Verify UI/behavior at runtime: `npm run dev` (Vite; auto-falls off 5173 if busy) + Playwright (`playwright` is installed; `npx playwright install chromium` once) to drive real routes and screenshot. The API defaults to `127.0.0.1:8787`; filter benign backend fetch/WebSocket errors when asserting on console output.
 
+## Local Agent (agent/)
+
+- **Every Local Agent fix must ship to BOTH the Electron desktop app AND the `npx @q-agent/agent` version.** Both compile from the same `agent/src` (→ `dist/`), so a source fix already covers both — the discipline is at **release**: ship it to both channels, never just one. Electron-specific behavior (window, auto-update) lives in `agent/electron/`.
+- Release with the default `cd agent && npm run release` — it does BOTH: `npm publish` (the npx path) **and** builds the Windows desktop app + stages `qagent-agent-setup.exe` + `latest.yml` into `downloads/` (the Electron electron-updater path). Do **not** use `--no-desktop` or `--desktop-only` alone (each ships only one channel). `npm run release -- --minor|--major` to bump beyond patch. Bump above the currently-shipped version or electron-updater won't upgrade.
+- Agent gate: `cd agent && npm run build` (tsc) + `node --test dist/test`. Agent fixes are **not** delivered by the server `docker compose` rebuild — the agent runs on the paired device and updates via its own installer/npm publish.
+
 ## Issue-driven delivery workflow (default for every request)
 
 For any **feature, enhancement, or bug** the user raises, follow this end-to-end by
