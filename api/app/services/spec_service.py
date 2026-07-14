@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -304,15 +305,34 @@ def generate_fixed_spec_code(
     Raises:
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
+    # Observability (#heal-slow): make it visible whether a heal fix is actually
+    # progressing and whether it's grounded on the live DOM — the heal is slow
+    # because it regenerates the WHOLE spec (~15k tokens), not because it hangs.
+    dom_elements = len(dom_snapshot.get("elements") or []) if dom_snapshot else 0
+    dom_path = (dom_snapshot or {}).get("path") or ""
+    label = f"Heal: {case.ticket_external_id} {case.code}"
+    logger.info(
+        "{} — generating fix (full-spec regenerate): DOM grounding = {}",
+        label,
+        f"{dom_elements} element(s), path={dom_path}" if dom_elements else "none (no live DOM captured)",
+    )
+    started = time.monotonic()
     raw = claude_cli.run_prompt(
         _build_fix_prompt(
             case, current_code, error_message, run_output, context, examples, dom_snapshot
         ),
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
-        label=f"Heal: {case.ticket_external_id} {case.code}",
+        label=label,
     )
-    return _extract_code(raw)
+    code = _extract_code(raw)
+    logger.info(
+        "{} — fix received in {:.1f}s ({} chars)",
+        label,
+        time.monotonic() - started,
+        len(code),
+    )
+    return code
 
 
 def _render_references(references: list[tuple[str, str]] | None) -> str:
