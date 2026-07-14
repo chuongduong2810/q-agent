@@ -463,6 +463,7 @@ class TestCaseUpdate(ApiModel):
     title: str | None = None
     precondition: str | None = None
     steps: list[TestStep] | None = None
+    test_data: list[dict] | None = None
     priority: str | None = None
     test_type: str | None = None
     automation: str | None = None

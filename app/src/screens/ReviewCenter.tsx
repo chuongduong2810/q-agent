@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/Dropdown";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useCaseMutations, useCreateAndLink, useRun, useRunCases } from "@/hooks/queries";
-import { useUI } from "@/store/ui";
+import { useUI, type CaseDraft } from "@/store/ui";
 import type { TestCaseOut } from "@/types/api";
 
 /** Groups the run's flat case list by ticket, preserving first-seen order. */
@@ -250,7 +250,7 @@ function TicketAccordion({
   onSetApproval: (caseId: number, approval: "approved" | "rejected") => void;
   onRegenerate: (caseId: number) => void;
   regeneratingCaseId: number | null;
-  onSave: (caseId: number, body: { title: string; precondition: string; steps: { a: string; e: string }[] }) => void;
+  onSave: (caseId: number, body: CaseDraft) => void;
   onSetAutomation: (caseId: number, automation: string) => void;
 }) {
   const approved = cases.filter((c) => c.approval === "approved").length;
@@ -384,7 +384,7 @@ function CaseRow({
   regenerating: boolean;
   onSetApproval: (approval: "approved" | "rejected") => void;
   onRegenerate: () => void;
-  onSave: (body: { title: string; precondition: string; steps: { a: string; e: string }[] }) => void;
+  onSave: (body: CaseDraft) => void;
   onSetAutomation: (automation: string) => void;
 }) {
   const expandedCase = useUI((s) => s.expandedCase);
@@ -582,7 +582,14 @@ function CaseRow({
                     )}
                   </button>
                   <button
-                    onClick={() => startEdit(c.id, { title: c.title, precondition: c.precondition, steps: c.steps })}
+                    onClick={() =>
+                      startEdit(c.id, {
+                        title: c.title,
+                        precondition: c.precondition,
+                        steps: c.steps,
+                        testData: c.testData ?? [],
+                      })
+                    }
                     className="flex items-center gap-1.5 rounded-[10px] border border-white/10 bg-white/5 px-[13px] py-[7px] text-xs font-semibold text-ink-soft hover:bg-white/10 md:ml-auto"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -608,6 +615,54 @@ function CaseRow({
                     rows={3}
                     className="mb-3 w-full resize-y rounded-[10px] border border-[rgba(139,92,246,.3)] bg-white/5 px-3 py-[9px] text-[13px] leading-relaxed text-ink outline-none focus:border-[rgba(139,92,246,.6)]"
                   />
+                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">TEST DATA</div>
+                  <div className="mb-3 flex flex-col gap-2">
+                    {draft.testData.map((d, i) => (
+                      <div
+                        key={i}
+                        className="grid grid-cols-[1fr_1fr_auto] items-center gap-2"
+                      >
+                        <input
+                          value={d.field}
+                          placeholder="Field"
+                          onChange={(e) => {
+                            const testData = draft.testData.map((row, j) =>
+                              j === i ? { ...row, field: e.target.value } : row,
+                            );
+                            updateDraft({ testData });
+                          }}
+                          className="w-full rounded-[9px] border border-white/[0.12] bg-white/5 px-[11px] py-2 text-[12.5px] text-ink-soft outline-none focus:border-[rgba(139,92,246,.5)]"
+                        />
+                        <input
+                          value={d.value}
+                          placeholder="Value"
+                          onChange={(e) => {
+                            const testData = draft.testData.map((row, j) =>
+                              j === i ? { ...row, value: e.target.value } : row,
+                            );
+                            updateDraft({ testData });
+                          }}
+                          className="w-full rounded-[9px] border border-white/[0.12] bg-white/5 px-[11px] py-2 text-[12.5px] text-ink-dim outline-none focus:border-[rgba(139,92,246,.5)]"
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Remove test data ${i + 1}`}
+                          title="Remove field"
+                          onClick={() => updateDraft({ testData: draft.testData.filter((_, j) => j !== i) })}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] border border-white/[0.12] bg-white/5 text-ink-dim hover:border-[rgba(248,113,113,.5)] hover:text-red-400"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => updateDraft({ testData: [...draft.testData, { field: "", value: "" }] })}
+                      className="flex items-center gap-1.5 self-start rounded-[9px] border border-dashed border-white/[0.16] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-ink-dim hover:bg-white/[0.08]"
+                    >
+                      <Plus size={12} />
+                      Add field
+                    </button>
+                  </div>
                   <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">STEPS</div>
                   <div className="mb-3 flex flex-col gap-2">
                     {draft.steps.map((st, i) => (
@@ -660,7 +715,10 @@ function CaseRow({
                       variant="primary"
                       size="sm"
                       onClick={() => {
-                        onSave(draft);
+                        onSave({
+                          ...draft,
+                          testData: draft.testData.filter((d) => d.field.trim() || d.value.trim()),
+                        });
                         cancelEdit();
                       }}
                     >

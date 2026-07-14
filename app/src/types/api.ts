@@ -398,6 +398,12 @@ export interface TestStep {
   e: string;
 }
 
+/** A single reviewer-editable test-data entry (a labelled input value). */
+export interface TestDatum {
+  field: string;
+  value: string;
+}
+
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
 export interface TestCaseOut {
@@ -409,7 +415,7 @@ export interface TestCaseOut {
   objective: string;
   precondition: string;
   steps: TestStep[];
-  testData: { field: string; value: string }[];
+  testData: TestDatum[];
   linkedAc: string[];
   priority: string;
   testType: string;
@@ -425,6 +431,7 @@ export interface TestCaseUpdate {
   title?: string;
   precondition?: string;
   steps?: TestStep[];
+  testData?: TestDatum[];
   priority?: string;
   testType?: string;
   automation?: string;

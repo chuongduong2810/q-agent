@@ -141,6 +141,34 @@ def _case_rank_query(case: TestCase) -> str:
     return " ".join(parts)
 
 
+def _render_test_data(case: TestCase) -> str:
+    """Render the reviewer-provided test data as a prompt block, or '' if none.
+
+    Args:
+        case: The TestCase whose ``test_data`` (a list of ``{field, value}`` dicts,
+            editable by QA in the Review screen) supplies the concrete inputs the
+            spec should exercise.
+
+    Returns:
+        A prompt paragraph (trailing blank line) listing each field/value so the
+        model fills forms and asserts against QA's exact values instead of
+        inventing them — or an empty string when the case has no usable test data.
+    """
+    rows = [
+        row
+        for row in (case.test_data or [])
+        if isinstance(row, dict) and (row.get("field") or row.get("value"))
+    ]
+    if not rows:
+        return ""
+    lines = "\n".join(f"  - {row.get('field', '')}: {row.get('value', '')}" for row in rows)
+    return (
+        "Test Data (reviewer-provided — use these EXACT values wherever the steps "
+        "reference them: enter them into inputs and assert against them; do not "
+        f"substitute invented values):\n{lines}\n\n"
+    )
+
+
 def _build_prompt(
     case: TestCase,
     context: dict[str, Any] | None = None,
@@ -207,6 +235,7 @@ def _build_prompt(
         f"Title: {case.title}\n"
         f"Precondition: {case.precondition or 'None'}\n"
         f"Steps:\n{steps_lines or '  (none provided)'}\n\n"
+        f"{_render_test_data(case)}"
         f"Use `import {{ test, expect }} from '@playwright/test';` and a single "
         f"`test('{case.code} — {case.title}', async ({{ page }}) => {{ ... }})` block, "
         f"tagged with the Test Case ID ({case.code}) so results trace back to this case, "
@@ -263,6 +292,7 @@ def _build_fix_prompt(
         f"Title: {case.title}\n"
         f"Precondition: {case.precondition or 'None'}\n"
         f"Steps:\n{steps_lines or '  (none provided)'}\n\n"
+        f"{_render_test_data(case)}"
         "Current spec (this is exactly what ran and FAILED):\n"
         f"```typescript\n{current_code.strip()}\n```\n\n"
         f"Failure / error:\n{error_message.strip() or '(no error message captured)'}"
@@ -371,6 +401,7 @@ def _build_chat_edit_prompt(
         "You are editing an existing Playwright test spec based on a reviewer's instruction.\n\n"
         f"{grounding}"
         f"{_render_references(references)}"
+        f"{_render_test_data(case)}"
         f"{_ROBUSTNESS_RULES} {_AUTH_POLICY}\n\n"
         f"Reviewer instruction:\n{instruction.strip()}\n\n"
         "Current spec:\n"

@@ -6,7 +6,7 @@
  */
 
 import { create } from "zustand";
-import type { TestStep } from "@/types/api";
+import type { TestDatum, TestStep } from "@/types/api";
 
 export type TicketFilter = "all" | "ready" | "mine" | "sprint";
 export type RunFilter = "all" | "active" | "review" | "completed" | "failed";
@@ -18,6 +18,7 @@ export interface CaseDraft {
   title: string;
   precondition: string;
   steps: TestStep[];
+  testData: TestDatum[];
 }
 
 interface UIState {
