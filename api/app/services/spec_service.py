@@ -297,15 +297,33 @@ def generate_fixed_spec_code(
     return _extract_code(raw)
 
 
+def _render_references(references: list[tuple[str, str]] | None) -> str:
+    """Render `@spec` mentions the reviewer embedded — the referenced specs' code,
+    shown as read-only context (Claude edits only the current spec)."""
+    if not references:
+        return ""
+    blocks = "\n\n".join(
+        f"// {name}\n```typescript\n{(code or '').strip()}\n```" for name, code in references
+    )
+    return (
+        "Referenced specs (context the reviewer @-mentioned — do NOT edit these, only the "
+        f"current spec below; reuse their patterns/selectors where relevant):\n{blocks}\n\n"
+    )
+
+
 def _build_chat_edit_prompt(
-    case: TestCase, current_code: str, instruction: str, context: dict[str, Any] | None
+    case: TestCase,
+    current_code: str,
+    instruction: str,
+    context: dict[str, Any] | None,
+    references: list[tuple[str, str]] | None = None,
 ) -> str:
     """Render a prompt asking Claude to edit an existing spec per a reviewer instruction.
 
     Feeds the current spec, the natural-language instruction, grounded project
-    context, and the shared robustness rules. Asks for a short prose explanation
-    followed by the COMPLETE edited spec in a ```typescript fence — the caller
-    splits the two (:func:`generate_chat_edit`).
+    context, any @-mentioned reference specs, and the shared robustness rules. Asks
+    for a short prose explanation followed by the COMPLETE edited spec in a
+    ```typescript fence — the caller splits the two (:func:`generate_chat_edit`).
     """
     project_block = render_project_context(
         context, include_secrets=True, rank_query=_case_rank_query(case)
@@ -314,6 +332,7 @@ def _build_chat_edit_prompt(
     return (
         "You are editing an existing Playwright test spec based on a reviewer's instruction.\n\n"
         f"{grounding}"
+        f"{_render_references(references)}"
         f"{_ROBUSTNESS_RULES}"
         f"Reviewer instruction:\n{instruction.strip()}\n\n"
         "Current spec:\n"
@@ -328,21 +347,23 @@ def _build_chat_edit_prompt(
 
 
 def generate_chat_edit(
-    db, run, case: TestCase, current_code: str, instruction: str
+    db, run, case: TestCase, current_code: str, instruction: str,
+    references: list[tuple[str, str]] | None = None,
 ) -> tuple[str, str]:
     """Ask Claude to edit a spec per a NL instruction; return ``(explanation, new_code)``.
 
     Backend for the Automation screen's AI chat panel. Resolves the run's grounded
     project context, prompts Claude for a prose explanation + the complete edited
     spec, and splits the response: ``new_code`` via :func:`_extract_code`, the
-    ``explanation`` = the text before the code fence.
+    ``explanation`` = the text before the code fence. ``references`` are ``(filename,
+    code)`` pairs the reviewer ``@``-mentioned, embedded as read-only context.
 
     Raises:
         claude_cli.ClaudeError: if the CLI is unavailable or errors.
     """
     context = build_case_context(db, case, env=run.env)
     raw = claude_cli.run_prompt(
-        _build_chat_edit_prompt(case, current_code, instruction, context),
+        _build_chat_edit_prompt(case, current_code, instruction, context, references),
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
         label=f"Chat edit: {case.ticket_external_id} {case.code}",
