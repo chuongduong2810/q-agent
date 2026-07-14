@@ -602,17 +602,18 @@ function CaseRow({
                     className="mb-3 w-full rounded-[10px] border border-[rgba(139,92,246,.3)] bg-white/5 px-3 py-[9px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.6)]"
                   />
                   <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">PRECONDITION</div>
-                  <input
+                  <textarea
                     value={draft.precondition}
                     onChange={(e) => updateDraft({ precondition: e.target.value })}
-                    className="mb-3 w-full rounded-[10px] border border-[rgba(139,92,246,.3)] bg-white/5 px-3 py-[9px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.6)]"
+                    rows={3}
+                    className="mb-3 w-full resize-y rounded-[10px] border border-[rgba(139,92,246,.3)] bg-white/5 px-3 py-[9px] text-[13px] leading-relaxed text-ink outline-none focus:border-[rgba(139,92,246,.6)]"
                   />
                   <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">STEPS</div>
                   <div className="mb-3 flex flex-col gap-2">
                     {draft.steps.map((st, i) => (
                       <div
                         key={i}
-                        className="grid grid-cols-[20px_1fr] items-start gap-2 md:grid-cols-[24px_1fr_1fr] md:items-center"
+                        className="grid grid-cols-[20px_1fr_auto] items-start gap-2 md:grid-cols-[24px_1fr_1fr_auto] md:items-center"
                       >
                         <span className="pt-2 font-mono text-xs text-violet md:pt-0">{i + 1}</span>
                         <div className="flex flex-col gap-2 md:contents">
@@ -635,6 +636,15 @@ function CaseRow({
                             className="w-full rounded-[9px] border border-white/[0.12] bg-white/5 px-[11px] py-2 text-[12.5px] text-ink-dim outline-none focus:border-[rgba(139,92,246,.5)]"
                           />
                         </div>
+                        <button
+                          type="button"
+                          aria-label={`Remove step ${i + 1}`}
+                          title="Remove step"
+                          onClick={() => updateDraft({ steps: draft.steps.filter((_, j) => j !== i) })}
+                          className="mt-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] border border-white/[0.12] bg-white/5 text-ink-dim hover:border-[rgba(248,113,113,.5)] hover:text-red-400 md:mt-0"
+                        >
+                          <X size={13} />
+                        </button>
                       </div>
                     ))}
                     <button
