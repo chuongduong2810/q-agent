@@ -144,3 +144,20 @@ test("redeemDevice posts code+name with no auth header", async () => {
   const body = JSON.parse(calls[0].init.body as string);
   assert.deepEqual(body, { code: "PAIR123", name: "my-laptop" });
 });
+
+test("fetchWithTimeout aborts a stalled request once the timeout elapses", async () => {
+  // A server that never responds but honors the abort signal.
+  mockFetch(
+    (_u, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        (init.signal as AbortSignal).addEventListener("abort", () => reject(new Error("aborted")));
+      }),
+  );
+  await assert.rejects(api.fetchWithTimeout("http://127.0.0.1:8787/slow", { method: "POST" }, 20));
+});
+
+test("fetchWithTimeout returns the response when it resolves before the timeout", async () => {
+  mockFetch(() => new Response(null, { status: 200 }));
+  const res = await api.fetchWithTimeout("http://127.0.0.1:8787/ok", {}, 1000);
+  assert.equal(res.status, 200);
+});
