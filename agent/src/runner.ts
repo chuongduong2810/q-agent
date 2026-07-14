@@ -18,6 +18,7 @@ import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorCaptureSc
 import { applyFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedAttachment, ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
+import { agentVersion } from "./version";
 
 // Mirrors api/app/config.py's Settings.exec_timeout_s / auth_capture_timeout_s.
 const EXEC_TIMEOUT_MS = 600_000;
@@ -599,7 +600,9 @@ export async function runAgentLoop(cfg: AgentConfig, signal: { aborted: boolean 
     console.error("Chromium is required to run tests — aborting.");
     return;
   }
-  console.log(`Local Agent started — polling ${cfg.serverUrl} as device #${cfg.deviceId} (${cfg.deviceName})`);
+  console.log(
+    `Local Agent v${agentVersion()} started — polling ${cfg.serverUrl} as device #${cfg.deviceId} (${cfg.deviceName})`
+  );
   while (!signal.aborted) {
     let job: api.Job | null = null;
     try {

@@ -15,6 +15,7 @@ import { AgentConfig, clearConfig, defaultServerUrl, loadConfig, saveConfig } fr
 import { redeemDevice } from "./api";
 import { killActiveChild, runAgentLoop } from "./runner";
 import { startUi } from "./ui";
+import { agentVersion } from "./version";
 
 /** How the user invoked this agent, for accurate "run X" hints: the bare command
  * inside a packaged bundle, else the `npx` form of the published package. */
@@ -23,7 +24,12 @@ function invocation(): string {
 }
 
 const program = new Command();
-program.name("qagent-agent").description("Q-Agent Local Agent — runs Playwright locally for this machine's owner.");
+program
+  .name("qagent-agent")
+  .description("Q-Agent Local Agent — runs Playwright locally for this machine's owner.")
+  // Surfaces the actual installed build (e.g. via `npx @q-agent/agent --version`),
+  // so a stale npx cache serving an old agent is easy to spot.
+  .version(agentVersion(), "-v, --version", "print the agent version");
 
 program
   .command("pair")
