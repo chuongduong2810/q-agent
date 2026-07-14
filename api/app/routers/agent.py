@@ -26,6 +26,8 @@ manual auth is required and which origin(s) to expect it for.
 
 from __future__ import annotations
 
+import threading
+import uuid
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
@@ -34,7 +36,8 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import SessionLocal, get_db
+from app.logging import logger
 from app.deps_auth import require_agent, require_user
 from app.models.execution import Execution, ExecutionResult
 from app.models.run import Run
@@ -376,26 +379,96 @@ def _owned_case_and_run(db: Session, case_id: int, user: User) -> tuple[TestCase
     return case, run
 
 
+# In-flight agent heal-fix jobs (#313): job_id -> {"status": running|done|error,
+# "result"|"error"}. The fix generation is a ~3-min Claude call; running it inline
+# behind a proxy trips the ~100s edge timeout (Cloudflare 524). So the agent starts
+# the job (fast POST) and polls for the result — no single request stays open long.
+_heal_fix_jobs: dict[str, dict] = {}
+_heal_fix_lock = threading.Lock()
+
+
+def _run_heal_fix_job(
+    job_id: str, case_id: int, current_code: str, error: str, output: str, dom: dict | None
+) -> None:
+    """Background worker: run :func:`heal_service.plan_fix` off the request thread.
+
+    Uses its own DB session (the request's session is closed once the POST returns)
+    and stores the terminal outcome in ``_heal_fix_jobs`` for the agent to poll.
+    Never raises — a failure is recorded as an ``error`` job the agent can surface.
+    """
+    db = SessionLocal()
+    try:
+        case = db.get(TestCase, case_id)
+        run = db.get(Run, case.run_id) if case else None
+        if case is None or run is None:
+            result = {"action": "rejected", "reason": "Case/run not found for heal fix."}
+        else:
+            result = heal_service.plan_fix(db, case, run, current_code, error, output, dom)
+        with _heal_fix_lock:
+            _heal_fix_jobs[job_id] = {"status": "done", "result": result}
+    except Exception as exc:  # noqa: BLE001 - surface to the agent, never crash the thread
+        logger.error("Heal fix job {} failed: {}", job_id, exc)
+        with _heal_fix_lock:
+            _heal_fix_jobs[job_id] = {"status": "error", "error": str(exc)}
+    finally:
+        db.close()
+
+
 @router.post("/heal/{case_id}/fix")
 def agent_heal_fix(
     case_id: int, body: dict, user: User = Depends(require_agent), db: Session = Depends(get_db)
 ) -> dict:
-    """Classify a failed heal attempt and, unless it's a product defect, ask Claude
-    for a fix (server holds the LLM creds + KB the agent lacks).
+    """Start an async heal-fix job and return its id immediately (#313).
 
-    Body: ``{currentCode, error, output, domDistilled, attempt}``. Returns the
-    action the agent should take — see :func:`heal_service.plan_fix`.
+    The fix (classify + ask Claude, server holds the LLM creds + KB) is a ~3-min
+    call, so it runs in a background thread instead of inline — a synchronous
+    response would exceed a fronting proxy's ~100s cap (Cloudflare 524) and the
+    agent would never receive the fix. Body: ``{currentCode, error, output,
+    domDistilled, attempt}``. Returns ``{jobId, status:"running"}``; the agent then
+    polls :func:`agent_heal_fix_status`.
     """
-    case, run = _owned_case_and_run(db, case_id, user)
-    return heal_service.plan_fix(
-        db,
-        case,
-        run,
-        body.get("currentCode") or "",
-        body.get("error") or "",
-        body.get("output") or "",
-        body.get("domDistilled"),
-    )
+    _owned_case_and_run(db, case_id, user)  # ownership guard (404 if not the caller's)
+    job_id = uuid.uuid4().hex
+    with _heal_fix_lock:
+        _heal_fix_jobs[job_id] = {"status": "running"}
+    threading.Thread(
+        target=_run_heal_fix_job,
+        args=(
+            job_id,
+            case_id,
+            body.get("currentCode") or "",
+            body.get("error") or "",
+            body.get("output") or "",
+            body.get("domDistilled"),
+        ),
+        daemon=True,
+    ).start()
+    return {"jobId": job_id, "status": "running"}
+
+
+@router.get("/heal/{case_id}/fix/{job_id}")
+def agent_heal_fix_status(
+    case_id: int, job_id: str, user: User = Depends(require_agent), db: Session = Depends(get_db)
+) -> dict:
+    """Poll a heal-fix job started by :func:`agent_heal_fix` (#313).
+
+    Returns ``{status:"running"}`` while the fix is generating, or the terminal
+    ``{status:"done", result:{…plan…}}`` / ``{status:"error", error}`` once ready.
+    A terminal job is popped on delivery so the store doesn't grow unbounded. 404
+    if the job id is unknown (e.g. the API restarted mid-fix).
+    """
+    _owned_case_and_run(db, case_id, user)  # ownership guard
+    with _heal_fix_lock:
+        job = _heal_fix_jobs.get(job_id)
+        if job is not None and job["status"] in ("done", "error"):
+            _heal_fix_jobs.pop(job_id, None)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Heal fix job not found")
+    if job["status"] == "done":
+        return {"status": "done", "result": job["result"]}
+    if job["status"] == "error":
+        return {"status": "error", "error": job["error"]}
+    return {"status": "running"}
 
 
 @router.post("/heal/{case_id}/finalize")

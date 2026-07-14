@@ -225,19 +225,51 @@ export interface HealFixResult {
   gate?: string;
 }
 
-/** Ask the server to classify + fix one failed heal attempt (Claude + KB live server-side). */
+/** Heal-fix polling: the server generates the fix (~3 min Claude call) in the
+ * background so no single request stays open long enough to hit a fronting
+ * proxy's ~100s edge cap (Cloudflare 524). Poll every 3s, capped at 6 min
+ * (covers the server's 300s Claude timeout + margin); each request is short. */
+const HEAL_FIX_POLL_INTERVAL_MS = 3_000;
+const HEAL_FIX_TOTAL_TIMEOUT_MS = 360_000;
+const HEAL_FIX_REQUEST_TIMEOUT_MS = 30_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Ask the server to classify + fix one failed heal attempt (Claude + KB live
+ * server-side). Starts an async job then polls for the result, so a long fix
+ * generation never trips the ~100s proxy timeout that a synchronous call did. */
 export async function postHealFix(
   cfg: AgentConfig,
   caseId: number,
   body: { currentCode: string; error: string; output: string; domDistilled: unknown; attempt: number }
 ): Promise<HealFixResult> {
-  const res = await fetch(`${cfg.serverUrl}/agent/heal/${caseId}/fix`, {
-    method: "POST",
-    headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  await throwIfNotOk(res);
-  return (await res.json()) as HealFixResult;
+  const startRes = await fetchWithTimeout(
+    `${cfg.serverUrl}/agent/heal/${caseId}/fix`,
+    {
+      method: "POST",
+      headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    HEAL_FIX_REQUEST_TIMEOUT_MS
+  );
+  await throwIfNotOk(startRes);
+  const { jobId } = (await startRes.json()) as { jobId?: string };
+  if (!jobId) throw new Error("Heal fix did not return a job id");
+
+  const deadline = Date.now() + HEAL_FIX_TOTAL_TIMEOUT_MS;
+  for (;;) {
+    const res = await fetchWithTimeout(
+      `${cfg.serverUrl}/agent/heal/${caseId}/fix/${jobId}`,
+      { method: "GET", headers: authHeaders(cfg.deviceToken) },
+      HEAL_FIX_REQUEST_TIMEOUT_MS
+    );
+    await throwIfNotOk(res);
+    const data = (await res.json()) as { status: string; result?: HealFixResult; error?: string };
+    if (data.status === "done" && data.result) return data.result;
+    if (data.status === "error") throw new Error(data.error || "Heal fix failed on the server");
+    if (Date.now() > deadline) throw new Error("Heal fix timed out waiting for the server");
+    await sleep(HEAL_FIX_POLL_INTERVAL_MS);
+  }
 }
 
 /** Persist the heal's final outcome + feed a passing DOM-grounded heal into the KB. */
