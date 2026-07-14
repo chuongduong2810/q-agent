@@ -70,6 +70,36 @@ def test_run_spec_chat_persists_edit_and_publishes_reply(db_session, monkeypatch
     assert r["spec"]["code"] == _EDITED
 
 
+def test_resolve_spec_mentions_returns_other_run_specs(db_session):
+    from app.models.testcase import AutomationSpec, TestCase
+
+    run, case, _spec = _seed(db_session, code="// current\n")
+    other = TestCase(
+        run_id=run.id, ticket_external_id="SUR-1500", code="TC-02",
+        title="Other", approval="approved", automation="Playwright",
+    )
+    db_session.add(other)
+    db_session.flush()
+    db_session.add(
+        AutomationSpec(test_case_id=other.id, filename="1500-TC-02.spec.ts", code="// other\n", status="draft")
+    )
+    db_session.commit()
+
+    refs = automation._resolve_spec_mentions(
+        db_session, run, case, "make it like @1500-TC-02.spec.ts please"
+    )
+    assert refs == [("1500-TC-02.spec.ts", "// other\n")]
+    # No mention -> nothing embedded; the edited spec itself is never echoed back.
+    assert automation._resolve_spec_mentions(db_session, run, case, "no mention") == []
+
+
+def test_render_references_embeds_referenced_code():
+    out = spec_service._render_references([("a.spec.ts", "code A")])
+    assert "a.spec.ts" in out and "code A" in out
+    assert spec_service._render_references([]) == ""
+    assert spec_service._render_references(None) == ""
+
+
 def test_run_spec_chat_publishes_error_on_claude_failure(db_session, monkeypatch):
     run, case, _spec = _seed(db_session, code="// old\n")
     published: list[tuple[str, str, dict]] = []

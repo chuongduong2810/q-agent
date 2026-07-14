@@ -12,7 +12,7 @@ import { Send, Sparkles, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRunEvents } from "@/hooks/useRunEvents";
-import { useSendSpecChat, useUpdateSpec } from "@/hooks/queries";
+import { useSendSpecChat, useSpecs, useUpdateSpec } from "@/hooks/queries";
 import { AI_MODEL_OPTIONS } from "@/lib/models";
 import { useUI } from "@/store/ui";
 import type { AutomationSpecOut, ChatErrorPayload, ChatReplyPayload } from "@/types/api";
@@ -55,6 +55,15 @@ export function SpecChatPanel({ runId, spec }: Props) {
   const [input, setInput] = useState("");
   const [model, setModel] = useState<string>(AI_MODEL_OPTIONS[1]?.value ?? "");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // @-mention: the run's specs the reviewer can embed as context. `mention` is the
+  // active token (the text after the last "@") + where it starts, or null.
+  const specs = useSpecs(runId).data ?? [];
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const mentionMatches = mention
+    ? specs.filter((s) => s.filename.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 8)
+    : [];
 
   // Reset the conversation when the selected spec changes.
   useEffect(() => {
@@ -102,7 +111,33 @@ export function SpecChatPanel({ runId, spec }: Props) {
       { id: messageId, role: "assistant", text: "", thinking: true },
     ]);
     setInput("");
+    setMention(null);
     sendChat.mutate({ caseId, message, model: model || undefined, messageId });
+  };
+
+  // Detect an active "@…" token immediately before the caret, to drive the
+  // spec-mention dropdown.
+  const detectMention = (value: string, caret: number) => {
+    const m = /@([\w.\-]*)$/.exec(value.slice(0, caret));
+    setMention(m ? { start: caret - m[0].length, query: m[1] } : null);
+  };
+
+  // Replace the active "@query" with "@<filename> " so the referenced spec is
+  // embedded in the message (the backend resolves the mention to that spec's code).
+  const insertMention = (filename: string) => {
+    if (!mention) return;
+    const to = mention.start + 1 + mention.query.length;
+    const next = `${input.slice(0, mention.start)}@${filename} ${input.slice(to)}`;
+    setInput(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        const pos = mention.start + filename.length + 2;
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      }
+    });
   };
 
   const undo = (m: ChatMessage) => {
@@ -187,7 +222,28 @@ export function SpecChatPanel({ runId, spec }: Props) {
             </div>
 
             {/* Composer */}
-            <div className="border-t border-white/[0.07] p-3">
+            <div className="relative border-t border-white/[0.07] p-3">
+              {/* @-mention dropdown: the run's specs the reviewer can embed as context. */}
+              {mention && mentionMatches.length > 0 && (
+                <div className="absolute inset-x-3 bottom-full mb-2 max-h-56 overflow-y-auto rounded-xl border border-white/[0.12] bg-[#16161f] py-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,.8)]">
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-dim">
+                    Specs
+                  </div>
+                  {mentionMatches.map((s) => (
+                    <button
+                      key={s.id}
+                      onMouseDown={(e) => {
+                        e.preventDefault(); // keep textarea focus
+                        insertMention(s.filename);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-white/[0.06]"
+                    >
+                      <Sparkles size={12} className="shrink-0 text-violet-300" />
+                      <span className="truncate font-mono text-ink-soft">{s.filename}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {QUICK_ACTIONS.map((q) => (
                   <button
@@ -202,16 +258,33 @@ export function SpecChatPanel({ runId, spec }: Props) {
               </div>
               <div className="flex items-end gap-2 rounded-xl border border-white/[0.1] bg-white/[0.03] p-2">
                 <textarea
+                  ref={textareaRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                  }}
                   onKeyDown={(e) => {
+                    if (mention && mentionMatches.length > 0) {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        insertMention(mentionMatches[0].filename);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation(); // don't let the global Escape close the drawer
+                        setMention(null);
+                        return;
+                      }
+                    }
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       send(input);
                     }
                   }}
                   rows={1}
-                  placeholder="Ask Q-Agent to edit this spec…"
+                  placeholder="Ask Q-Agent to edit this spec… (@ to reference a spec)"
                   className="max-h-32 flex-1 resize-none bg-transparent px-1 text-[12.5px] text-ink outline-none placeholder:text-ink-dim"
                 />
                 <button

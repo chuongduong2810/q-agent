@@ -13,6 +13,7 @@ persists AutomationSpec rows. Manual cases are skipped. Publishes WS progress.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from uuid import uuid4
 
@@ -565,6 +566,25 @@ def regenerate_case_spec(
     return {"started": True, "caseId": case_id}
 
 
+_SPEC_MENTION_RE = re.compile(r"@([\w.\-]+\.spec\.ts)")
+
+
+def _resolve_spec_mentions(db, run: Run, case: TestCase, message: str) -> list[tuple[str, str]]:
+    """Resolve ``@<filename>.spec.ts`` mentions in a chat message to (filename, code)
+    pairs for other specs in the same run — the reviewer's embedded context. Skips
+    the spec being edited and de-dupes; best-effort (returns [] on no matches)."""
+    names = {n for n in _SPEC_MENTION_RE.findall(message or "")}
+    if not names:
+        return []
+    rows = (
+        db.query(AutomationSpec)
+        .join(TestCase, AutomationSpec.test_case_id == TestCase.id)
+        .filter(TestCase.run_id == run.id, AutomationSpec.filename.in_(names))
+        .all()
+    )
+    return [(r.filename, r.code or "") for r in rows if r.test_case_id != case.id]
+
+
 def _run_spec_chat(run_id: int, case_id: int, message: str, message_id: str) -> None:
     """Background worker: apply a reviewer's chat instruction to a spec via Claude.
 
@@ -591,7 +611,10 @@ def _run_spec_chat(run_id: int, case_id: int, message: str, message_id: str) -> 
             return
         prev_code = spec.code or ""
         try:
-            explanation, new_code = spec_service.generate_chat_edit(db, run, case, prev_code, message)
+            references = _resolve_spec_mentions(db, run, case, message)
+            explanation, new_code = spec_service.generate_chat_edit(
+                db, run, case, prev_code, message, references
+            )
             # Persist + re-gate exactly like a manual edit (update_case_spec).
             spec.code = new_code
             context = spec_service.build_case_context(db, case, env=run.env)
