@@ -114,17 +114,39 @@ test("postComplete sends the aggregate body", async () => {
   assert.deepEqual(body, { passed: 3, failed: 1, log: "tail" });
 });
 
-test("postHealFix posts the attempt to /agent/heal/{caseId}/fix and returns the action", async () => {
-  mockFetch(() => Response.json({ action: "fixed", code: "// fixed", diff: "@@" }));
+test("postHealFix starts a job then polls /agent/heal/{caseId}/fix/{jobId} for the action", async () => {
+  // Async flow (#313): POST starts the job (returns jobId), GET polls until done.
+  mockFetch((url, init) => {
+    if (init.method === "POST") return Response.json({ jobId: "job-1", status: "running" });
+    return Response.json({ status: "done", result: { action: "fixed", code: "// fixed", diff: "@@" } });
+  });
   const out = await api.postHealFix(cfg, 99, {
     currentCode: "// old", error: "boom", output: "tail", domDistilled: { path: "/x" }, attempt: 2,
   });
+  // First call: POST to start with the attempt body.
   assert.equal(calls[0].url, "http://127.0.0.1:8787/agent/heal/99/fix");
   assert.equal(calls[0].init.method, "POST");
   const body = JSON.parse(calls[0].init.body as string);
   assert.deepEqual(body, { currentCode: "// old", error: "boom", output: "tail", domDistilled: { path: "/x" }, attempt: 2 });
+  // Second call: GET poll on the returned job id.
+  assert.equal(calls[1].url, "http://127.0.0.1:8787/agent/heal/99/fix/job-1");
+  assert.equal(calls[1].init.method, "GET");
   assert.equal(out.action, "fixed");
   assert.equal(out.code, "// fixed");
+});
+
+test("postHealFix surfaces a server-side error job", async () => {
+  mockFetch((url, init) => {
+    if (init.method === "POST") return Response.json({ jobId: "job-2", status: "running" });
+    return Response.json({ status: "error", error: "Claude timed out" });
+  });
+  await assert.rejects(
+    () =>
+      api.postHealFix(cfg, 99, {
+        currentCode: "// old", error: "boom", output: "", domDistilled: null, attempt: 1,
+      }),
+    /Claude timed out/
+  );
 });
 
 test("postHealFinalize posts the outcome to /agent/heal/{caseId}/finalize", async () => {
