@@ -5,7 +5,7 @@ import { toast } from "@/lib/toast";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/misc";
-import { runColor, timeAgo } from "@/components/dashboard/runStatus";
+import { runColor, runEffectiveStatus, timeAgo } from "@/components/dashboard/runStatus";
 import { useReports, useRuns } from "@/hooks/queries";
 
 interface FlakyRow {
@@ -173,7 +173,7 @@ export function Reports() {
           ) : (
             <div className="flex flex-col gap-[9px]">
               {recentRuns.map((r) => {
-                const color = runColor(r.status);
+                const color = runColor(runEffectiveStatus(r));
                 return (
                   <div
                     key={r.id}

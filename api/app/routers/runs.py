@@ -155,7 +155,27 @@ def _attach_run_aggregates(db: Session, runs: list[Run]) -> list[Run]:
         run.passed = execution.passed if execution else 0
         report = reports.get(run.id)
         run.pass_rate = report.pass_rate if report else None
+        run.result = _run_result(execution)
     return runs
+
+
+def _run_result(execution: Execution | None) -> str:
+    """QA verdict for a run from its latest execution, independent of pipeline stage.
+
+    Args:
+        execution: The run's latest :class:`Execution`, or None if it never ran.
+
+    Returns:
+        ``"not_run"`` (no execution / zero cases), ``"failed"`` (>=1 failed),
+        ``"mixed"`` (both passes and failures), or ``"passed"`` (all passed).
+    """
+    if execution is None or execution.total == 0:
+        return "not_run"
+    if execution.failed > 0 and execution.passed > 0:
+        return "mixed"
+    if execution.failed > 0:
+        return "failed"
+    return "passed"
 
 
 @router.get("", response_model=list[RunOut])

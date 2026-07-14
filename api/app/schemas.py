@@ -570,6 +570,12 @@ class RunOut(ApiModel):
     total: int = 0  # cases in the latest execution (the "/N" denominator)
     passed: int = 0  # passed in the latest execution
     pass_rate: float | None = None  # 0..100 from the latest report; None until finalized
+    # QA verdict from the latest execution, decoupled from the pipeline `status`
+    # (which only tracks stage/lifecycle). "not_run" until tests execute; then
+    # "passed" / "failed" (>=1 fail) / "mixed" (some pass + some fail). Lets the UI
+    # show the test outcome instead of conflating it with a post-execution
+    # pipeline hiccup (see the "Incomplete" display state).
+    result: str = "not_run"
 
 
 class RunDetailOut(RunOut):

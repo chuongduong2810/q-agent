@@ -6,7 +6,7 @@ import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
-import { runRateLabel } from "@/components/dashboard/runStatus";
+import { runEffectiveStatus, runRateLabel } from "@/components/dashboard/runStatus";
 import { useRun } from "@/hooks/queries";
 
 /**
@@ -60,7 +60,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
             }}
           >
             <CheckSquare size={12} strokeWidth={2} />
-            {runRateLabel(run.status)} &#183; stage {stage} of 9
+            {runRateLabel(runEffectiveStatus(run))} &#183; stage {stage} of 9
           </span>
         </>
       )}

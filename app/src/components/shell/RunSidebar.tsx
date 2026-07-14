@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { GLOBAL_MINI, PIPELINE } from "@/components/shell/navConfig";
-import { runColor, runRateLabel } from "@/components/dashboard/runStatus";
+import { runColor, runEffectiveStatus, runRateLabel } from "@/components/dashboard/runStatus";
 import { runStatusToStage } from "@/components/ui/PipelineRail";
 import { useRun } from "@/hooks/queries";
 
@@ -25,7 +25,8 @@ export function RunSidebar({ runId }: { runId: number }) {
   const urlSeg = pathname.match(/^\/runs\/\d+(?:\/(\w+))?/)?.[1] ?? null;
   // 1-based pipeline stage the run is currently at, from its status.
   const currentStage = run ? runStatusToStage[run.status] ?? 0 : 0;
-  const accent = run ? runColor(run.status) : "#a0a0b2";
+  const effectiveStatus = run ? runEffectiveStatus(run) : null;
+  const accent = effectiveStatus ? runColor(effectiveStatus) : "#a0a0b2";
 
   return (
     <aside className="glass-strong flex w-[248px] shrink-0 flex-col rounded-[22px] p-[20px_14px] shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)]">
@@ -57,7 +58,7 @@ export function RunSidebar({ runId }: { runId: number }) {
                 color: accent,
               }}
             >
-              {runRateLabel(run.status)}
+              {runRateLabel(effectiveStatus ?? run.status)}
             </span>
           )}
         </div>
