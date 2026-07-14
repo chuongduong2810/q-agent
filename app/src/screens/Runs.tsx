@@ -6,6 +6,7 @@ import {
   isTerminalRun,
   isWorkingRun,
   runBadge,
+  runEffectiveStatus,
   runGroup,
   timeAgoShort,
 } from "@/components/dashboard/runStatus";
@@ -45,11 +46,12 @@ export function Runs() {
   const { data: runs, isLoading } = useRuns();
   const all = runs ?? [];
 
+  const groupOf = (r: RunOut) => runGroup(runEffectiveStatus(r));
   const counts = {
-    active: all.filter((r) => runGroup(r.status) === "active").length,
-    review: all.filter((r) => runGroup(r.status) === "review").length,
-    completed: all.filter((r) => runGroup(r.status) === "completed").length,
-    failed: all.filter((r) => runGroup(r.status) === "failed").length,
+    active: all.filter((r) => groupOf(r) === "active").length,
+    review: all.filter((r) => groupOf(r) === "review").length,
+    completed: all.filter((r) => groupOf(r) === "completed").length,
+    failed: all.filter((r) => groupOf(r) === "failed").length,
   };
 
   const tabs: { key: RunFilter; label: string; count: number }[] = [
@@ -71,8 +73,8 @@ export function Runs() {
     other: 4,
   };
   const filtered = all
-    .filter((r) => runFilter === "all" || runGroup(r.status) === runFilter)
-    .sort((a, b) => GROUP_ORDER[runGroup(a.status)] - GROUP_ORDER[runGroup(b.status)]);
+    .filter((r) => runFilter === "all" || groupOf(r) === runFilter)
+    .sort((a, b) => GROUP_ORDER[groupOf(a)] - GROUP_ORDER[groupOf(b)]);
   const selected = all.filter((r) => runSel[r.id]);
 
   return (
@@ -195,7 +197,7 @@ function RunRow({
   onOpen: () => void;
   onPlay: () => void;
 }) {
-  const badge = runBadge(run.status);
+  const badge = runBadge(runEffectiveStatus(run));
   const working = isWorkingRun(run.status);
   const paused = isPausedRun(run.status);
   const isReview = run.status === "review";

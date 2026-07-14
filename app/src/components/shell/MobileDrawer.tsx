@@ -10,7 +10,7 @@ import {
   activeNavPath,
   type NavItem,
 } from "@/components/shell/navConfig";
-import { runColor, runRateLabel } from "@/components/dashboard/runStatus";
+import { runColor, runEffectiveStatus, runRateLabel } from "@/components/dashboard/runStatus";
 import { useRun } from "@/hooks/queries";
 import { useRunRouteId } from "@/hooks/useRunRouteId";
 import { useLogout } from "@/hooks/useLogout";
@@ -140,9 +140,12 @@ export function MobileDrawer() {
                     {run && (
                       <span
                         className="rounded-full px-2 py-0.5 text-[9.5px] font-bold"
-                        style={{ background: `${runColor(run.status)}2e`, color: runColor(run.status) }}
+                        style={{
+                          background: `${runColor(runEffectiveStatus(run))}2e`,
+                          color: runColor(runEffectiveStatus(run)),
+                        }}
                       >
-                        {runRateLabel(run.status)}
+                        {runRateLabel(runEffectiveStatus(run))}
                       </span>
                     )}
                   </div>

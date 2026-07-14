@@ -485,6 +485,10 @@ export type RunStatus =
   | "cancelled"
   | "failed";
 
+/** QA verdict from a run's latest execution — decoupled from the pipeline
+ * `RunStatus`. Drives the headline outcome (see `runEffectiveStatus`). */
+export type RunResult = "not_run" | "passed" | "failed" | "mixed";
+
 export interface RunTicketOut {
   ticketExternalId: string;
   position: number;
@@ -524,6 +528,9 @@ export interface RunOut {
   passed: number;
   /** Pass rate (0..100) from the latest report; null until finalized. */
   passRate: number | null;
+  /** QA verdict from the latest execution, independent of the pipeline `status`.
+   * "not_run" until tests execute. See `runEffectiveStatus`. */
+  result: RunResult;
 }
 export interface RunDetailOut extends RunOut {
   runTickets: RunTicketOut[];

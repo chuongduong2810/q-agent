@@ -5,7 +5,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
-import { runColor, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
+import { runColor, runEffectiveStatus, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
 import { useAuditEvents, useReports, useRunCases, useRuns } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
 import { useUI } from "@/store/ui";
@@ -171,7 +171,7 @@ export function Dashboard() {
               <span
                 className="h-1.5 w-1.5 rounded-full"
                 style={{
-                  background: heroRun ? runColor(heroRun.status) : "#22d3ee",
+                  background: heroRun ? runColor(runEffectiveStatus(heroRun)) : "#22d3ee",
                   animation: "pulseDot 1.5s infinite",
                 }}
               />
@@ -317,7 +317,7 @@ export function Dashboard() {
           ) : (
             <div className="flex flex-col gap-[9px]">
               {recentRuns.slice(0, 4).map((r) => {
-                const color = runColor(r.status);
+                const color = runColor(runEffectiveStatus(r));
                 return (
                   <div
                     key={r.id}
@@ -337,7 +337,7 @@ export function Dashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-[13px] font-extrabold" style={{ color }}>
-                        {runRateLabel(r.status)}
+                        {runRateLabel(runEffectiveStatus(r))}
                       </div>
                       <div className="text-[10.5px] text-[#7a7a8c]">{timeAgo(r.createdAt)}</div>
                     </div>
