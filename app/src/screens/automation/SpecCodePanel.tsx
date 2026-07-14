@@ -1,4 +1,5 @@
-import { Download, Pencil, Play, Save, Sparkles, Wand2, X } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Copy, Download, Pencil, Play, Save, Sparkles, Wand2, X } from "lucide-react";
+import { OverflowMenu } from "@/components/ui/OverflowMenu";
 import type { AutomationSpecOut } from "@/types/api";
 import { Pill } from "@/components/ui/badges";
 import { GateRejectedNote } from "./banners";
@@ -121,28 +122,6 @@ export function SpecCodePanel({
             </>
           ) : (
             <>
-              <button
-                onClick={collapseAll}
-                disabled={foldRanges.length === 0}
-                className="rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-40"
-              >
-                Collapse all
-              </button>
-              <button
-                onClick={expandAll}
-                disabled={folded.size === 0}
-                className="rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-40"
-              >
-                Expand all
-              </button>
-              <button
-                onClick={onStartEdit}
-                disabled={generating || specRegenerating}
-                className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-40"
-              >
-                <Pencil size={13} />
-                Edit
-              </button>
               <RegenerateWithNote
                 label="Regenerate"
                 regenerating={specRegenerating}
@@ -207,21 +186,45 @@ export function SpecCodePanel({
               >
                 <Sparkles size={13} /> Edit with Q-Agent
               </button>
-              <button
-                onClick={onCopy}
-                disabled={specRegenerating}
-                className="rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-60"
-              >
-                {copyLabel}
-              </button>
-              <button
-                onClick={onDownload}
-                disabled={specRegenerating}
-                className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-60"
-              >
-                <Download size={13} />
-                Download
-              </button>
+              <OverflowMenu
+                items={[
+                  {
+                    key: "collapse",
+                    label: "Collapse all",
+                    icon: <ChevronsDownUp size={14} />,
+                    onClick: collapseAll,
+                    disabled: foldRanges.length === 0,
+                  },
+                  {
+                    key: "expand",
+                    label: "Expand all",
+                    icon: <ChevronsUpDown size={14} />,
+                    onClick: expandAll,
+                    disabled: folded.size === 0,
+                  },
+                  {
+                    key: "edit",
+                    label: "Edit manually",
+                    icon: <Pencil size={14} />,
+                    onClick: onStartEdit,
+                    disabled: generating || specRegenerating,
+                  },
+                  {
+                    key: "copy",
+                    label: copyLabel === "Copy" ? "Copy" : copyLabel,
+                    icon: <Copy size={14} />,
+                    onClick: onCopy,
+                    disabled: specRegenerating,
+                  },
+                  {
+                    key: "download",
+                    label: "Download",
+                    icon: <Download size={14} />,
+                    onClick: onDownload,
+                    disabled: specRegenerating,
+                  },
+                ]}
+              />
             </>
           )}
         </div>
