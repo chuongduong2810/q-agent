@@ -269,7 +269,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
                   </button>
                 ))}
               </div>
-              <div className="flex items-end gap-2 rounded-xl border border-white/[0.1] bg-white/[0.03] p-2">
+              <div className="flex items-end gap-2 rounded-xl border border-white/[0.16] bg-white/[0.07] p-2">
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -298,7 +298,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
                   }}
                   rows={1}
                   placeholder="Ask Q-Agent to edit this spec… (@ to reference a spec)"
-                  className="max-h-32 flex-1 resize-none bg-transparent px-1 text-[12.5px] text-ink outline-none placeholder:text-ink-dim"
+                  className="max-h-32 flex-1 resize-none bg-transparent px-1 text-[13.5px] text-ink outline-none placeholder:text-ink-dim"
                 />
                 <button
                   onClick={() => send(input)}
@@ -361,7 +361,7 @@ function AssistantMessage({
           </div>
         ) : (
           <>
-            <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink-soft">
+            <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
               {shown}
               {!done && <span className="caret-blink">▍</span>}
             </div>
