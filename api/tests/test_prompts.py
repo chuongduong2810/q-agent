@@ -79,3 +79,51 @@ def test_build_fix_prompt_includes_discovered_selector():
     )
     assert "Live DOM captured at failure" in prompt
     assert "testid='username'" in prompt
+
+
+def _auth_policy_case():
+    """A minimal TestCase stand-in for the auth-policy prompt assertions (#291)."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        title="Sign in", precondition=None, steps=[],
+        ticket_external_id="TCK-1", code="TC-01",
+    )
+
+
+def _assert_auth_policy(prompt: str):
+    """Every spec prompt must forbid mocking/bypassing auth and any 'Auth note'
+    narration, and point at the saved manual-login session instead (#291)."""
+    assert "Do NOT mock, stub, intercept, or bypass authentication" in prompt
+    assert "/api/sessions/me" in prompt
+    assert "VITE_BYPASS_AUTH" in prompt
+    assert "saved manual-login session" in prompt
+    assert '"Auth note"' in prompt
+
+
+def test_build_prompt_forbids_mocking_auth_and_narration():
+    """Initial generation carries the no-mock-auth / no-narration policy (#291)."""
+    from app.services.spec_service import _build_prompt
+
+    _assert_auth_policy(_build_prompt(_auth_policy_case()))
+
+
+def test_build_fix_prompt_forbids_mocking_auth_and_narration():
+    """Self-heal carries the policy too, so it can't reintroduce mocked auth (#291)."""
+    from app.services.spec_service import _build_fix_prompt
+
+    prompt = _build_fix_prompt(
+        _auth_policy_case(), "test('Sign in', async () => {});", "assertion failed"
+    )
+    _assert_auth_policy(prompt)
+
+
+def test_build_chat_edit_prompt_forbids_mocking_auth_and_narration():
+    """AI chat-edit carries the policy too (#291)."""
+    from app.services.spec_service import _build_chat_edit_prompt
+
+    prompt = _build_chat_edit_prompt(
+        _auth_policy_case(), "test('Sign in', async () => {});",
+        "add an assertion", context=None,
+    )
+    _assert_auth_policy(prompt)

@@ -127,6 +127,12 @@ If any prerequisite is missing, stop and request that `project-bootstrap` (for t
 - Reference the source **Test Case ID** in the `test()` title so failures are traceable.
 - **No unresolved placeholders** — bake in the real base URL, routes, selectors and credentials
   from the project context; a `// TODO` is allowed only for a value truly missing from the context.
+- **Never mock or bypass auth.** Authentication is handled outside the spec by the run's saved
+  manual-login session (storageState) and the real test-account credentials in the project context.
+  Test as a real authenticated user — do NOT route-mock identity/session endpoints (e.g.
+  `GET /api/sessions/me`, `/api/sessions/permissions`), assume flags like `VITE_BYPASS_AUTH`, or
+  fabricate a `storageState`. And do NOT emit meta-commentary / "Auth note" prose explaining auth
+  strategy, mocking decisions, or environment assumptions — keep comments to brief step annotations.
 
 ## Handoff / Success Criteria
 
