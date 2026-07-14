@@ -180,6 +180,64 @@ def _known_route_paths(known: dict) -> set[str]:
     return out
 
 
+# A `${...}` template-literal interpolation inside a goto() target.
+_INTERP_RE = re.compile(r"\$\{[^}]*\}")
+
+
+def _path_segments(path: str) -> list[str]:
+    """Split a normalized path into its non-empty segments."""
+    return [seg for seg in path.strip("/").split("/") if seg]
+
+
+def _route_goto_is_grounded(raw: str, base_url: str, known_routes: set[str]) -> bool:
+    """Whether a goto() target corresponds to a known KB route.
+
+    Handles both plain string paths and template literals that interpolate
+    grounded constants, e.g. ``\\`${BASE_URL}/employers/${EMPLOYER_ID}/groups/${GROUP_ID}\\```.
+    A leading ``${...}`` (the base-URL variable) or literal ``base_url`` prefix is
+    stripped, then each ``${...}`` path segment is treated as a wildcard and matched
+    against the KB routes segment-by-segment: a legitimately *parameterized* real
+    route is grounded, while a made-up *static* segment (e.g. ``/made-up-screen``)
+    still fails to match. A path whose segments are all interpolations carries no
+    static structure to verify, so it is treated as grounded (no false positives).
+
+    Args:
+        raw: The raw goto() argument as captured from source (quotes/backticks
+            already stripped by the caller's regex).
+        base_url: The KB base URL, stripped from the front when present as a literal.
+        known_routes: Normalized KB route paths to match against.
+
+    Returns:
+        True when the target is (or matches) a known route, False when it looks
+        invented.
+    """
+    value = raw.strip()
+    # Drop a leading ${...} interpolation (the base-URL variable) or a literal
+    # base_url prefix, so only the route path remains for comparison.
+    lead = re.match(r"^\s*\$\{[^}]*\}", value)
+    if lead:
+        value = value[lead.end():]
+    elif base_url and value.startswith(base_url):
+        value = value[len(base_url):]
+
+    if "${" not in value:
+        # Plain literal path — exact match against the KB (the empty/"/" defaults
+        # are handled as safe by the caller).
+        return _normalize_path(value) in known_routes
+
+    spec_segs = _path_segments(_normalize_path(value))
+    if not any("${" not in seg for seg in spec_segs):
+        # No static segment to verify — cannot be confidently called invented.
+        return True
+    for route in known_routes:
+        route_segs = _path_segments(route)
+        if len(route_segs) != len(spec_segs):
+            continue
+        if all("${" in s or s == r for s, r in zip(spec_segs, route_segs)):
+            return True
+    return False
+
+
 def _known_selectors(known: dict) -> set[str]:
     """Set of selector strings the KB knows about (whitespace-trimmed)."""
     out: set[str] = set()
@@ -206,10 +264,16 @@ def _find_invented(code: str, known: dict) -> list[str]:
 
     known_routes = _known_route_paths(known)
     if known_routes:
+        base_url = (known.get("base_url") or "").strip()
         for raw in _GOTO_RE.findall(code):
             path = _normalize_path(raw)
             # Ignore relative-to-baseURL "" and pure "/" — those are safe defaults.
-            if path and path != "/" and path not in known_routes and raw not in seen:
+            if not path or path == "/" or raw in seen:
+                continue
+            # Template-literal targets (`${BASE_URL}/employers/${ID}`) are matched by
+            # pattern, not string equality — grounded, parameterized routes must not
+            # be mistaken for invented ones (#gate false positive).
+            if not _route_goto_is_grounded(raw, base_url, known_routes):
                 seen.add(raw)
                 invented.append(f"route {raw}")
 
