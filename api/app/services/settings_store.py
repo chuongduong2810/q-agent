@@ -33,6 +33,10 @@ DEFAULTS: dict[str, Any] = {
     # runner) or "local-agent" (queued for a paired device to claim). Fresh
     # installs default to the user's machine ("My machine").
     "executionTarget": "local-agent",
+    # Global spec quality-gate toggle (#gate-toggle). True = gate specs on
+    # generation/edit/heal (default); False = bypass gating and accept every
+    # spec as runnable. See placeholder_gate + automation._gate_spec_or_bypass.
+    "gateEnabled": True,
 }
 
 
@@ -52,6 +56,16 @@ def load_settings() -> dict[str, Any]:
     merged = dict(DEFAULTS)
     merged.update(data)
     return merged
+
+
+def gate_enabled() -> bool:
+    """Whether the global spec quality gate is active (default on).
+
+    Read by the spec generation/edit/heal paths to decide whether to gate a spec
+    or bypass gating entirely (#gate-toggle). Defaults to True for any install
+    that predates the setting.
+    """
+    return bool(load_settings().get("gateEnabled", True))
 
 
 def save_settings(data: dict[str, Any]) -> dict[str, Any]:

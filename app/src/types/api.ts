@@ -767,6 +767,10 @@ export interface SettingsOut {
   /** Default execution target for new runs — the server, or a paired Local
    * Agent on the user's machine. Configured on the Settings screen. */
   executionTarget: ExecutionTarget;
+  /** Global spec quality-gate toggle. When false, spec generation/edit/heal skip
+   * the placeholder/invented-reference gate, the AI reviewer and the parse check,
+   * accepting every generated spec as runnable. */
+  gateEnabled: boolean;
 }
 export type SettingsUpdate = Partial<SettingsOut>;
 

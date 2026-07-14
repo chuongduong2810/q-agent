@@ -76,6 +76,26 @@ _BRITTLE_CSS_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 
+def bypassed_result() -> dict:
+    """A ``passed`` gate result for when the global quality gate is disabled.
+
+    Returned by callers (spec generation/edit/heal) instead of running any checks
+    when the workspace ``gateEnabled`` setting is off (#gate-toggle). Carries
+    ``bypassed=True`` so downstream code (e.g. the AI-reviewer step) can tell a
+    genuine pass from a bypass, and the UI can label it as "gate disabled".
+
+    Returns:
+        A gate dict with ``outcome="passed"``, no findings, and ``bypassed=True``.
+    """
+    return {
+        "outcome": "passed",
+        "findings": [],
+        "reason": "Quality gate is disabled — the spec was accepted without gating.",
+        "unblock_action": "",
+        "bypassed": True,
+    }
+
+
 def count_assertions(code: str) -> int:
     """Count Playwright assertion occurrences in a spec's source.
 
