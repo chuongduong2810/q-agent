@@ -23,7 +23,7 @@ from app.models.run import Run
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas import CommentEdit, PublishRequest, TicketCommentOut
-from app.services import claude_cli
+from app.services import claude_cli, run_context
 from app.services.claude_cli import ClaudeError
 from app.services.ownership import get_owned_or_404
 from app.services.publish_service import publish_one
@@ -68,7 +68,9 @@ def _latest_report(db: Session, run_id: int) -> Report:
     return report
 
 
-def _summarize_ticket(ticket_external_id: str, summary: dict, ai_failure_analysis: str) -> str:
+def _summarize_ticket(
+    ticket_external_id: str, summary: dict, ai_failure_analysis: str, run_id: int
+) -> str:
     """Ask Claude for ONE consolidated QA comment aggregating all of a ticket's
     test cases — overall verdict, per-case breakdown, and consolidated findings.
 
@@ -98,12 +100,20 @@ def _summarize_ticket(ticket_external_id: str, summary: dict, ai_failure_analysi
         "breakdown, and (3) consolidated key findings for any failures (fold in each failing "
         "case's diagnosis). Do not include a greeting or signature."
     )
-    return claude_cli.run_prompt(
-        prompt,
-        skill=TICKET_COMMENT_GENERATOR,
-        include_template=True,
-        label=f"Comment: {ticket_external_id}",
-    ).strip()
+    # Attribute to the run so Claude resolves the run OWNER's credential
+    # (own→shared) rather than the ambient/shared one — a request thread has no
+    # ambient run, so it would otherwise fall back to a possibly-expired shared credential.
+    _prev_run = run_context.get_run()
+    run_context.set_run(run_id)
+    try:
+        return claude_cli.run_prompt(
+            prompt,
+            skill=TICKET_COMMENT_GENERATOR,
+            include_template=True,
+            label=f"Comment: {ticket_external_id}",
+        ).strip()
+    finally:
+        run_context.set_run(_prev_run)
 
 
 @router.post("/runs/{run_id}/comments/prepare", response_model=list[TicketCommentOut])
@@ -138,7 +148,7 @@ def prepare_comments(
             _TARGET_STATUS_ALL_PASS if ticket_status == "Passed" else _TARGET_STATUS_ANY_FAIL
         )
         try:
-            body = _summarize_ticket(ticket_external_id, summary, ai_failure_analysis)
+            body = _summarize_ticket(ticket_external_id, summary, ai_failure_analysis, run_id)
         except ClaudeError as exc:
             raise HTTPException(status_code=502, detail=f"Claude CLI failed: {exc}") from exc
 

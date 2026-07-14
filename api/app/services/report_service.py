@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.execution import Execution, ExecutionResult
 from app.models.report import Report
-from app.services import claude_cli
+from app.services import claude_cli, run_context
 from app.services.claude_cli import ClaudeError
 from app.services.skills import EXECUTION_ANALYZER
 
@@ -151,10 +151,17 @@ def build_report(db: Session, run_id: int) -> Report:
     overall_result = "passed" if failed == 0 and total > 0 else "failed" if total > 0 else "unknown"
 
     failed_results = [r for r in results if r.status == "fail"]
+    # Attribute the Claude call to this run so it resolves the run OWNER's
+    # credential (own→shared), not the ambient/shared one — otherwise a request
+    # thread with no ambient run falls back to a possibly-expired shared credential.
+    _prev_run = run_context.get_run()
+    run_context.set_run(run_id)
     try:
         ai_failure_analysis = _ai_failure_analysis(failed_results)
     except ClaudeError as exc:
         ai_failure_analysis = f"AI failure analysis unavailable: {exc}"
+    finally:
+        run_context.set_run(_prev_run)
 
     report = Report(
         run_id=run_id,
