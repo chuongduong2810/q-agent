@@ -215,6 +215,10 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     return;
   }
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "qagent-"));
+  // Set once the (detached) evidence uploader takes ownership of workDir — it
+  // then removes the dir when its uploads finish. Until then, this function's
+  // finally cleans up (error / early-return paths).
+  let handedOff = false;
   try {
     for (const spec of job.specs) {
       fs.writeFileSync(path.join(workDir, spec.filename), spec.code, "utf-8");
@@ -347,11 +351,34 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     emit("job-complete", { executionId: job.executionId, passed, failed });
 
     // Now that the run is marked done, upload the (deferred) evidence artifacts.
-    // The web already reflects the outcome; these trail in the background and the
-    // Evidence step picks them up as they land.
+    // These run DETACHED from the claim loop: the run's outcome is already
+    // reported, so the agent must be free to claim the next run immediately
+    // rather than blocking here until every (potentially multi-MB) artifact
+    // finishes uploading — that block is what stalled the agent when a new run
+    // was started mid-upload. The uploader owns workDir cleanup from here.
+    handedOff = true;
+    void uploadEvidenceThenCleanup(cfg, job.executionId, pendingEvidence, workDir);
+  } finally {
+    if (!handedOff) fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Upload a completed job's deferred evidence artifacts, then remove its workDir.
+ * Runs detached from the claim loop (see {@link processJob}) so uploads never
+ * delay claiming the next run. Never throws: each upload's failure is logged and
+ * the workDir is always removed, even if some uploads fail or time out.
+ */
+async function uploadEvidenceThenCleanup(
+  cfg: AgentConfig,
+  executionId: number,
+  pendingEvidence: { ticket: string; caseCode: string; kind: string; filePath: string }[],
+  workDir: string
+): Promise<void> {
+  try {
     for (const ev of pendingEvidence) {
       await api
-        .postEvidence(cfg, job.executionId, {
+        .postEvidence(cfg, executionId, {
           ticketExternalId: ev.ticket,
           caseCode: ev.caseCode,
           kind: ev.kind,

@@ -60,6 +60,27 @@ async function throwIfNotOk(res: Response): Promise<void> {
   }
 }
 
+/** Multipart evidence (video/trace) can be multi-MB; cap the upload so a stalled
+ * connection aborts instead of hanging the background uploader forever. */
+const EVIDENCE_UPLOAD_TIMEOUT_MS = 300_000;
+
+/** `fetch()` with a hard timeout via `AbortController`, so a stalled connection
+ * can't hang indefinitely (Node's `fetch` has no default timeout). Rejects with
+ * an `AbortError` once `timeoutMs` elapses. */
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Redeem a one-time pairing code for a durable device token (the `pair` command). */
 export async function redeemDevice(
   serverUrl: string,
@@ -182,11 +203,15 @@ export async function postEvidence(cfg: AgentConfig, executionId: number, ev: Ev
   form.set("case_code", ev.caseCode);
   form.set("kind", ev.kind);
   form.set("file", new Blob([data]), ev.filename);
-  const res = await fetch(`${cfg.serverUrl}/agent/jobs/${executionId}/evidence`, {
-    method: "POST",
-    headers: authHeaders(cfg.deviceToken),
-    body: form,
-  });
+  const res = await fetchWithTimeout(
+    `${cfg.serverUrl}/agent/jobs/${executionId}/evidence`,
+    {
+      method: "POST",
+      headers: authHeaders(cfg.deviceToken),
+      body: form,
+    },
+    EVIDENCE_UPLOAD_TIMEOUT_MS
+  );
   await throwIfNotOk(res);
 }
 
