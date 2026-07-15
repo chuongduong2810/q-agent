@@ -159,7 +159,10 @@ async function handle(line) {
 
 (async () => {
   if (!baseURL) { console.error('explore_session: missing baseURL arg'); process.exit(1); }
-  browser = await chromium.launch({ headless: true });
+  // Headed when QAGENT_EXPLORE_HEADED=1 (the Local Agent sets it so the user can
+  // watch, and a headed browser trips WAF/bot-protection far less than headless);
+  // headless otherwise (e.g. the server, which has no display).
+  browser = await chromium.launch({ headless: process.env.QAGENT_EXPLORE_HEADED !== '1' });
   const contextOpts = { baseURL };
   if (storageState) contextOpts.storageState = storageState;
   const context = await browser.newContext(contextOpts);

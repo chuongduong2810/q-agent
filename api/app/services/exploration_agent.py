@@ -260,9 +260,13 @@ def _build_decide_prompt(
     screen = target.get("screen") or ""
     ticket = target.get("ticket") or ""
 
+    # History entries come from two producers with different shapes: the server
+    # loop stamps `step`/`observedUrl`, the Local Agent sends `{action,args,
+    # reasoning}` only. Use the position for numbering and `.get` throughout so a
+    # missing key never crashes the decide (was a KeyError on the agent path).
     history_lines = [
-        f"  {e['step']}. {e['action']}({json.dumps(e.get('args') or {})}) @ {e.get('observedUrl') or '?'}"
-        for e in log
+        f"  {i}. {e.get('action')}({json.dumps(e.get('args') or {})}) @ {e.get('observedUrl') or '?'}"
+        for i, e in enumerate(log)
     ]
     history = "\n".join(history_lines) if history_lines else "  (none yet — this is the first step)"
 
@@ -322,6 +326,81 @@ def _parse_decision(raw: Any) -> dict[str, Any] | None:
     if not isinstance(args, dict):
         return None
     return {"reasoning": str(raw.get("reasoning") or ""), "action": action, "args": args}
+
+
+def _to_path(value: str) -> str:
+    """Reduce a discovered route to a URL path (strip scheme/host), best-effort."""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://")):
+        try:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(value)
+            return parsed.path or "/"
+        except Exception:  # noqa: BLE001
+            return value
+    return value
+
+
+def normalize_discovered(discovered: dict[str, Any], *, screen: str = "") -> dict[str, list]:
+    """Coerce the loop's raw discovered data into the KB writer's contract.
+
+    The Local Agent records routes as bare URL/path **strings** and selectors as
+    ``{action, strategy, value, name?}`` (from its ``describeSelector``), but
+    :func:`knowledge_service.merge_verified_discovery` expects routes as
+    ``{"path", "description"}`` dicts (deduped by ``path``) and selectors as
+    ``{"screen", "element", "selector", "strategy"}`` dicts (deduped by
+    ``selector``). Without this coercion the merge writes nothing (``wroteKb``
+    stays False). Server-side loop data already matching the target shape passes
+    through unchanged.
+
+    Args:
+        discovered: ``{"routes": [...], "selectors": [...]}`` as accumulated by the
+            loop (agent- or server-side).
+        screen: The target screen name, stamped onto selector entries.
+
+    Returns:
+        ``{"routes": [{path, description}], "selectors": [{screen, element,
+        selector, strategy}]}`` ready for ``merge_verified_discovery``.
+    """
+    routes_out: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for r in discovered.get("routes") or []:
+        path = _to_path(r.get("path") or r.get("url") or "") if isinstance(r, dict) else _to_path(str(r))
+        if path and path not in seen_paths:
+            seen_paths.add(path)
+            routes_out.append({"path": path, "description": "discovered via exploration"})
+
+    _STRATEGY_MAP = {"testId": "data-testid", "role": "role", "selector": "css", "label": "label"}
+    selectors_out: list[dict[str, Any]] = []
+    seen_sel: set[str] = set()
+    for s in discovered.get("selectors") or []:
+        if not isinstance(s, dict):
+            continue
+        raw_strat = s.get("strategy")
+        value = s.get("value")
+        name = s.get("name")
+        if s.get("selector"):  # already normalized (server-side shape)
+            selector = str(s["selector"])
+            strategy = s.get("strategy") or "css"
+            element = str(s.get("element") or selector)
+        elif raw_strat == "testId" and value:
+            selector, strategy, element = f'[data-testid="{value}"]', "data-testid", str(value)
+        elif raw_strat == "role" and value:
+            selector = f"role={value}" + (f'[name="{name}"]' if name else "")
+            strategy, element = "role", str(name or value)
+        elif raw_strat == "selector" and value:
+            selector, strategy, element = str(value), "css", str(value)
+        else:
+            continue
+        if selector not in seen_sel:
+            seen_sel.add(selector)
+            selectors_out.append(
+                {"screen": screen or "", "element": element, "selector": selector, "strategy": strategy}
+            )
+    return {"routes": routes_out, "selectors": selectors_out}
 
 
 def _session_spend(db, run_id: int | None) -> dict[str, float]:
