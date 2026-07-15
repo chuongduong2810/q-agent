@@ -1,5 +1,6 @@
 import { RotateCcw, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -49,6 +50,7 @@ import { useUI } from "@/store/ui";
 import { RegenSummary, deriveTags } from "./automation/RegenSummary";
 
 export function Automation() {
+  const { t } = useTranslation("pipeline");
   const runId = Number(useParams().runId);
   const navigate = useNavigate();
   const { data: run } = useRun(runId);
@@ -88,7 +90,7 @@ export function Automation() {
     [setSearchParams],
   );
 
-  const [copyLabel, setCopyLabel] = useState("Copy");
+  const [copyLabel, setCopyLabel] = useState(t("automation.copy"));
 
   // Ephemeral, client-side inline-diff state for the last regeneration of the
   // selected case: which lines changed vs the previous code, a lines-changed
@@ -161,22 +163,17 @@ export function Automation() {
   const startGenerate = () => {
     generateAutomation.mutate(false, {
       onError: (e) =>
-        toast.error(e instanceof Error ? e.message : "Automation generation failed to start"),
+        toast.error(e instanceof Error ? e.message : t("automation.generationFailedToStart")),
     });
   };
 
   // Force regeneration of every approved case, overwriting existing specs
   // (including manual edits). Guarded by a confirm since it is destructive.
   const regenerateAll = () => {
-    if (
-      !window.confirm(
-        "Regenerate every spec? This overwrites all generated specs, including any manual edits.",
-      )
-    )
-      return;
+    if (!window.confirm(t("automation.regenerateAllConfirm"))) return;
     generateAutomation.mutate(true, {
       onError: (e) =>
-        toast.error(e instanceof Error ? e.message : "Automation generation failed to start"),
+        toast.error(e instanceof Error ? e.message : t("automation.generationFailedToStart")),
     });
   };
 
@@ -188,7 +185,7 @@ export function Automation() {
       {
         onSuccess: () => navigate("/runs/" + runId + "/execution"),
         onError: (e) =>
-          toast.error(e instanceof Error ? e.message : "Failed to start execution"),
+          toast.error(e instanceof Error ? e.message : t("automation.executionFailedToStart")),
       },
     );
   };
@@ -275,17 +272,17 @@ export function Automation() {
 
     // Completion feedback for every outcome — a regeneration can take minutes.
     if (isBlocked) {
-      toast.error("Regeneration is still blocked by the quality gate.", {
+      toast.error(t("automation.regenBlocked"), {
         description: didChange
-          ? "See the highlighted changes below. To unblock, refresh the project Knowledge Base, then regenerate."
-          : "It still used placeholders/ungrounded references. Refresh the project Knowledge Base, then regenerate.",
+          ? t("automation.regenBlockedDescChanged")
+          : t("automation.regenBlockedDescUnchanged"),
       });
     } else if (!didChange) {
       toast.message(
-        prevCode == null ? "Regeneration finished." : "Regeneration finished — no changes.",
+        prevCode == null ? t("automation.regenFinished") : t("automation.regenFinishedNoChanges"),
       );
     } else {
-      toast.success(`Regenerated · ${count} line${count === 1 ? "" : "s"} changed`);
+      toast.success(t("automation.regeneratedLines", { count }));
     }
   });
 
@@ -464,7 +461,7 @@ export function Automation() {
   const startExplore = () => {
     if (!selectedSpec) return;
     if (!projectKey || !targetRepo) {
-      toast.error("Couldn't resolve the project/repository for this case.");
+      toast.error(t("automation.resolveRepoFailed"));
       return;
     }
     const caseId = selectedSpec.testCaseId;
@@ -486,7 +483,7 @@ export function Automation() {
       {
         onSuccess: () =>
           qc.invalidateQueries({ queryKey: queryKeys.exploreStatus(projectKey, targetRepo) }),
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to start exploration"),
+        onError: (e) => toast.error(e instanceof Error ? e.message : t("automation.explorationFailedToStart")),
       },
     );
   };
@@ -494,9 +491,9 @@ export function Automation() {
   const handleCopy = () => {
     if (!selectedSpec) return;
     navigator.clipboard.writeText(selectedSpec.code);
-    setCopyLabel("Copied!");
-    toast.success("Code copied to clipboard");
-    setTimeout(() => setCopyLabel("Copy"), 1500);
+    setCopyLabel(t("automation.copied"));
+    toast.success(t("automation.codeCopied"));
+    setTimeout(() => setCopyLabel(t("automation.copy")), 1500);
   };
 
   const handleDownload = () => {
@@ -524,7 +521,7 @@ export function Automation() {
     healSpec.mutate(selectedSpec.testCaseId, {
       onSuccess: () =>
         qc.invalidateQueries({ queryKey: queryKeys.healStatus(selectedSpec.testCaseId) }),
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to start self-heal"),
+      onError: (e) => toast.error(e instanceof Error ? e.message : t("automation.healFailedToStart")),
     });
   };
 
@@ -534,8 +531,8 @@ export function Automation() {
     if (!selectedSpec) return;
     const file = selectedSpec.filename;
     runSpec.mutate(selectedSpec.testCaseId, {
-      onSuccess: () => toast.success(`Running ${file}…`),
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to run test"),
+      onSuccess: () => toast.success(t("automation.runningSpec", { file })),
+      onError: (e) => toast.error(e instanceof Error ? e.message : t("automation.runTestFailed")),
     });
   };
 
@@ -570,7 +567,7 @@ export function Automation() {
             next.delete(caseId);
             return next;
           });
-          toast.error(e instanceof Error ? e.message : "Failed to start regeneration");
+          toast.error(e instanceof Error ? e.message : t("automation.regenerationFailedToStart"));
         },
       },
     );
@@ -585,9 +582,9 @@ export function Automation() {
       {
         onSuccess: () => {
           setEditing(false);
-          toast.success("Spec saved");
+          toast.success(t("automation.specSaved"));
         },
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save spec"),
+        onError: (e) => toast.error(e instanceof Error ? e.message : t("automation.saveSpecFailed")),
       },
     );
   };
@@ -597,19 +594,19 @@ export function Automation() {
       <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-1 text-[13px] font-medium text-muted">
-            {run?.code} &middot; Playwright · TypeScript · approved cases only
+            {run?.code} &middot; Playwright · TypeScript · {t("automation.approvedCasesOnly")}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Automation</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">{t("automation.title")}</h1>
         </div>
         {specCount > 0 && (
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             {missingCount > 0 && (
               <Button variant="primary" onClick={startGenerate} disabled={generating} className="w-full md:w-auto">
-                <Sparkles size={15} strokeWidth={2.2} /> Generate new ({missingCount})
+                <Sparkles size={15} strokeWidth={2.2} /> {t("automation.generateNew", { count: missingCount })}
               </Button>
             )}
             <Button variant="glass" onClick={regenerateAll} disabled={generating} className="w-full md:w-auto">
-              <RotateCcw size={15} strokeWidth={2.2} /> Regenerate all
+              <RotateCcw size={15} strokeWidth={2.2} /> {t("automation.regenerateAll")}
             </Button>
           </div>
         )}
@@ -630,7 +627,7 @@ export function Automation() {
               { tid, repo },
               {
                 onError: (e) =>
-                  toast.error(e instanceof Error ? e.message : "Failed to set repository"),
+                  toast.error(e instanceof Error ? e.message : t("automation.setRepoFailed")),
               },
             )
           }
@@ -706,10 +703,10 @@ export function Automation() {
                   {
                     onSuccess: () => {
                       setRegenResult(null);
-                      toast.success("Reverted to previous spec");
+                      toast.success(t("automation.revertedToPrevious"));
                     },
                     onError: (e) =>
-                      toast.error(e instanceof Error ? e.message : "Failed to revert spec"),
+                      toast.error(e instanceof Error ? e.message : t("automation.revertSpecFailed")),
                   },
                 );
               }}

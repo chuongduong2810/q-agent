@@ -1,5 +1,6 @@
 import { ArrowRight, Check, Link2, RefreshCw, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { PipelineRail } from "@/components/ui/PipelineRail";
@@ -22,6 +23,7 @@ import type { LinkTicketResult, ProviderKind } from "@/types/api";
  * them to each work item (pipeline stage between Review and Automation).
  */
 export function CreateLinkSync() {
+  const { t } = useTranslation("pipeline");
   const runId = Number(useParams().runId);
   const navigate = useNavigate();
   const { data: run } = useRun(runId);
@@ -56,9 +58,9 @@ export function CreateLinkSync() {
       <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-            {run?.code} &middot; create approved cases in the provider &amp; link to each work item
+            {run?.code} &middot; {t("createLink.header.subtitle")}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Create &amp; Link Test Cases</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">{t("createLink.header.title")}</h1>
         </div>
         {state === "done" && (
           <Button
@@ -70,7 +72,7 @@ export function CreateLinkSync() {
               navigate("/runs/" + runId + "/automation");
             }}
           >
-            Generate automation <ArrowRight size={15} strokeWidth={2.2} />
+            {t("createLink.generateAutomation")} <ArrowRight size={15} strokeWidth={2.2} />
           </Button>
         )}
       </div>
@@ -87,11 +89,9 @@ export function CreateLinkSync() {
           >
             <Link2 size={30} color="#a78bfa" strokeWidth={1.9} />
           </div>
-          <h2 className="m-0 mb-2 text-xl font-extrabold">Ready to create test cases</h2>
+          <h2 className="m-0 mb-2 text-xl font-extrabold">{t("createLink.idle.title")}</h2>
           <p className="m-0 mb-[18px] max-w-[400px] text-[13.5px] leading-relaxed text-ink-dim">
-            {localMode
-              ? "Local mode is on — approved cases are recorded locally only. Nothing is written to the provider."
-              : "Approved cases will be created in the provider and linked to each work item before automation is generated."}
+            {localMode ? t("createLink.idle.descLocal") : t("createLink.idle.descProvider")}
           </p>
 
           <label
@@ -108,7 +108,7 @@ export function CreateLinkSync() {
               onChange={(e) => toggleLocalMode(e.target.checked)}
             />
             <span className="text-[13px] font-semibold text-ink-soft">
-              Local mode — don&apos;t create in the provider (avoid test-item clutter)
+              {t("createLink.idle.localToggle")}
             </span>
           </label>
 
@@ -119,12 +119,12 @@ export function CreateLinkSync() {
             onClick={() =>
               createAndLink.mutate(
                 { link: !localMode, dryRun: localMode },
-                { onError: (e) => toast.error(e instanceof Error ? e.message : "Create & link failed") },
+                { onError: (e) => toast.error(e instanceof Error ? e.message : t("createLink.toast.createLinkFailed")) },
               )
             }
           >
             <Sparkles size={16} strokeWidth={2.2} />{" "}
-            {localMode ? "Create locally" : "Create & link now"}
+            {localMode ? t("createLink.idle.createLocally") : t("createLink.idle.createAndLinkNow")}
           </Button>
         </div>
       )}
@@ -136,8 +136,8 @@ export function CreateLinkSync() {
         >
           <RefreshCw size={20} className="animate-[spin_.8s_linear_infinite] text-violet" />
           <div>
-            <div className="text-[15px] font-bold">Synchronizing with the provider</div>
-            <div className="text-[12px] text-ink-dim">Creating and linking approved test cases…</div>
+            <div className="text-[15px] font-bold">{t("createLink.running.title")}</div>
+            <div className="text-[12px] text-ink-dim">{t("createLink.running.subtitle")}</div>
           </div>
         </div>
       )}
@@ -151,12 +151,12 @@ export function CreateLinkSync() {
             <Check size={15} color="#fff" strokeWidth={3} />
           </span>
           <span className="text-[14px] font-bold text-success-soft">
-            {results.some((r) => r.local) ? "Created locally" : "Synchronization complete"}
+            {results.some((r) => r.local) ? t("createLink.done.createdLocally") : t("createLink.done.complete")}
           </span>
           <span className="flex-1 text-[12.5px] text-[#9fe8c8]">
             {results.some((r) => r.local)
-              ? "Approved test cases were recorded locally (provider untouched). You can now generate automation."
-              : "Approved test cases are created and linked. You can now generate automation."}
+              ? t("createLink.done.descLocal")
+              : t("createLink.done.descProvider")}
           </span>
         </div>
       )}
@@ -185,7 +185,11 @@ export function CreateLinkSync() {
                     <span className="font-mono text-[11.5px] font-semibold text-violet">
                       {rt.ticketExternalId}
                     </span>
-                    {res && <span className="text-[11px] text-[#7a7a8c]">{res.count} test cases</span>}
+                    {res && (
+                      <span className="text-[11px] text-[#7a7a8c]">
+                        {t("createLink.ticket.testCasesCount", { count: res.count })}
+                      </span>
+                    )}
                   </div>
                   <div className="truncate text-[14px] font-semibold">{title}</div>
                 </div>
@@ -197,16 +201,16 @@ export function CreateLinkSync() {
                       <>
                         <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-success-soft">
                           <Check size={13} strokeWidth={2.6} />{" "}
-                          {res.local ? "Created locally" : "Test cases created"}
+                          {res.local ? t("createLink.ticket.createdLocally") : t("createLink.ticket.testCasesCreated")}
                         </span>
                         {res.local ? (
                           <span className="text-[11px] font-semibold text-[#9494a6]">
-                            Provider not touched
+                            {t("createLink.ticket.providerNotTouched")}
                           </span>
                         ) : (
                           res.linked && (
                             <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-success-soft">
-                              <Check size={13} strokeWidth={2.6} /> Linked to {providerLabel[kind]}
+                              <Check size={13} strokeWidth={2.6} /> {t("createLink.ticket.linkedTo", { provider: providerLabel[kind] })}
                             </span>
                           )
                         )}
@@ -215,7 +219,7 @@ export function CreateLinkSync() {
                   </div>
                 ) : (
                   <span className="flex items-center gap-2 text-[12px] font-semibold text-[#6b7280]">
-                    <Spinner size={13} /> Pending…
+                    <Spinner size={13} /> {t("createLink.ticket.pending")}
                   </span>
                 )}
               </div>

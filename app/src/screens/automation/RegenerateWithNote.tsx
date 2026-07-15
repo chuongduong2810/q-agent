@@ -1,5 +1,6 @@
 import { RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * Regenerate control with an on-demand reviewer note.
@@ -33,6 +34,7 @@ export function RegenerateWithNote({
   onRegenerate: (comment?: string) => void;
   openSignal?: number;
 }) {
+  const { t } = useTranslation("pipeline");
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -78,7 +80,7 @@ export function RegenerateWithNote({
       <button
         onClick={() => setOpen(true)}
         disabled={regenerating || disabled}
-        title="Regenerate this spec, optionally with a note steering Claude"
+        title={t("progress.regenNote.triggerTitle")}
         className={triggerClass}
       >
         {regenerating ? (
@@ -89,7 +91,7 @@ export function RegenerateWithNote({
         ) : (
           <RotateCcw size={13} />
         )}
-        {regenerating ? "Regenerating…" : label}
+        {regenerating ? t("progress.regenNote.regenerating") : label}
       </button>
     );
   }
@@ -105,7 +107,7 @@ export function RegenerateWithNote({
         ref={textareaRef}
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        placeholder="Note for Claude (optional)…"
+        placeholder={t("progress.regenNote.placeholder")}
         spellCheck={false}
         className="block w-full resize-y rounded-[9px] border border-white/[0.09] px-3 py-2 font-mono text-[12px] leading-[1.6] text-ink outline-none placeholder:text-faint"
         style={{ minHeight: 70, background: "rgba(8,8,13,.6)" }}
@@ -124,14 +126,14 @@ export function RegenerateWithNote({
           ) : (
             <RotateCcw size={13} />
           )}
-          {regenerating ? "Regenerating…" : label}
+          {regenerating ? t("progress.regenNote.regenerating") : label}
         </button>
         <button
           onClick={cancel}
           disabled={regenerating}
           className="rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-60"
         >
-          Cancel
+          {t("progress.regenNote.cancel")}
         </button>
       </div>
     </div>

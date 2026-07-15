@@ -1,4 +1,5 @@
 import { AlertTriangle, GitBranch } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Select } from "@/components/ui/Dropdown";
 import { GlassCard } from "@/components/ui/GlassCard";
 import type { KnowledgeStatus, RunTicketOut, TicketOut } from "@/types/api";
@@ -24,15 +25,15 @@ export function TargetRepoPanel({
   defaultRepoName: string;
   onChangeRepo: (tid: string, repo: string) => void;
 }) {
+  const { t } = useTranslation("pipeline");
   return (
     <GlassCard className="mb-3.5 p-4">
       <div className="mb-1 flex items-center gap-2">
         <GitBranch size={15} className="text-violet" />
-        <span className="text-[13.5px] font-bold">Target repositories</span>
+        <span className="text-[13.5px] font-bold">{t("spec.repo.title")}</span>
       </div>
       <p className="m-0 mb-3 text-xs leading-relaxed text-muted">
-        Automation reads each work item's repository knowledge base. Claude guessed a default —
-        override per item if needed.
+        {t("spec.repo.description")}
       </p>
       <div className="flex flex-col gap-2">
         {runTickets.map((rt) => {
@@ -51,13 +52,13 @@ export function TargetRepoPanel({
               {status && status !== "indexed" && (
                 <span className="flex shrink-0 items-center gap-1 text-[11px] font-semibold text-warning-soft">
                   <AlertTriangle size={12} />
-                  knowledge not built
+                  {t("spec.repo.knowledgeNotBuilt")}
                 </span>
               )}
               <Select
                 value={selected}
                 options={repoSelectOptions}
-                placeholder="Select repo"
+                placeholder={t("spec.repo.selectPlaceholder")}
                 allowClear={false}
                 onChange={(v) => {
                   if (!v || v === selected) return;

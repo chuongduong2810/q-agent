@@ -1,10 +1,12 @@
 import { AlertTriangle, Telescope } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Pill } from "@/components/ui/badges";
 import { PRODUCT_DEFECT_HUE } from "./specStatus";
 import { RegenerateWithNote } from "./RegenerateWithNote";
 
 /** Terminal "product defect" banner — fuchsia, distinct from a script failure. */
 export function ProductDefectBanner() {
+  const { t } = useTranslation("pipeline");
   return (
     <div
       className="flex items-start gap-3 rounded-2xl border p-4"
@@ -14,15 +16,14 @@ export function ProductDefectBanner() {
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-[13.5px] font-bold" style={{ color: "#e879f9" }}>
-            Product defect
+            {t("progress.productDefect.title")}
           </span>
           <Pill color={PRODUCT_DEFECT_HUE} bg="rgba(217,70,239,.14)">
-            Terminal
+            {t("progress.productDefect.terminal")}
           </Pill>
         </div>
         <p className="m-0 mt-1 text-xs leading-relaxed text-muted">
-          This case surfaced a product defect — it is routed to the report rather than re-run.
-          Regeneration and self-heal are disabled.
+          {t("progress.productDefect.body")}
         </p>
       </div>
     </div>
@@ -48,6 +49,7 @@ export function BlockedBanner({
   onExplore?: () => void;
   exploring?: boolean;
 }) {
+  const { t } = useTranslation("pipeline");
   return (
     <div
       className="rounded-2xl border border-dashed p-4"
@@ -55,19 +57,19 @@ export function BlockedBanner({
     >
       <div className="mb-2 flex items-center gap-2">
         <Pill color="#fbbf24" bg="rgba(251,191,36,.14)">
-          Blocked
+          {t("progress.blocked.pill")}
         </Pill>
-        <span className="text-[13px] font-bold">Spec is blocked</span>
+        <span className="text-[13px] font-bold">{t("progress.blocked.title")}</span>
       </div>
       <p className="m-0 mb-3 text-xs leading-relaxed text-ink-soft">
-        {reason || "This spec is blocked and cannot run. Resolve the underlying issue first."}
+        {reason || t("progress.blocked.defaultReason")}
       </p>
       <div className="flex flex-wrap items-center gap-3">
         {onExplore && (
           <button
             onClick={onExplore}
             disabled={exploring || regenerating}
-            title="Drive a real browser to discover the missing routes/selectors and write them to the Knowledge Base, then regenerate"
+            title={t("progress.blocked.exploreTitle")}
             className="flex items-center gap-1.5 rounded-[9px] border border-sky-400/30 bg-sky-400/10 px-[13px] py-1.5 text-[12px] font-semibold text-sky-300 hover:bg-sky-400/20 disabled:opacity-60"
           >
             {exploring ? (
@@ -78,17 +80,17 @@ export function BlockedBanner({
             ) : (
               <Telescope size={13} />
             )}
-            {exploring ? "Exploring…" : "Explore to unblock"}
+            {exploring ? t("progress.blocked.exploring") : t("progress.blocked.exploreCta")}
           </button>
         )}
         <RegenerateWithNote
-          label="Regenerate to retry"
+          label={t("progress.blocked.regenerateRetry")}
           variant="amber"
           regenerating={regenerating}
           onRegenerate={onRegenerate}
         />
         <span className="text-[11px] text-muted">
-          Explore the live app to discover selectors, or re-run project bootstrap, then regenerate.
+          {t("progress.blocked.hint")}
         </span>
       </div>
     </div>
@@ -101,6 +103,7 @@ export function BlockedBanner({
  * shown is unchanged.
  */
 export function GateRejectedNote({ reason }: { reason: string }) {
+  const { t } = useTranslation("pipeline");
   return (
     <div
       className="flex items-start gap-2 border-b border-white/[0.06] px-4 py-2.5"
@@ -108,7 +111,7 @@ export function GateRejectedNote({ reason }: { reason: string }) {
     >
       <AlertTriangle size={13} className="mt-[1px] shrink-0 text-warning-soft" />
       <span className="text-[11.5px] leading-relaxed text-warning-soft">
-        Last regeneration rejected (kept previous good spec){reason ? ` — ${reason}` : ""}
+        {t("progress.gateRejected.text")}{reason ? ` — ${reason}` : ""}
       </span>
     </div>
   );

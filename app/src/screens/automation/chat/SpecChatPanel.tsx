@@ -10,6 +10,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Send, Sparkles, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { useRunEvents } from "@/hooks/useRunEvents";
 import { useSendSpecChat, useSpecs, useUpdateSpec } from "@/hooks/queries";
@@ -18,13 +19,6 @@ import { useUI } from "@/store/ui";
 import type { AutomationSpecOut, ChatErrorPayload, ChatReplyPayload } from "@/types/api";
 import { diffLines } from "@/screens/automation/lineDiff";
 import { useTypewriter } from "./useTypewriter";
-
-const QUICK_ACTIONS = [
-  "Use data-testid selectors",
-  "Add a network-idle wait",
-  "Assert the success toast",
-  "Cover the empty state",
-];
 
 type ChatMessage = {
   id: string;
@@ -45,6 +39,13 @@ interface Props {
 
 /** Drives the chat message list + send/undo for the currently-selected spec. */
 export function SpecChatPanel({ runId, spec }: Props) {
+  const { t } = useTranslation("pipeline");
+  const quickActions = [
+    t("automation.chat.quickUseTestId"),
+    t("automation.chat.quickNetworkIdle"),
+    t("automation.chat.quickAssertToast"),
+    t("automation.chat.quickEmptyState"),
+  ];
   const chatOpen = useUI((s) => s.chatOpen);
   const closeChat = useUI((s) => s.closeChat);
   const sendChat = useSendSpecChat(runId);
@@ -193,7 +194,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 className="ml-auto rounded-lg border border-white/[0.1] bg-white/[0.04] px-2 py-1 text-[11px] text-ink-soft"
-                title="Model"
+                title={t("automation.chat.model")}
               >
                 {AI_MODEL_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -204,7 +205,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
               <button
                 onClick={closeChat}
                 className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-dim hover:bg-white/[0.08]"
-                title="Close"
+                title={t("automation.chat.close")}
               >
                 <X size={16} />
               </button>
@@ -214,8 +215,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
             <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
               {messages.length === 0 && (
                 <div className="px-2 py-8 text-center text-[12.5px] text-ink-dim">
-                  Ask Q-Agent to edit this spec — e.g. “use data-testid selectors” or “assert the
-                  success toast”.
+                  {t("automation.chat.emptyState")}
                 </div>
               )}
               {messages.map((m) =>
@@ -240,7 +240,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
               {mention && mentionMatches.length > 0 && (
                 <div className="absolute inset-x-3 bottom-full mb-2 max-h-56 overflow-y-auto rounded-xl border border-white/[0.12] bg-[#16161f] py-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,.8)]">
                   <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-dim">
-                    Specs
+                    {t("automation.chat.specs")}
                   </div>
                   {mentionMatches.map((s) => (
                     <button
@@ -258,7 +258,7 @@ export function SpecChatPanel({ runId, spec }: Props) {
                 </div>
               )}
               <div className="mb-2 flex flex-wrap gap-1.5">
-                {QUICK_ACTIONS.map((q) => (
+                {quickActions.map((q) => (
                   <button
                     key={q}
                     disabled={busy}
@@ -297,14 +297,14 @@ export function SpecChatPanel({ runId, spec }: Props) {
                     }
                   }}
                   rows={1}
-                  placeholder="Ask Q-Agent to edit this spec… (@ to reference a spec)"
+                  placeholder={t("automation.chat.placeholder")}
                   className="max-h-32 flex-1 resize-none bg-transparent px-1 text-[13.5px] text-ink outline-none placeholder:text-ink-dim"
                 />
                 <button
                   onClick={() => send(input)}
                   disabled={!input.trim() || busy}
                   className="accent-gradient flex h-8 w-8 shrink-0 items-center justify-center rounded-lg disabled:opacity-40"
-                  title="Send"
+                  title={t("automation.chat.send")}
                 >
                   <Send size={15} color="#fff" />
                 </button>
@@ -341,6 +341,7 @@ function AssistantMessage({
   onUndo: () => void;
   onReapply: () => void;
 }) {
+  const { t } = useTranslation("pipeline");
   const { shown, done } = useTypewriter(m.thinking ? "" : m.text, animate);
   useEffect(() => {
     if (done && m.text) onRevealed();
@@ -352,7 +353,7 @@ function AssistantMessage({
       </span>
       <div className="min-w-0 flex-1 space-y-2">
         {m.thinking ? (
-          <span className="inline-flex gap-1 text-ink-dim" aria-label="Thinking">
+          <span className="inline-flex gap-1 text-ink-dim" aria-label={t("automation.chat.thinking")}>
             <Dot /> <Dot /> <Dot />
           </span>
         ) : m.error ? (
@@ -412,15 +413,16 @@ function DiffSnippet({ prev, next }: { prev: string; next: string }) {
 }
 
 function AppliedCard({ prev, next, onUndo }: { prev: string; next: string; onUndo: () => void }) {
+  const { t } = useTranslation("pipeline");
   const { count } = useMemo(() => diffLines(prev, next), [prev, next]);
   return (
     <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-[12px]">
       <span className="text-success">
-        {count === 0 ? "Applied to spec · no changes" : `Applied to spec · ${count} line${count === 1 ? "" : "s"} changed`}
+        {count === 0 ? t("automation.chat.appliedNoChanges") : t("automation.chat.appliedLines", { count })}
       </span>
       {count > 0 && (
-        <button onClick={onUndo} className="ml-auto flex items-center gap-1 text-ink-soft hover:text-ink" title="Undo">
-          <Undo2 size={13} /> Undo
+        <button onClick={onUndo} className="ml-auto flex items-center gap-1 text-ink-soft hover:text-ink" title={t("automation.chat.undo")}>
+          <Undo2 size={13} /> {t("automation.chat.undo")}
         </button>
       )}
     </div>
@@ -428,11 +430,12 @@ function AppliedCard({ prev, next, onUndo }: { prev: string; next: string; onUnd
 }
 
 function RevertedCard({ onReapply }: { onReapply: () => void }) {
+  const { t } = useTranslation("pipeline");
   return (
     <div className="flex items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-[12px] text-ink-dim">
-      Edit reverted
+      {t("automation.chat.editReverted")}
       <button onClick={onReapply} className="ml-auto text-ink-soft hover:text-ink">
-        Re-apply
+        {t("automation.chat.reapply")}
       </button>
     </div>
   );

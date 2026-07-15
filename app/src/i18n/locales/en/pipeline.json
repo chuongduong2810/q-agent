@@ -1,0 +1,414 @@
+{
+  "automation": {
+    "title": "Automation",
+    "approvedCasesOnly": "approved cases only",
+    "generateNew": "Generate new ({{count}})",
+    "regenerateAll": "Regenerate all",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "codeCopied": "Code copied to clipboard",
+    "regenerateAllConfirm": "Regenerate every spec? This overwrites all generated specs, including any manual edits.",
+    "generationFailedToStart": "Automation generation failed to start",
+    "executionFailedToStart": "Failed to start execution",
+    "regenBlocked": "Regeneration is still blocked by the quality gate.",
+    "regenBlockedDescChanged": "See the highlighted changes below. To unblock, refresh the project Knowledge Base, then regenerate.",
+    "regenBlockedDescUnchanged": "It still used placeholders/ungrounded references. Refresh the project Knowledge Base, then regenerate.",
+    "regenFinished": "Regeneration finished.",
+    "regenFinishedNoChanges": "Regeneration finished — no changes.",
+    "regeneratedLines_one": "Regenerated · {{count}} line changed",
+    "regeneratedLines_other": "Regenerated · {{count}} lines changed",
+    "resolveRepoFailed": "Couldn't resolve the project/repository for this case.",
+    "explorationFailedToStart": "Failed to start exploration",
+    "healFailedToStart": "Failed to start self-heal",
+    "runningSpec": "Running {{file}}…",
+    "runTestFailed": "Failed to run test",
+    "regenerationFailedToStart": "Failed to start regeneration",
+    "specSaved": "Spec saved",
+    "saveSpecFailed": "Failed to save spec",
+    "setRepoFailed": "Failed to set repository",
+    "revertedToPrevious": "Reverted to previous spec",
+    "revertSpecFailed": "Failed to revert spec",
+    "chat": {
+      "close": "Close",
+      "model": "Model",
+      "send": "Send",
+      "thinking": "Thinking",
+      "specs": "Specs",
+      "emptyState": "Ask Q-Agent to edit this spec — e.g. “use data-testid selectors” or “assert the success toast”.",
+      "placeholder": "Ask Q-Agent to edit this spec… (@ to reference a spec)",
+      "quickUseTestId": "Use data-testid selectors",
+      "quickNetworkIdle": "Add a network-idle wait",
+      "quickAssertToast": "Assert the success toast",
+      "quickEmptyState": "Cover the empty state",
+      "appliedNoChanges": "Applied to spec · no changes",
+      "appliedLines_one": "Applied to spec · {{count}} line changed",
+      "appliedLines_other": "Applied to spec · {{count}} lines changed",
+      "undo": "Undo",
+      "editReverted": "Edit reverted",
+      "reapply": "Re-apply"
+    }
+  },
+  "spec": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "regenerate": "Regenerate",
+    "runTests": "Run tests",
+    "run": {
+      "label": "Run",
+      "running": "Running…",
+      "title": "Run only this spec",
+      "titleBlocked": "Run anyway — this spec is blocked and will likely fail until unblocked",
+      "titleProductDefect": "Product defect — routed to report, not re-run"
+    },
+    "heal": {
+      "label": "Self-heal",
+      "healing": "Healing…",
+      "title": "Run this spec; if it fails, let Claude fix it from the error and retry",
+      "titleBlocked": "Self-heal — run it and let Claude try to fix/unblock it (fixes are still gated, so a missing-Knowledge-Base block needs a KB refresh)",
+      "titleProductDefect": "Product defect is terminal — self-heal disabled"
+    },
+    "explore": {
+      "label": "Explore to unblock",
+      "exploring": "Exploring…",
+      "title": "Drive a real browser to discover the missing routes/selectors and write them to the Knowledge Base, then regenerate to unblock"
+    },
+    "chat": {
+      "label": "Edit with Q-Agent",
+      "title": "Edit this spec with Q-Agent (AI chat)"
+    },
+    "menu": {
+      "collapseAll": "Collapse all",
+      "expandAll": "Expand all",
+      "editManually": "Edit manually",
+      "copy": "Copy",
+      "download": "Download"
+    },
+    "overlay": {
+      "regenerating": "Regenerating…",
+      "updating": "Updating…"
+    },
+    "footer": {
+      "description": "Execute the approved suite in parallel across the Run"
+    },
+    "code": {
+      "expandRegion": "Expand region",
+      "collapseRegion": "Collapse region",
+      "foldedLines": "{{count}} lines"
+    },
+    "list": {
+      "approvedSpecs": "APPROVED SPECS"
+    },
+    "empty": {
+      "title": "No automation yet",
+      "readyOne": "{{count}} approved case ready to automate. Generate Playwright specs from them.",
+      "readyOther": "{{count}} approved cases ready to automate. Generate Playwright specs from them.",
+      "generate": "Generate automation",
+      "none": "No approved, automatable cases in this run. Approve non-Manual test cases in the Review Center, then generate automation here."
+    },
+    "repo": {
+      "title": "Target repositories",
+      "description": "Automation reads each work item's repository knowledge base. Claude guessed a default — override per item if needed.",
+      "knowledgeNotBuilt": "knowledge not built",
+      "selectPlaceholder": "Select repo"
+    }
+  },
+  "progress": {
+    "productDefect": {
+      "title": "Product defect",
+      "terminal": "Terminal",
+      "body": "This case surfaced a product defect — it is routed to the report rather than re-run. Regeneration and self-heal are disabled."
+    },
+    "blocked": {
+      "pill": "Blocked",
+      "title": "Spec is blocked",
+      "defaultReason": "This spec is blocked and cannot run. Resolve the underlying issue first.",
+      "exploreTitle": "Drive a real browser to discover the missing routes/selectors and write them to the Knowledge Base, then regenerate",
+      "exploring": "Exploring…",
+      "exploreCta": "Explore to unblock",
+      "regenerateRetry": "Regenerate to retry",
+      "hint": "Explore the live app to discover selectors, or re-run project bootstrap, then regenerate."
+    },
+    "gateRejected": {
+      "text": "Last regeneration rejected (kept previous good spec)"
+    },
+    "thinking": {
+      "title": "Writing Playwright automation",
+      "subtitle": "for every approved case in {{runCode}}",
+      "steps": {
+        "reading": "Reading approved test cases",
+        "mapping": "Mapping steps to Playwright locators",
+        "assertions": "Writing assertions",
+        "formatting": "Formatting TypeScript specs"
+      }
+    },
+    "generating": {
+      "title": "Generating automation…"
+    },
+    "heal": {
+      "progressTitle": "Self-healing {{caseCode}} — attempt {{attempt}}/{{maxAttempts}}",
+      "fixing": "Fixing with Claude — {{detail}}",
+      "addressingFailure": "addressing the failure",
+      "runningSpec": "Running the spec…",
+      "time": {
+        "justNow": "just now",
+        "minutes_one": "{{count}}m ago",
+        "minutes_other": "{{count}}m ago",
+        "hours_one": "{{count}}h ago",
+        "hours_other": "{{count}}h ago",
+        "days_one": "{{count}}d ago",
+        "days_other": "{{count}}d ago"
+      },
+      "timeline": {
+        "title": "Self-heal timeline",
+        "healedAfter_one": "Healed after {{count}} attempt",
+        "healedAfter_other": "Healed after {{count}} attempts",
+        "stillFailing_one": "Still failing after {{count}} attempt",
+        "stillFailing_other": "Still failing after {{count}} attempts",
+        "attempt": "Attempt {{n}}",
+        "passed": "PASSED",
+        "failed": "FAILED",
+        "claudeRewrote": "Claude rewrote the spec"
+      }
+    },
+    "explore": {
+      "aRoute": "a route",
+      "step": {
+        "goto": "Navigate to {{target}}",
+        "click": "Click {{target}}",
+        "fill": "Fill {{target}}",
+        "fillValue": "Fill {{target}} = \"{{value}}\"",
+        "expectVisible": "Check {{target}} is visible",
+        "done": "Finished — goal reached"
+      },
+      "banner": {
+        "title": "Exploring the live app to unblock",
+        "subtitle": "Driving a real browser to discover routes & selectors",
+        "budgetLeft": "${{amount}} budget left",
+        "deciding": "Deciding the next step…"
+      },
+      "stop": {
+        "done": "Goal reached",
+        "stepCap": "Hit the step cap",
+        "budget": "Hit the cost budget",
+        "repeat": "Stopped — no further progress",
+        "unreachable": "Target screen unreachable",
+        "finished": "Finished"
+      },
+      "review": {
+        "title": "Exploration results",
+        "kbEnriched": "KB enriched · {{routes}}, {{selectors}}",
+        "routesCount_one": "{{count}} route",
+        "routesCount_other": "{{count}} routes",
+        "selectorsCount_one": "{{count}} selector",
+        "selectorsCount_other": "{{count}} selectors",
+        "nothingDiscovered": "Nothing discovered",
+        "noop": "no-op",
+        "regenerateWithKb": "Regenerate with the new KB",
+        "wroteKbHint": "Runtime-verified routes/selectors were written to the Knowledge Base — regenerate to unblock.",
+        "noKbHint": "No usable page state was observed, so nothing was written to the Knowledge Base — the case stays blocked. Check the app is reachable in this environment, then try again."
+      }
+    },
+    "regen": {
+      "tags": {
+        "dataTestId": "data-testid selectors",
+        "networkIdle": "network-idle waits",
+        "removedHardWaits": "removed hard waits",
+        "roleLabel": "role/label locators",
+        "assertions": "explicit assertions"
+      },
+      "summary": {
+        "title": "Regenerated to v{{version}}",
+        "stillBlocked": " · still blocked",
+        "linesChanged_one": " · {{count}} line changed",
+        "linesChanged_other": " · {{count}} lines changed",
+        "applied": "Applied: {{tags}}",
+        "feedback": "Feedback",
+        "revert": "Revert"
+      }
+    },
+    "regenNote": {
+      "triggerTitle": "Regenerate this spec, optionally with a note steering Claude",
+      "regenerating": "Regenerating…",
+      "placeholder": "Note for Claude (optional)…",
+      "cancel": "Cancel"
+    },
+    "events": {
+      "specFallback": "spec",
+      "healFixed": "Self-heal fixed {{caseCode}}",
+      "productDefect": "{{caseCode}}: product defect suspected — routed to the report",
+      "healGaveUp": "Self-heal gave up on {{caseCode}}: {{detail}}",
+      "stillFailing": "still failing"
+    }
+  },
+  "execution": {
+    "title": "Execution",
+    "parallelWorkers": "{{count}} parallel workers",
+    "target": {
+      "changeTooltip": "Change the default execution target in Settings",
+      "myMachine": "My machine",
+      "server": "Server"
+    },
+    "button": {
+      "running": "Running…",
+      "rerun": "Re-run",
+      "runSuite": "Run suite"
+    },
+    "auth": {
+      "waiting": "Waiting for manual login",
+      "localAgent": "A browser opened on your machine. Log in",
+      "server": "A browser has opened on the host machine. Log in",
+      "at": "at",
+      "thenClose": ", then close the window to continue."
+    },
+    "stats": {
+      "passed": "Passed",
+      "failed": "Failed",
+      "remaining": "Remaining"
+    },
+    "currentlyExecuting": "CURRENTLY EXECUTING",
+    "notStarted": "Not started",
+    "collectEvidence": "Collect evidence",
+    "queue": {
+      "heading": "EXECUTION QUEUE",
+      "empty": "No cases queued yet. Run the suite to begin execution."
+    },
+    "log": {
+      "heading": "EXECUTION LOG"
+    },
+    "toast": {
+      "loginCaptured": "Login captured",
+      "manualLoginFailed": "Manual login failed",
+      "noLocalAgent": "No local agent paired — start your local agent",
+      "localAgentAction": "Local Agent",
+      "startFailed": "Failed to start execution"
+    }
+  },
+  "evidence": {
+    "title": "Evidence",
+    "subtitle": "RUN-{{runId}} · evidence per test case, grouped by ticket",
+    "empty": {
+      "title": "No evidence yet",
+      "body": "Run the approved suite to capture evidence for every ticket in the Run.",
+      "action": "Go to execution"
+    },
+    "ticketsInRun": "TICKETS IN RUN",
+    "passedCount": "{{pass}}/{{total}} passed",
+    "prepareComments": "Prepare ticket comments",
+    "testCases": "TEST CASES · {{id}}",
+    "selectPrompt": "Select a test case",
+    "noTestCases": "No test cases in this ticket.",
+    "tabs": {
+      "screenshot": "Screenshot",
+      "video": "Video",
+      "trace": "Trace",
+      "console": "Console",
+      "network": "Network"
+    },
+    "toast": {
+      "annotationSaved": "Annotation saved",
+      "annotationFailed": "Failed to save annotation",
+      "autoAnnotated": "Screenshot analyzed & annotated",
+      "autoAnnotateFailed": "Auto-analysis failed"
+    },
+    "screenshot": {
+      "chromePassed": "{{caseCode}} · passed — no defects",
+      "chromeNoShot": "{{caseCode}} · no screenshot captured",
+      "allPassed": "All assertions passed",
+      "noShotTitle": "No screenshot for this case",
+      "passedBody": "Screenshots are captured only on failure — nothing to annotate here.",
+      "noShotBody": "This case has no failure screenshot to annotate.",
+      "annotatedSuffix": " · annotated"
+    },
+    "aiDiagnosis": "AI diagnosis",
+    "shotView": {
+      "annotated": "annotated",
+      "original": "original"
+    },
+    "analyzing": "Analyzing…",
+    "reAnalyze": "Re-analyze",
+    "autoAnalyze": "Auto-analyze",
+    "toolLabel": "Tool:",
+    "tools": {
+      "cursor": "cursor",
+      "rectangle": "rectangle",
+      "arrow": "arrow",
+      "highlight": "highlight",
+      "circle": "circle",
+      "text": "text"
+    },
+    "saveAnnotation": "Save annotation",
+    "noVideo": "No video captured for {{caseCode}}.",
+    "noTrace": "No trace file recorded for this case.",
+    "noConsole": "No console output captured for {{caseCode}}.",
+    "net": {
+      "method": "METHOD",
+      "status": "STATUS",
+      "time": "TIME"
+    },
+    "noNetwork": "No network requests captured for {{caseCode}}."
+  },
+  "publish": {
+    "header": {
+      "subtitle": "publish results to each work item",
+      "title": "Ticket Comments"
+    },
+    "retryFailed": "Retry failed",
+    "publishAll": "Publish all",
+    "publish": "Publish",
+    "status": {
+      "draft": "Draft",
+      "publishing": "Publishing…",
+      "published": "Published",
+      "failed": "Failed"
+    },
+    "toast": {
+      "publishingResults": "Publishing results to tickets",
+      "publishFailed": "Publish failed",
+      "prepareFailed": "Prepare failed"
+    },
+    "empty": {
+      "title": "No comments prepared",
+      "body": "Generate a report, then prepare AI-summarized result comments for each ticket in the run."
+    },
+    "preparing": "Preparing…",
+    "prepareComments": "Prepare comments",
+    "summarizing": "Summarizing results with AI…"
+  },
+  "createLink": {
+    "header": {
+      "subtitle": "create approved cases in the provider & link to each work item",
+      "title": "Create & Link Test Cases"
+    },
+    "generateAutomation": "Generate automation",
+    "idle": {
+      "title": "Ready to create test cases",
+      "descLocal": "Local mode is on — approved cases are recorded locally only. Nothing is written to the provider.",
+      "descProvider": "Approved cases will be created in the provider and linked to each work item before automation is generated.",
+      "localToggle": "Local mode — don't create in the provider (avoid test-item clutter)",
+      "createLocally": "Create locally",
+      "createAndLinkNow": "Create & link now"
+    },
+    "toast": {
+      "createLinkFailed": "Create & link failed"
+    },
+    "running": {
+      "title": "Synchronizing with the provider",
+      "subtitle": "Creating and linking approved test cases…"
+    },
+    "done": {
+      "createdLocally": "Created locally",
+      "complete": "Synchronization complete",
+      "descLocal": "Approved test cases were recorded locally (provider untouched). You can now generate automation.",
+      "descProvider": "Approved test cases are created and linked. You can now generate automation."
+    },
+    "ticket": {
+      "testCasesCount": "{{count}} test cases",
+      "createdLocally": "Created locally",
+      "testCasesCreated": "Test cases created",
+      "providerNotTouched": "Provider not touched",
+      "linkedTo": "Linked to {{provider}}",
+      "pending": "Pending…"
+    }
+  }
+}

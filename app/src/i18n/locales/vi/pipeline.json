@@ -1,0 +1,414 @@
+{
+  "automation": {
+    "title": "Tự động hóa",
+    "approvedCasesOnly": "chỉ các trường hợp đã duyệt",
+    "generateNew": "Tạo mới ({{count}})",
+    "regenerateAll": "Tạo lại tất cả",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép!",
+    "codeCopied": "Đã sao chép mã vào bộ nhớ tạm",
+    "regenerateAllConfirm": "Tạo lại mọi đặc tả? Thao tác này sẽ ghi đè tất cả đặc tả đã tạo, bao gồm mọi chỉnh sửa thủ công.",
+    "generationFailedToStart": "Không thể bắt đầu tạo tự động hóa",
+    "executionFailedToStart": "Không thể bắt đầu thực thi",
+    "regenBlocked": "Việc tạo lại vẫn bị chặn bởi cổng kiểm tra chất lượng.",
+    "regenBlockedDescChanged": "Xem các thay đổi được đánh dấu bên dưới. Để bỏ chặn, hãy làm mới Cơ sở tri thức của dự án, rồi tạo lại.",
+    "regenBlockedDescUnchanged": "Nó vẫn dùng các giá trị giữ chỗ/tham chiếu không có căn cứ. Hãy làm mới Cơ sở tri thức của dự án, rồi tạo lại.",
+    "regenFinished": "Đã tạo lại xong.",
+    "regenFinishedNoChanges": "Đã tạo lại xong — không có thay đổi.",
+    "regeneratedLines_one": "Đã tạo lại · {{count}} dòng thay đổi",
+    "regeneratedLines_other": "Đã tạo lại · {{count}} dòng thay đổi",
+    "resolveRepoFailed": "Không thể xác định dự án/kho lưu trữ cho trường hợp này.",
+    "explorationFailedToStart": "Không thể bắt đầu khám phá",
+    "healFailedToStart": "Không thể bắt đầu tự khắc phục",
+    "runningSpec": "Đang chạy {{file}}…",
+    "runTestFailed": "Không thể chạy kiểm thử",
+    "regenerationFailedToStart": "Không thể bắt đầu tạo lại",
+    "specSaved": "Đã lưu đặc tả",
+    "saveSpecFailed": "Không thể lưu đặc tả",
+    "setRepoFailed": "Không thể đặt kho lưu trữ",
+    "revertedToPrevious": "Đã hoàn nguyên về đặc tả trước đó",
+    "revertSpecFailed": "Không thể hoàn nguyên đặc tả",
+    "chat": {
+      "close": "Đóng",
+      "model": "Mô hình",
+      "send": "Gửi",
+      "thinking": "Đang suy nghĩ",
+      "specs": "Đặc tả",
+      "emptyState": "Yêu cầu Q-Agent chỉnh sửa đặc tả này — ví dụ “dùng bộ chọn data-testid” hoặc “kiểm tra thông báo thành công”.",
+      "placeholder": "Yêu cầu Q-Agent chỉnh sửa đặc tả này… (@ để tham chiếu một đặc tả)",
+      "quickUseTestId": "Dùng bộ chọn data-testid",
+      "quickNetworkIdle": "Thêm thời gian chờ mạng rảnh",
+      "quickAssertToast": "Kiểm tra thông báo thành công",
+      "quickEmptyState": "Bao phủ trạng thái rỗng",
+      "appliedNoChanges": "Đã áp dụng vào đặc tả · không có thay đổi",
+      "appliedLines_one": "Đã áp dụng vào đặc tả · {{count}} dòng thay đổi",
+      "appliedLines_other": "Đã áp dụng vào đặc tả · {{count}} dòng thay đổi",
+      "undo": "Hoàn tác",
+      "editReverted": "Đã hoàn nguyên chỉnh sửa",
+      "reapply": "Áp dụng lại"
+    }
+  },
+  "spec": {
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "cancel": "Hủy",
+    "regenerate": "Tạo lại",
+    "runTests": "Chạy kiểm thử",
+    "run": {
+      "label": "Chạy",
+      "running": "Đang chạy…",
+      "title": "Chỉ chạy đặc tả này",
+      "titleBlocked": "Vẫn chạy — đặc tả này đang bị chặn và có khả năng sẽ thất bại cho đến khi được gỡ chặn",
+      "titleProductDefect": "Lỗi sản phẩm — được chuyển vào báo cáo, không chạy lại"
+    },
+    "heal": {
+      "label": "Tự khắc phục",
+      "healing": "Đang khắc phục…",
+      "title": "Chạy đặc tả này; nếu thất bại, để Claude sửa từ lỗi và thử lại",
+      "titleBlocked": "Tự khắc phục — chạy nó và để Claude thử sửa/gỡ chặn (các bản sửa vẫn được kiểm duyệt, nên nếu bị chặn do thiếu Cơ sở tri thức thì cần làm mới KB)",
+      "titleProductDefect": "Lỗi sản phẩm là trạng thái cuối — tự khắc phục bị vô hiệu hóa"
+    },
+    "explore": {
+      "label": "Khám phá để gỡ chặn",
+      "exploring": "Đang khám phá…",
+      "title": "Điều khiển trình duyệt thật để khám phá các route/bộ chọn còn thiếu và ghi chúng vào Cơ sở tri thức, sau đó tạo lại để gỡ chặn"
+    },
+    "chat": {
+      "label": "Chỉnh sửa với Q-Agent",
+      "title": "Chỉnh sửa đặc tả này với Q-Agent (trò chuyện AI)"
+    },
+    "menu": {
+      "collapseAll": "Thu gọn tất cả",
+      "expandAll": "Mở rộng tất cả",
+      "editManually": "Chỉnh sửa thủ công",
+      "copy": "Sao chép",
+      "download": "Tải xuống"
+    },
+    "overlay": {
+      "regenerating": "Đang tạo lại…",
+      "updating": "Đang cập nhật…"
+    },
+    "footer": {
+      "description": "Thực thi bộ kiểm thử đã duyệt song song trên toàn bộ lần Chạy"
+    },
+    "code": {
+      "expandRegion": "Mở rộng vùng",
+      "collapseRegion": "Thu gọn vùng",
+      "foldedLines": "{{count}} dòng"
+    },
+    "list": {
+      "approvedSpecs": "ĐẶC TẢ ĐÃ DUYỆT"
+    },
+    "empty": {
+      "title": "Chưa có tự động hóa",
+      "readyOne": "{{count}} trường hợp đã duyệt sẵn sàng để tự động hóa. Tạo các đặc tả Playwright từ chúng.",
+      "readyOther": "{{count}} trường hợp đã duyệt sẵn sàng để tự động hóa. Tạo các đặc tả Playwright từ chúng.",
+      "generate": "Tạo tự động hóa",
+      "none": "Không có trường hợp kiểm thử đã duyệt, có thể tự động hóa trong lần chạy này. Hãy duyệt các trường hợp kiểm thử không phải Thủ công trong Trung tâm Đánh giá, sau đó tạo tự động hóa tại đây."
+    },
+    "repo": {
+      "title": "Kho lưu trữ mục tiêu",
+      "description": "Tự động hóa đọc cơ sở tri thức kho lưu trữ của mỗi hạng mục công việc. Claude đã đoán một giá trị mặc định — ghi đè cho từng hạng mục nếu cần.",
+      "knowledgeNotBuilt": "tri thức chưa được xây dựng",
+      "selectPlaceholder": "Chọn kho lưu trữ"
+    }
+  },
+  "progress": {
+    "productDefect": {
+      "title": "Lỗi sản phẩm",
+      "terminal": "Kết thúc",
+      "body": "Trường hợp này phát hiện một lỗi sản phẩm — nó được chuyển đến báo cáo thay vì chạy lại. Việc tạo lại và tự khắc phục đã bị vô hiệu hóa."
+    },
+    "blocked": {
+      "pill": "Bị chặn",
+      "title": "Đặc tả bị chặn",
+      "defaultReason": "Đặc tả này bị chặn và không thể chạy. Hãy giải quyết vấn đề gốc trước.",
+      "exploreTitle": "Điều khiển trình duyệt thật để khám phá các tuyến/bộ chọn còn thiếu và ghi chúng vào Cơ sở tri thức, sau đó tạo lại",
+      "exploring": "Đang khám phá…",
+      "exploreCta": "Khám phá để bỏ chặn",
+      "regenerateRetry": "Tạo lại để thử lại",
+      "hint": "Khám phá ứng dụng trực tiếp để tìm bộ chọn, hoặc chạy lại khởi tạo dự án, rồi tạo lại."
+    },
+    "gateRejected": {
+      "text": "Lần tạo lại gần nhất bị từ chối (giữ lại đặc tả tốt trước đó)"
+    },
+    "thinking": {
+      "title": "Đang viết tự động hóa Playwright",
+      "subtitle": "cho mọi trường hợp đã duyệt trong {{runCode}}",
+      "steps": {
+        "reading": "Đang đọc các trường hợp kiểm thử đã duyệt",
+        "mapping": "Đang ánh xạ các bước sang bộ định vị Playwright",
+        "assertions": "Đang viết các khẳng định",
+        "formatting": "Đang định dạng các đặc tả TypeScript"
+      }
+    },
+    "generating": {
+      "title": "Đang tạo tự động hóa…"
+    },
+    "heal": {
+      "progressTitle": "Đang tự khắc phục {{caseCode}} — lần thử {{attempt}}/{{maxAttempts}}",
+      "fixing": "Đang sửa với Claude — {{detail}}",
+      "addressingFailure": "đang xử lý lỗi",
+      "runningSpec": "Đang chạy đặc tả…",
+      "time": {
+        "justNow": "vừa xong",
+        "minutes_one": "{{count}} phút trước",
+        "minutes_other": "{{count}} phút trước",
+        "hours_one": "{{count}} giờ trước",
+        "hours_other": "{{count}} giờ trước",
+        "days_one": "{{count}} ngày trước",
+        "days_other": "{{count}} ngày trước"
+      },
+      "timeline": {
+        "title": "Dòng thời gian tự khắc phục",
+        "healedAfter_one": "Đã khắc phục sau {{count}} lần thử",
+        "healedAfter_other": "Đã khắc phục sau {{count}} lần thử",
+        "stillFailing_one": "Vẫn thất bại sau {{count}} lần thử",
+        "stillFailing_other": "Vẫn thất bại sau {{count}} lần thử",
+        "attempt": "Lần thử {{n}}",
+        "passed": "ĐẠT",
+        "failed": "KHÔNG ĐẠT",
+        "claudeRewrote": "Claude đã viết lại đặc tả"
+      }
+    },
+    "explore": {
+      "aRoute": "một tuyến",
+      "step": {
+        "goto": "Điều hướng đến {{target}}",
+        "click": "Nhấp {{target}}",
+        "fill": "Điền {{target}}",
+        "fillValue": "Điền {{target}} = \"{{value}}\"",
+        "expectVisible": "Kiểm tra {{target}} hiển thị",
+        "done": "Hoàn tất — đã đạt mục tiêu"
+      },
+      "banner": {
+        "title": "Đang khám phá ứng dụng trực tiếp để bỏ chặn",
+        "subtitle": "Đang điều khiển trình duyệt thật để khám phá các tuyến & bộ chọn",
+        "budgetLeft": "còn {{amount}}$ ngân sách",
+        "deciding": "Đang quyết định bước tiếp theo…"
+      },
+      "stop": {
+        "done": "Đã đạt mục tiêu",
+        "stepCap": "Đã đạt giới hạn số bước",
+        "budget": "Đã đạt giới hạn chi phí",
+        "repeat": "Đã dừng — không tiến triển thêm",
+        "unreachable": "Không thể truy cập màn hình mục tiêu",
+        "finished": "Hoàn tất"
+      },
+      "review": {
+        "title": "Kết quả khám phá",
+        "kbEnriched": "Đã làm giàu KB · {{routes}}, {{selectors}}",
+        "routesCount_one": "{{count}} tuyến",
+        "routesCount_other": "{{count}} tuyến",
+        "selectorsCount_one": "{{count}} bộ chọn",
+        "selectorsCount_other": "{{count}} bộ chọn",
+        "nothingDiscovered": "Không khám phá được gì",
+        "noop": "không tác dụng",
+        "regenerateWithKb": "Tạo lại với KB mới",
+        "wroteKbHint": "Các tuyến/bộ chọn đã được xác minh khi chạy đã được ghi vào Cơ sở tri thức — hãy tạo lại để bỏ chặn.",
+        "noKbHint": "Không quan sát được trạng thái trang khả dụng nào, nên không có gì được ghi vào Cơ sở tri thức — trường hợp này vẫn bị chặn. Hãy kiểm tra ứng dụng có thể truy cập trong môi trường này, rồi thử lại."
+      }
+    },
+    "regen": {
+      "tags": {
+        "dataTestId": "bộ chọn data-testid",
+        "networkIdle": "chờ network-idle",
+        "removedHardWaits": "đã loại bỏ chờ cứng",
+        "roleLabel": "bộ định vị role/label",
+        "assertions": "khẳng định tường minh"
+      },
+      "summary": {
+        "title": "Đã tạo lại lên v{{version}}",
+        "stillBlocked": " · vẫn bị chặn",
+        "linesChanged_one": " · đã thay đổi {{count}} dòng",
+        "linesChanged_other": " · đã thay đổi {{count}} dòng",
+        "applied": "Đã áp dụng: {{tags}}",
+        "feedback": "Phản hồi",
+        "revert": "Hoàn tác"
+      }
+    },
+    "regenNote": {
+      "triggerTitle": "Tạo lại đặc tả này, tùy chọn kèm ghi chú định hướng cho Claude",
+      "regenerating": "Đang tạo lại…",
+      "placeholder": "Ghi chú cho Claude (tùy chọn)…",
+      "cancel": "Hủy"
+    },
+    "events": {
+      "specFallback": "đặc tả",
+      "healFixed": "Tự khắc phục đã sửa {{caseCode}}",
+      "productDefect": "{{caseCode}}: nghi ngờ lỗi sản phẩm — đã chuyển đến báo cáo",
+      "healGaveUp": "Tự khắc phục đã bỏ cuộc với {{caseCode}}: {{detail}}",
+      "stillFailing": "vẫn thất bại"
+    }
+  },
+  "execution": {
+    "title": "Thực thi",
+    "parallelWorkers": "{{count}} luồng song song",
+    "target": {
+      "changeTooltip": "Thay đổi mục tiêu thực thi mặc định trong Cài đặt",
+      "myMachine": "Máy của tôi",
+      "server": "Máy chủ"
+    },
+    "button": {
+      "running": "Đang chạy…",
+      "rerun": "Chạy lại",
+      "runSuite": "Chạy bộ kiểm thử"
+    },
+    "auth": {
+      "waiting": "Đang chờ đăng nhập thủ công",
+      "localAgent": "Một trình duyệt đã mở trên máy của bạn. Đăng nhập",
+      "server": "Một trình duyệt đã mở trên máy chủ. Đăng nhập",
+      "at": "tại",
+      "thenClose": ", sau đó đóng cửa sổ để tiếp tục."
+    },
+    "stats": {
+      "passed": "Đạt",
+      "failed": "Không đạt",
+      "remaining": "Còn lại"
+    },
+    "currentlyExecuting": "ĐANG THỰC THI",
+    "notStarted": "Chưa bắt đầu",
+    "collectEvidence": "Thu thập bằng chứng",
+    "queue": {
+      "heading": "HÀNG ĐỢI THỰC THI",
+      "empty": "Chưa có trường hợp nào trong hàng đợi. Chạy bộ kiểm thử để bắt đầu thực thi."
+    },
+    "log": {
+      "heading": "NHẬT KÝ THỰC THI"
+    },
+    "toast": {
+      "loginCaptured": "Đã ghi nhận đăng nhập",
+      "manualLoginFailed": "Đăng nhập thủ công thất bại",
+      "noLocalAgent": "Chưa ghép nối tác nhân cục bộ — hãy khởi động tác nhân cục bộ của bạn",
+      "localAgentAction": "Tác nhân cục bộ",
+      "startFailed": "Không thể bắt đầu thực thi"
+    }
+  },
+  "evidence": {
+    "title": "Bằng chứng",
+    "subtitle": "RUN-{{runId}} · bằng chứng theo từng ca kiểm thử, nhóm theo ticket",
+    "empty": {
+      "title": "Chưa có bằng chứng",
+      "body": "Chạy bộ kiểm thử đã duyệt để thu thập bằng chứng cho mọi ticket trong Lần chạy.",
+      "action": "Đi đến Thực thi"
+    },
+    "ticketsInRun": "TICKET TRONG LẦN CHẠY",
+    "passedCount": "{{pass}}/{{total}} đạt",
+    "prepareComments": "Chuẩn bị bình luận ticket",
+    "testCases": "CA KIỂM THỬ · {{id}}",
+    "selectPrompt": "Chọn một ca kiểm thử",
+    "noTestCases": "Không có ca kiểm thử nào trong ticket này.",
+    "tabs": {
+      "screenshot": "Ảnh chụp màn hình",
+      "video": "Video",
+      "trace": "Dấu vết",
+      "console": "Nhật ký console",
+      "network": "Mạng"
+    },
+    "toast": {
+      "annotationSaved": "Đã lưu chú thích",
+      "annotationFailed": "Lưu chú thích thất bại",
+      "autoAnnotated": "Đã phân tích & chú thích ảnh chụp màn hình",
+      "autoAnnotateFailed": "Phân tích tự động thất bại"
+    },
+    "screenshot": {
+      "chromePassed": "{{caseCode}} · đạt — không có lỗi",
+      "chromeNoShot": "{{caseCode}} · không có ảnh chụp màn hình",
+      "allPassed": "Tất cả các kiểm chứng đều đạt",
+      "noShotTitle": "Không có ảnh chụp màn hình cho ca này",
+      "passedBody": "Ảnh chụp màn hình chỉ được ghi lại khi thất bại — không có gì để chú thích ở đây.",
+      "noShotBody": "Ca này không có ảnh chụp màn hình lỗi để chú thích.",
+      "annotatedSuffix": " · đã chú thích"
+    },
+    "aiDiagnosis": "Chẩn đoán AI",
+    "shotView": {
+      "annotated": "đã chú thích",
+      "original": "gốc"
+    },
+    "analyzing": "Đang phân tích…",
+    "reAnalyze": "Phân tích lại",
+    "autoAnalyze": "Phân tích tự động",
+    "toolLabel": "Công cụ:",
+    "tools": {
+      "cursor": "con trỏ",
+      "rectangle": "hình chữ nhật",
+      "arrow": "mũi tên",
+      "highlight": "đánh dấu",
+      "circle": "hình tròn",
+      "text": "văn bản"
+    },
+    "saveAnnotation": "Lưu chú thích",
+    "noVideo": "Không có video nào được ghi cho {{caseCode}}.",
+    "noTrace": "Không có tệp dấu vết nào được ghi cho ca này.",
+    "noConsole": "Không có đầu ra console nào được ghi cho {{caseCode}}.",
+    "net": {
+      "method": "PHƯƠNG THỨC",
+      "status": "TRẠNG THÁI",
+      "time": "THỜI GIAN"
+    },
+    "noNetwork": "Không có yêu cầu mạng nào được ghi cho {{caseCode}}."
+  },
+  "publish": {
+    "header": {
+      "subtitle": "xuất bản kết quả lên từng hạng mục công việc",
+      "title": "Bình luận Ticket"
+    },
+    "retryFailed": "Thử lại mục lỗi",
+    "publishAll": "Xuất bản tất cả",
+    "publish": "Xuất bản",
+    "status": {
+      "draft": "Bản nháp",
+      "publishing": "Đang xuất bản…",
+      "published": "Đã xuất bản",
+      "failed": "Thất bại"
+    },
+    "toast": {
+      "publishingResults": "Đang xuất bản kết quả lên các ticket",
+      "publishFailed": "Xuất bản thất bại",
+      "prepareFailed": "Chuẩn bị thất bại"
+    },
+    "empty": {
+      "title": "Chưa có bình luận nào được chuẩn bị",
+      "body": "Tạo một báo cáo, sau đó chuẩn bị các bình luận kết quả do AI tóm tắt cho từng ticket trong lần chạy."
+    },
+    "preparing": "Đang chuẩn bị…",
+    "prepareComments": "Chuẩn bị bình luận",
+    "summarizing": "Đang tóm tắt kết quả bằng AI…"
+  },
+  "createLink": {
+    "header": {
+      "subtitle": "tạo các ca kiểm thử đã duyệt trong nhà cung cấp & liên kết tới từng hạng mục công việc",
+      "title": "Tạo & Liên kết Ca kiểm thử"
+    },
+    "generateAutomation": "Tạo tự động hóa",
+    "idle": {
+      "title": "Sẵn sàng tạo ca kiểm thử",
+      "descLocal": "Chế độ cục bộ đang bật — các ca đã duyệt chỉ được ghi lại cục bộ. Không có gì được ghi lên nhà cung cấp.",
+      "descProvider": "Các ca đã duyệt sẽ được tạo trong nhà cung cấp và liên kết tới từng hạng mục công việc trước khi tự động hóa được tạo.",
+      "localToggle": "Chế độ cục bộ — không tạo trong nhà cung cấp (tránh làm lộn xộn các mục kiểm thử)",
+      "createLocally": "Tạo cục bộ",
+      "createAndLinkNow": "Tạo & liên kết ngay"
+    },
+    "toast": {
+      "createLinkFailed": "Tạo & liên kết thất bại"
+    },
+    "running": {
+      "title": "Đang đồng bộ với nhà cung cấp",
+      "subtitle": "Đang tạo và liên kết các ca kiểm thử đã duyệt…"
+    },
+    "done": {
+      "createdLocally": "Đã tạo cục bộ",
+      "complete": "Đồng bộ hoàn tất",
+      "descLocal": "Các ca kiểm thử đã duyệt đã được ghi lại cục bộ (nhà cung cấp không bị thay đổi). Bây giờ bạn có thể tạo tự động hóa.",
+      "descProvider": "Các ca kiểm thử đã duyệt đã được tạo và liên kết. Bây giờ bạn có thể tạo tự động hóa."
+    },
+    "ticket": {
+      "testCasesCount": "{{count}} ca kiểm thử",
+      "createdLocally": "Đã tạo cục bộ",
+      "testCasesCreated": "Đã tạo ca kiểm thử",
+      "providerNotTouched": "Nhà cung cấp không bị thay đổi",
+      "linkedTo": "Đã liên kết với {{provider}}",
+      "pending": "Đang chờ…"
+    }
+  }
+}

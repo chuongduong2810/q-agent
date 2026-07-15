@@ -13,6 +13,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";
@@ -23,12 +24,12 @@ import { useAnnotate, useAutoAnnotate, useEvidence } from "@/hooks/queries";
 import { useUI, type AnnotationTool, type EvidenceTab } from "@/store/ui";
 import type { ExecutionResultOut } from "@/types/api";
 
-const TABS: { id: EvidenceTab; label: string }[] = [
-  { id: "screenshot", label: "Screenshot" },
-  { id: "video", label: "Video" },
-  { id: "trace", label: "Trace" },
-  { id: "console", label: "Console" },
-  { id: "network", label: "Network" },
+const TABS: { id: EvidenceTab }[] = [
+  { id: "screenshot" },
+  { id: "video" },
+  { id: "trace" },
+  { id: "console" },
+  { id: "network" },
 ];
 
 const TOOLS: { id: AnnotationTool; icon: typeof MousePointer2 }[] = [
@@ -49,6 +50,8 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export function Evidence() {
+  // `t` is used as a loop variable below, so alias the translator to `tr`.
+  const { t: tr } = useTranslation("pipeline");
   const runId = Number(useParams().runId);
   const navigate = useNavigate();
   const evidenceTab = useUI((s) => s.evidenceTab);
@@ -106,9 +109,9 @@ export function Evidence() {
     <div className="px-1 pb-10 pt-0.5">
       <div className="mb-3.5">
         <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-          RUN-{runId} &middot; evidence per test case, grouped by ticket
+          {tr("evidence.subtitle", { runId })}
         </div>
-        <h1 className="m-0 text-[28px] font-black tracking-tight">Evidence</h1>
+        <h1 className="m-0 text-[28px] font-black tracking-tight">{tr("evidence.title")}</h1>
       </div>
 
       <div className="mb-4 hidden md:block">
@@ -123,8 +126,8 @@ export function Evidence() {
       ) : notReady ? (
         <EmptyState
           icon={<Rows3 size={30} color="#7a7a8c" strokeWidth={1.8} />}
-          title="No evidence yet"
-          body="Run the approved suite to capture evidence for every ticket in the Run."
+          title={tr("evidence.empty.title")}
+          body={tr("evidence.empty.body")}
           action={
             <Button
               variant="primary"
@@ -132,7 +135,7 @@ export function Evidence() {
               className="w-full md:w-auto"
               onClick={() => navigate("/runs/" + runId + "/execution")}
             >
-              Go to execution
+              {tr("evidence.empty.action")}
             </Button>
           }
         />
@@ -170,7 +173,7 @@ export function Evidence() {
           <div className="hidden flex-col gap-3 md:flex">
             <div className="glass rounded-[18px] p-3.5">
               <div className="m-[2px_4px_10px] text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">
-                TICKETS IN RUN
+                {tr("evidence.ticketsInRun")}
               </div>
               <div className="flex flex-col gap-2">
                 {tickets.map((t) => {
@@ -200,7 +203,7 @@ export function Evidence() {
                         <div className="text-[11px] font-semibold" style={{ color: statusColor }}>
                           {t.statusLabel}
                           <span className="ml-1 font-normal text-ink-dim">
-                            · {t.pass}/{total} passed
+                            · {tr("evidence.passedCount", { pass: t.pass, total })}
                           </span>
                         </div>
                       </div>
@@ -210,7 +213,7 @@ export function Evidence() {
               </div>
             </div>
             <Button variant="primary" size="lg" onClick={() => navigate("/runs/" + runId + "/comment")} className="w-full">
-              Prepare ticket comments
+              {tr("evidence.prepareComments")}
               <ArrowRight size={15} strokeWidth={2.2} />
             </Button>
           </div>
@@ -240,11 +243,14 @@ export function Evidence() {
 
             <div className="glass hidden rounded-[18px] p-3 md:block">
               <div className="m-[2px_4px_6px] text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">
-                TEST CASES · {selectedTicket?.id ?? "—"}
+                {tr("evidence.testCases", { id: selectedTicket?.id ?? "—" })}
               </div>
               <div className="mb-2 px-1 text-[11px] text-ink-dim">
                 {selectedTicket
-                  ? `${selectedTicket.pass}/${selectedTicket.approved || selectedTicket.pass + selectedTicket.fail} passed`
+                  ? tr("evidence.passedCount", {
+                      pass: selectedTicket.pass,
+                      total: selectedTicket.approved || selectedTicket.pass + selectedTicket.fail,
+                    })
                   : ""}
               </div>
               <div className="flex flex-col gap-1.5">
@@ -288,7 +294,7 @@ export function Evidence() {
                   {selectedResult?.caseCode ?? "—"}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
-                  {selectedResult?.title ?? "Select a test case"}
+                  {selectedResult?.title ?? tr("evidence.selectPrompt")}
                 </span>
                 {selectedResult && (
                   <span
@@ -316,7 +322,7 @@ export function Evidence() {
                           : { background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.09)", color: "#dcdce4" }
                       }
                     >
-                      {t.label}
+                      {tr(`evidence.tabs.${t.id}`)}
                     </button>
                   );
                 })}
@@ -332,22 +338,23 @@ export function Evidence() {
                       annotate.mutate(
                         { evidenceId, shapes },
                         {
-                          onSuccess: () => toast.success("Annotation saved"),
-                          onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to save annotation"),
+                          onSuccess: () => toast.success(tr("evidence.toast.annotationSaved")),
+                          onError: (err) =>
+                            toast.error(err instanceof Error ? err.message : tr("evidence.toast.annotationFailed")),
                         },
                       )
                     }
                     onAutoAnnotate={(evidenceId) =>
                       autoAnnotate.mutate(evidenceId, {
-                        onSuccess: () => toast.success("Screenshot analyzed & annotated"),
+                        onSuccess: () => toast.success(tr("evidence.toast.autoAnnotated")),
                         onError: (err) =>
-                          toast.error(err instanceof Error ? err.message : "Auto-analysis failed"),
+                          toast.error(err instanceof Error ? err.message : tr("evidence.toast.autoAnnotateFailed")),
                       })
                     }
                     autoAnnotating={autoAnnotate.isPending}
                   />
                 ) : (
-                  <div className="text-[13px] text-ink-dim">No test cases in this ticket.</div>
+                  <div className="text-[13px] text-ink-dim">{tr("evidence.noTestCases")}</div>
                 )}
               </div>
             </div>
@@ -360,7 +367,7 @@ export function Evidence() {
             onClick={() => navigate("/runs/" + runId + "/comment")}
             className="w-full md:hidden"
           >
-            Prepare ticket comments
+            {tr("evidence.prepareComments")}
             <ArrowRight size={15} strokeWidth={2.2} />
           </Button>
         </div>
@@ -386,6 +393,7 @@ function EvidencePanel({
   onAutoAnnotate: (evidenceId: number) => void;
   autoAnnotating: boolean;
 }) {
+  const { t: tr } = useTranslation("pipeline");
   const [shotView, setShotView] = useState<"annotated" | "original">("annotated");
   const caseLabel = `${result.ticketExternalId} · ${result.caseCode} · ${result.title}`;
   const screenshot = result.evidence.find((e) => e.kind === "screenshot");
@@ -404,7 +412,13 @@ function EvidencePanel({
       const passed = result.status === "pass";
       return (
         <div className="overflow-hidden rounded-[14px] border border-white/10">
-          <BrowserChrome label={`${result.caseCode} · ${passed ? "passed — no defects" : "no screenshot captured"}`} />
+          <BrowserChrome
+            label={
+              passed
+                ? tr("evidence.screenshot.chromePassed", { caseCode: result.caseCode })
+                : tr("evidence.screenshot.chromeNoShot", { caseCode: result.caseCode })
+            }
+          />
           <div className="flex items-center gap-3.5 bg-[#f6f7fb] p-[22px] text-[#1e2430]">
             <div
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
@@ -414,12 +428,12 @@ function EvidencePanel({
             </div>
             <div>
               <div className="text-[15px] font-extrabold text-[#111827]">
-                {passed ? "All assertions passed" : "No screenshot for this case"}
+                {passed ? tr("evidence.screenshot.allPassed") : tr("evidence.screenshot.noShotTitle")}
               </div>
               <div className="mt-[3px] text-[12.5px] text-[#5b616e]">
                 {passed
-                  ? "Screenshots are captured only on failure — nothing to annotate here."
-                  : "This case has no failure screenshot to annotate."}
+                  ? tr("evidence.screenshot.passedBody")
+                  : tr("evidence.screenshot.noShotBody")}
               </div>
             </div>
           </div>
@@ -442,7 +456,7 @@ function EvidencePanel({
             <AlertTriangle size={16} className="mt-0.5 shrink-0 text-[#fb7185]" strokeWidth={2.2} />
             <div className="min-w-0">
               <div className="mb-0.5 text-[11px] font-bold uppercase tracking-[.06em] text-[#fb7185]">
-                AI diagnosis
+                {tr("evidence.aiDiagnosis")}
               </div>
               <div className="text-[13px] leading-relaxed text-[#f7c9cf]">{meta.diagnosis}</div>
             </div>
@@ -463,7 +477,7 @@ function EvidencePanel({
                       : { background: "rgba(255,255,255,.04)", color: "#9494a6" }
                   }
                 >
-                  {v}
+                  {tr(`evidence.shotView.${v}`)}
                 </button>
               ))}
             </div>
@@ -483,7 +497,11 @@ function EvidencePanel({
             ) : (
               <Sparkles size={14} strokeWidth={2.2} />
             )}
-            {autoAnnotating ? "Analyzing…" : meta.autoAnnotated ? "Re-analyze" : "Auto-analyze"}
+            {autoAnnotating
+              ? tr("evidence.analyzing")
+              : meta.autoAnnotated
+                ? tr("evidence.reAnalyze")
+                : tr("evidence.autoAnalyze")}
           </Button>
         </div>
 
@@ -508,19 +526,20 @@ function EvidencePanel({
             })}
           </div>
           <div className="flex-1 overflow-hidden rounded-[14px] border border-white/10">
-            <BrowserChrome label={`${caseLabel}${showAnnotated ? " · annotated" : ""}`} />
+            <BrowserChrome label={`${caseLabel}${showAnnotated ? tr("evidence.screenshot.annotatedSuffix") : ""}`} />
             <img src={imgSrc} alt={screenshot.filename} className="block w-full" />
           </div>
         </div>
         <div className="mt-3.5 flex items-center gap-2.5 text-[12.5px] text-ink-dim">
-          <span className="font-semibold text-[#c4b5fd]">Tool:</span> {tool}
+          <span className="font-semibold text-[#c4b5fd]">{tr("evidence.toolLabel")}</span>{" "}
+          {tr(`evidence.tools.${tool}`)}
           <Button
             variant="glass"
             size="sm"
             className="ml-auto"
             onClick={() => onAnnotate(screenshot.id, [{ tool, x: 0.5, y: 0.5 }])}
           >
-            Save annotation
+            {tr("evidence.saveAnnotation")}
           </Button>
         </div>
       </div>
@@ -535,7 +554,7 @@ function EvidencePanel({
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(139,92,246,.2)]">
             <Play size={26} fill="#c4b5fd" stroke="none" />
           </div>
-          <div className="font-mono text-[13px] text-[#9494a6]">No video captured for {result.caseCode}.</div>
+          <div className="font-mono text-[13px] text-[#9494a6]">{tr("evidence.noVideo", { caseCode: result.caseCode })}</div>
         </div>
       );
     }
@@ -565,7 +584,7 @@ function EvidencePanel({
             {result.caseCode} — {result.title}
           </div>
           {result.errorMessage && <div className="text-[#fb7185]">{result.errorMessage}</div>}
-          {!trace && <div className="text-ink-dim">No trace file recorded for this case.</div>}
+          {!trace && <div className="text-ink-dim">{tr("evidence.noTrace")}</div>}
         </div>
       </div>
     );
@@ -585,7 +604,7 @@ function EvidencePanel({
             );
           })
         ) : (
-          <div className="text-ink-dim">No console output captured for {result.caseCode}.</div>
+          <div className="text-ink-dim">{tr("evidence.noConsole", { caseCode: result.caseCode })}</div>
         )}
       </div>
     );
@@ -595,10 +614,10 @@ function EvidencePanel({
   return (
     <div className="overflow-hidden rounded-[14px] border border-white/10">
       <div className="grid grid-cols-[60px_1fr_70px_70px] gap-2 bg-white/[0.04] p-[10px_14px] text-[10.5px] font-bold tracking-[.05em] text-[#7a7a8c]">
-        <span>METHOD</span>
+        <span>{tr("evidence.net.method")}</span>
         <span>URL</span>
-        <span>STATUS</span>
-        <span>TIME</span>
+        <span>{tr("evidence.net.status")}</span>
+        <span>{tr("evidence.net.time")}</span>
       </div>
       {networkLogs.length ? (
         networkLogs.map((n, i) => {
@@ -617,7 +636,7 @@ function EvidencePanel({
           );
         })
       ) : (
-        <div className="p-4 text-center text-[12.5px] text-ink-dim">No network requests captured for {result.caseCode}.</div>
+        <div className="p-4 text-center text-[12.5px] text-ink-dim">{tr("evidence.noNetwork", { caseCode: result.caseCode })}</div>
       )}
     </div>
   );

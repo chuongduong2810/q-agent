@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRunEvents } from "@/hooks/useRunEvents";
 import { queryKeys } from "@/lib/queryKeys";
@@ -61,6 +62,7 @@ export type ExploreProgress = {
  */
 export function useAutomationEvents(runId: number, generating: boolean) {
   const qc = useQueryClient();
+  const { t } = useTranslation("pipeline");
 
   // Latest automation.progress detail for the banner. Captured from the WS
   // stream (see onRunEvent); cleared when generation finishes.
@@ -99,7 +101,7 @@ export function useAutomationEvents(runId: number, generating: boolean) {
         message,
       });
       if (message.toLowerCase().startsWith("error")) {
-        toast.error(`${p.file ?? "spec"}: ${message}`);
+        toast.error(`${p.file ?? t("progress.events.specFallback")}: ${message}`);
       }
       return;
     }
@@ -119,10 +121,16 @@ export function useAutomationEvents(runId: number, generating: boolean) {
       // before, the button) sticks. `product_defect` is terminal too (the heal
       // routed the case to the report rather than fixing it).
       if (p.phase === "passed" || p.phase === "failed" || p.phase === "product_defect") {
-        if (p.phase === "passed") toast.success(`Self-heal fixed ${p.caseCode}`);
+        if (p.phase === "passed") toast.success(t("progress.events.healFixed", { caseCode: p.caseCode }));
         else if (p.phase === "product_defect")
-          toast.error(`${p.caseCode}: product defect suspected — routed to the report`);
-        else toast.error(`Self-heal gave up on ${p.caseCode}: ${p.message || "still failing"}`);
+          toast.error(t("progress.events.productDefect", { caseCode: p.caseCode }));
+        else
+          toast.error(
+            t("progress.events.healGaveUp", {
+              caseCode: p.caseCode,
+              detail: p.message || t("progress.events.stillFailing"),
+            }),
+          );
         // The spec code, latest execution result, and heal trail changed on the server.
         qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
         qc.invalidateQueries({ queryKey: queryKeys.execution(runId) });
@@ -172,7 +180,7 @@ export function useAutomationEvents(runId: number, generating: boolean) {
       }
       return;
     }
-  }, [qc, runId]);
+  }, [qc, runId, t]);
   useRunEvents(onRunEvent);
 
   // Belt-and-braces: clear the banner detail whenever generation is no longer

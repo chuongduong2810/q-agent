@@ -1,4 +1,5 @@
 import { FileCode } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import type { AutomationSpecOut } from "@/types/api";
 import { normalizeSpecStatus } from "./specStatus";
@@ -22,10 +23,11 @@ export function SpecList({
   healProgress: HealProgress | null;
   onSelect: (caseId: number) => void;
 }) {
+  const { t } = useTranslation("pipeline");
   return (
     <GlassCard className="p-2">
       <div className="hidden px-2.5 pb-1.5 pt-2 text-[10.5px] font-semibold tracking-wider text-faint md:block">
-        APPROVED SPECS
+        {t("spec.list.approvedSpecs")}
       </div>
       {/* Desktop: vertical file list. */}
       <div className="hidden flex-col gap-0.5 md:flex">

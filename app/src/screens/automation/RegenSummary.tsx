@@ -1,8 +1,11 @@
 import { MessageSquarePlus, RotateCcw, Undo2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 /**
- * Derive short human-readable tags describing what a regeneration changed, from a
- * heuristic over the added and removed lines of the diff.
+ * Derive short tags describing what a regeneration changed, from a heuristic over
+ * the added and removed lines of the diff. Returns `pipeline` namespace
+ * translation keys (the consuming {@link RegenSummary} maps each to `t()` for
+ * display) so this plain module stays translation-free.
  *
  * Ordered so the most salient improvements surface first; each tag is emitted at
  * most once. Returns an empty array when nothing matches (the summary then omits
@@ -19,11 +22,11 @@ export function deriveTags(added: string[], removed: string[]): string[] {
   const addedText = added.join("\n");
   const removedText = removed.join("\n");
 
-  if (/getByTestId|data-testid/.test(addedText)) push("data-testid selectors");
-  if (/waitForLoadState\(\s*['"]networkidle['"]\s*\)/.test(addedText)) push("network-idle waits");
-  if (/waitForTimeout\(/.test(removedText)) push("removed hard waits");
-  if (/getByRole|getByLabel|getByText/.test(addedText)) push("role/label locators");
-  if (/toBeVisible|expect\(/.test(addedText)) push("explicit assertions");
+  if (/getByTestId|data-testid/.test(addedText)) push("progress.regen.tags.dataTestId");
+  if (/waitForLoadState\(\s*['"]networkidle['"]\s*\)/.test(addedText)) push("progress.regen.tags.networkIdle");
+  if (/waitForTimeout\(/.test(removedText)) push("progress.regen.tags.removedHardWaits");
+  if (/getByRole|getByLabel|getByText/.test(addedText)) push("progress.regen.tags.roleLabel");
+  if (/toBeVisible|expect\(/.test(addedText)) push("progress.regen.tags.assertions");
 
   return tags;
 }
@@ -61,6 +64,7 @@ export function RegenSummary({
   onFeedback: () => void;
   onRevert: () => void;
 }) {
+  const { t } = useTranslation("pipeline");
   const accent = blocked ? "251,191,36" : "16,185,129"; // amber when still blocked, else green
   return (
     <div
@@ -73,11 +77,14 @@ export function RegenSummary({
           style={{ color: blocked ? "#fcd34d" : "#a7f3d0" }}
         >
           <RotateCcw size={14} strokeWidth={2.4} className="shrink-0" />
-          Regenerated to v{version}
-          {blocked ? " · still blocked" : ""} · {count} line{count === 1 ? "" : "s"} changed
+          {t("progress.regen.summary.title", { version })}
+          {blocked ? t("progress.regen.summary.stillBlocked") : ""}
+          {t("progress.regen.summary.linesChanged", { count })}
         </div>
         {tags.length > 0 && (
-          <div className="mt-1 text-xs leading-relaxed text-muted">Applied: {tags.join(", ")}</div>
+          <div className="mt-1 text-xs leading-relaxed text-muted">
+            {t("progress.regen.summary.applied", { tags: tags.map((k) => t(k)).join(", ") })}
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1.5">
@@ -86,7 +93,7 @@ export function RegenSummary({
           className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10"
         >
           <MessageSquarePlus size={13} />
-          Feedback
+          {t("progress.regen.summary.feedback")}
         </button>
         <button
           onClick={onRevert}
@@ -101,7 +108,7 @@ export function RegenSummary({
           ) : (
             <Undo2 size={13} />
           )}
-          Revert
+          {t("progress.regen.summary.revert")}
         </button>
       </div>
     </div>
