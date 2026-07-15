@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -48,6 +49,7 @@ function ConnectionSelect({
   value: number | null;
   onChange: (id: number) => void;
 }) {
+  const { t } = useTranslation("tickets");
   const selected = groups.flatMap((g) => g.connections).find((c) => c.id === value) ?? null;
   const meta = selected ? PROVIDER_META[selected.kind] : null;
 
@@ -64,7 +66,7 @@ function ConnectionSelect({
       </span>
     </span>
   ) : (
-    "Select connection"
+    t("selectConnection")
   );
 
   return (
@@ -73,7 +75,7 @@ function ConnectionSelect({
         <>
           {groups.length === 0 && (
             <div className="px-3 py-4 text-center text-[12px] text-ink-dim">
-              No work-item connections
+              {t("noWorkItemConnections")}
             </div>
           )}
           {groups.map((g) => (
@@ -110,6 +112,7 @@ function ConnectionSelect({
 }
 
 export function Tickets() {
+  const { t } = useTranslation("tickets");
   const ticketSearch = useUI((s) => s.ticketSearch);
   const setTicketSearch = useUI((s) => s.setTicketSearch);
   const selected = useUI((s) => s.selected);
@@ -208,10 +211,10 @@ export function Tickets() {
       onSuccess: () => {
         if (selected[id]) toggleSelected(id); // keep the selection count accurate
         setConfirmTicket(null);
-        toast.success("Ticket removed", { description: `${id} was removed locally.` });
+        toast.success(t("toast.removed"), { description: t("toast.removedDesc", { id }) });
       },
       onError: (e) =>
-        toast.error("Couldn't remove ticket", {
+        toast.error(t("toast.removeFailed"), {
           description: e instanceof Error ? e.message : undefined,
         }),
     });
@@ -223,12 +226,12 @@ export function Tickets() {
       onSuccess: (res) => {
         clearSelected();
         setConfirmBulk(false);
-        toast.success(`Removed ${res.deleted} ticket${res.deleted === 1 ? "" : "s"}`, {
-          description: "Removed locally — re-sync to restore.",
+        toast.success(t("toast.removedCount", { count: res.deleted }), {
+          description: t("toast.removedCountDesc"),
         });
       },
       onError: (e) =>
-        toast.error("Couldn't remove tickets", {
+        toast.error(t("toast.removeFailedMulti"), {
           description: e instanceof Error ? e.message : undefined,
         }),
     });
@@ -253,17 +256,17 @@ export function Tickets() {
 
   const syncSourceLabel = selectedConn
     ? `${PROVIDER_META[selectedConn.kind].name}${selectedConn.name ? ` · ${selectedConn.name}` : ""}`
-    : "your provider";
+    : t("yourProvider");
 
   return (
     <div className="px-1 pb-10 pt-0.5">
       <div className="mb-4 flex items-end justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-            {(selectedConn ? `${PROVIDER_META[selectedConn.kind].name} · ${selectedConn.name}` : "No connection") +
-              " · Synced 12m ago"}
+            {(selectedConn ? `${PROVIDER_META[selectedConn.kind].name} · ${selectedConn.name}` : t("noConnection")) +
+              ` · ${t("syncedAgo")}`}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Tickets</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">{t("title")}</h1>
         </div>
       </div>
 
@@ -280,7 +283,7 @@ export function Tickets() {
             <input
               value={ticketSearch}
               onChange={(e) => setTicketSearch(e.target.value)}
-              placeholder="Search tickets…"
+              placeholder={t("searchPlaceholder")}
               className="flex-1 border-none bg-transparent text-[13px] text-ink outline-none"
             />
           </div>
@@ -294,16 +297,16 @@ export function Tickets() {
                   onClick={() => setConfirmBulk(true)}
                 >
                   <Trash2 size={13} />
-                  Remove {selCount} selected
+                  {t("removeSelected", { n: selCount })}
                 </Button>
               )}
               <Button variant="glass" onClick={() => setSyncOpen(true)}>
                 <RefreshCw size={13} />
-                Sync
+                {t("sync")}
               </Button>
               <Button variant="primary" className="hidden md:inline-flex" onClick={openCreateRun}>
                 <Plus size={14} strokeWidth={2.3} />
-                Create Run {selCount > 0 && `(${selCount})`}
+                {t("createRun")} {selCount > 0 && `(${selCount})`}
               </Button>
             </div>
           </div>
@@ -315,44 +318,44 @@ export function Tickets() {
           <Select
             value={selectedSprint?.path ?? null}
             options={sprintOptions}
-            placeholder="Sprint"
+            placeholder={t("filters.sprint")}
             onChange={onPickSprint}
-            emptyLabel="No sprints found"
+            emptyLabel={t("filters.noSprintsFound")}
           />
           {isJira && (
             <Select
               value={ticketEpic}
               options={epicOptions}
-              placeholder="Epic"
+              placeholder={t("filters.epic")}
               onChange={setTicketEpic}
-              emptyLabel="No epics"
+              emptyLabel={t("filters.noEpics")}
             />
           )}
           {isAdo && (
             <Select
               value={areaPath}
               options={areaOptions}
-              placeholder="Area path"
+              placeholder={t("filters.areaPath")}
               onChange={setAreaPath}
-              emptyLabel="No area paths"
+              emptyLabel={t("filters.noAreaPaths")}
             />
           )}
           <MultiSelect
             values={states}
             options={stateOptions}
-            placeholder={isJira ? "Status" : "State"}
+            placeholder={isJira ? t("filters.status") : t("filters.state")}
             onChange={setStates}
           />
           <MultiSelect
             values={workItemTypes}
             options={typeOptions}
-            placeholder={isJira ? "Issue type" : "Work item type"}
+            placeholder={isJira ? t("filters.issueType") : t("filters.workItemType")}
             onChange={setWorkItemTypes}
           />
           <Select
             value={ticketPriority}
             options={PRIORITY_OPTIONS}
-            placeholder="Priority"
+            placeholder={t("filters.priority")}
             onChange={setTicketPriority}
           />
           {userName && (
@@ -360,7 +363,7 @@ export function Tickets() {
               onClick={selectAssigned}
               className="cursor-pointer rounded-[11px] border border-white/[0.09] bg-white/[0.05] px-[13px] py-2 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1]"
             >
-              Select my assigned
+              {t("selectMyAssigned")}
             </button>
           )}
         </div>
@@ -375,8 +378,8 @@ export function Tickets() {
       ) : !tickets.length ? (
         <EmptyState
           icon={<Search size={28} color="#8b8b9e" strokeWidth={1.6} />}
-          title="No tickets found"
-          body="Try a different filter or sync tickets from your provider."
+          title={t("empty.title")}
+          body={t("empty.body")}
         />
       ) : (
         <>
@@ -395,9 +398,7 @@ export function Tickets() {
           </div>
 
           <div className="mt-4 flex items-center justify-between text-[12.5px] text-ink-dim">
-            <span>
-              {total} ticket{total === 1 ? "" : "s"}
-            </span>
+            <span>{t("count", { count: total })}</span>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setTicketPage(Math.max(1, ticketPage - 1))}
@@ -405,17 +406,17 @@ export function Tickets() {
                 className="flex cursor-pointer items-center gap-1 rounded-[10px] border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft size={14} />
-                Prev
+                {t("pagination.prev")}
               </button>
               <span className="font-medium text-ink">
-                Page {ticketPage} of {totalPages}
+                {t("pagination.page", { page: ticketPage, total: totalPages })}
               </span>
               <button
                 onClick={() => setTicketPage(Math.min(totalPages, ticketPage + 1))}
                 disabled={ticketPage >= totalPages}
                 className="flex cursor-pointer items-center gap-1 rounded-[10px] border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-[12.5px] font-semibold text-[#dcdce4] hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Next
+                {t("pagination.next")}
                 <ChevronRight size={14} />
               </button>
             </div>
@@ -442,13 +443,9 @@ export function Tickets() {
 
       <ConfirmDialog
         open={!!confirmTicket}
-        title="Remove ticket?"
-        message={
-          confirmTicket
-            ? `Remove ${confirmTicket.externalId} from Q-Agent? This only deletes it locally — the work item in your provider is untouched, and a re-sync restores it.`
-            : ""
-        }
-        confirmLabel="Remove"
+        title={t("confirmRemove.title")}
+        message={confirmTicket ? t("confirmRemove.message", { id: confirmTicket.externalId }) : ""}
+        confirmLabel={t("confirmRemove.confirmLabel")}
         danger
         loading={deleteTicket.isPending}
         onConfirm={onConfirmDeleteTicket}
@@ -457,9 +454,9 @@ export function Tickets() {
 
       <ConfirmDialog
         open={confirmBulk}
-        title={`Remove ${selCount} ticket${selCount === 1 ? "" : "s"}?`}
-        message={`Remove ${selCount} selected ticket${selCount === 1 ? "" : "s"} from Q-Agent? This only deletes them locally — the work items in your provider are untouched, and a re-sync restores them.`}
-        confirmLabel={`Remove ${selCount}`}
+        title={t("confirmRemoveBulk.title", { count: selCount })}
+        message={t("confirmRemoveBulk.message", { count: selCount })}
+        confirmLabel={t("confirmRemoveBulk.confirmLabel", { n: selCount })}
         danger
         loading={deleteTickets.isPending}
         onConfirm={onConfirmDeleteSelected}
@@ -484,13 +481,14 @@ function TicketRow({
   onRequestDelete: () => void;
   index: number;
 }) {
+  const { t } = useTranslation("tickets");
   const [glyph, glyphColor] = providerGlyph[ticket.providerKind] ?? ["?", "#8b8b9e"];
   // Trash affordance — stops propagation so it never opens the ticket.
   const deleteButton = (
     <button
       type="button"
-      aria-label={`Remove ${ticket.externalId}`}
-      title="Remove locally"
+      aria-label={t("row.removeAria", { id: ticket.externalId })}
+      title={t("row.removeLocally")}
       onClick={(e) => {
         e.stopPropagation();
         onRequestDelete();
@@ -546,7 +544,7 @@ function TicketRow({
         <StatusBadge status={ticket.status} />
 
         <span className="w-[74px] shrink-0 text-right text-[11px] text-ink-dim">
-          {ticket.acCount} AC &middot; <span style={{ color: priorityColor(ticket.priority) }}>{ticket.priority}</span>
+          {t("row.ac", { n: ticket.acCount })} &middot; <span style={{ color: priorityColor(ticket.priority) }}>{ticket.priority}</span>
         </span>
 
         <div className="accent-gradient flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] text-[10.5px] font-bold text-white">
@@ -554,7 +552,7 @@ function TicketRow({
         </div>
 
         <Button variant="glass" size="sm" onClick={onOpen} className="shrink-0">
-          Details
+          {t("row.details")}
         </Button>
 
         {deleteButton}
@@ -593,7 +591,7 @@ function TicketRow({
           <div className="flex flex-wrap items-center gap-[7px] text-[11px] text-ink-dim">
             <StatusBadge status={ticket.status} />
             <span>{ticket.sprint}</span>
-            <span>&middot; {ticket.acCount} AC</span>
+            <span>&middot; {t("row.ac", { n: ticket.acCount })}</span>
           </div>
         </div>
 
@@ -622,6 +620,7 @@ function MobileSelectionBar({
   onRemove: () => void;
   onClear: () => void;
 }) {
+  const { t } = useTranslation("tickets");
   return createPortal(
     <AnimatePresence>
       {count > 0 && (
@@ -637,21 +636,21 @@ function MobileSelectionBar({
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet px-1.5 text-[11px] font-bold text-white">
               {count}
             </span>
-            selected
+            {t("mobileBar.selected")}
           </span>
           <button
             type="button"
-            title="Create run"
+            title={t("mobileBar.createRun")}
             onClick={onCreateRun}
             className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[11px] bg-[rgba(139,92,246,.9)] px-3 text-[13px] font-bold text-white transition-colors hover:bg-[rgba(139,92,246,1)]"
           >
             <Plus size={15} strokeWidth={2.4} />
-            Create run
+            {t("mobileBar.createRun")}
           </button>
           <button
             type="button"
-            title="Remove selected"
-            aria-label={`Remove ${count} selected`}
+            title={t("mobileBar.removeSelected")}
+            aria-label={t("mobileBar.removeSelectedAria", { n: count })}
             onClick={onRemove}
             className="flex h-9 w-9 items-center justify-center rounded-[11px] text-[#fb7185] transition-colors hover:bg-[rgba(251,113,133,.14)]"
           >
@@ -660,7 +659,7 @@ function MobileSelectionBar({
           <div className="mx-0.5 h-6 w-px bg-white/[0.1]" />
           <button
             type="button"
-            title="Clear selection"
+            title={t("mobileBar.clearSelection")}
             onClick={onClear}
             className="flex h-9 w-9 items-center justify-center rounded-[11px] text-ink-soft transition-colors hover:bg-white/[0.08] hover:text-ink"
           >
