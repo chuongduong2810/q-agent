@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";
-import { approvalColors, Pill, priorityBg, priorityColor } from "@/components/ui/badges";
+import { approvalStyle, Pill, priorityBg, priorityColor } from "@/components/ui/badges";
 import { Select } from "@/components/ui/Dropdown";
 import { EmptyState, Spinner } from "@/components/ui/misc";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -404,7 +404,7 @@ function CaseRow({
 
   const expanded = expandedCase === c.id;
   const isEditing = editingCase === c.id;
-  const [color, label, bg] = approvalColors[c.approval] ?? approvalColors.pending;
+  const [color, label, bg] = approvalStyle(c.approval);
   const prColor = priorityColor(c.priority);
   const prBg = priorityBg(c.priority);
   const statusBorder =

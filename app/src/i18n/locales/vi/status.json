@@ -1,0 +1,75 @@
+{
+  "run": {
+    "processing": "Đang xử lý",
+    "review": "Đánh giá",
+    "sync": "Tạo & Liên kết",
+    "automation": "Tự động hóa",
+    "executing": "Đang thực thi",
+    "evidence": "Bằng chứng",
+    "comment": "Đang xuất bản",
+    "done": "Hoàn tất",
+    "cancelled": "Đã hủy",
+    "failed": "Thất bại",
+    "incomplete": "Chưa hoàn tất"
+  },
+  "runBadge": {
+    "processing": "Đang phân tích",
+    "review": "Đang đánh giá",
+    "sync": "Đang tạo & liên kết",
+    "automation": "Tự động hóa",
+    "executing": "Đang thực thi",
+    "evidence": "Bằng chứng",
+    "comment": "Đang xuất bản",
+    "done": "Hoàn thành",
+    "cancelled": "Đã hủy",
+    "failed": "Thất bại",
+    "incomplete": "Chưa hoàn tất"
+  },
+  "runMeta_one": "{{count}} công việc",
+  "runMeta_other": "{{count}} công việc",
+  "timeAgo": {
+    "now": "vừa xong",
+    "minutes": "{{count}} phút trước",
+    "hours": "{{count}} giờ trước",
+    "days_one": "{{count}} ngày trước",
+    "days_other": "{{count}} ngày trước"
+  },
+  "timeShort": {
+    "now": "nay",
+    "minutes": "{{count}}p",
+    "hours": "{{count}}g",
+    "days": "{{count}}ng"
+  },
+  "approval": {
+    "pending": "Chờ duyệt",
+    "approved": "Đã duyệt",
+    "rejected": "Bị từ chối"
+  },
+  "exec": {
+    "pending": "Trong hàng đợi",
+    "running": "Đang chạy",
+    "pass": "Đạt",
+    "fail": "Không đạt",
+    "skipped": "Bỏ qua"
+  },
+  "productDefect": "Lỗi sản phẩm",
+  "knowledge": {
+    "indexed": "Đã lập chỉ mục",
+    "indexing": "Đang xây dựng…",
+    "stale": "Cần làm mới",
+    "error": "Xây dựng thất bại",
+    "none": "Chưa lập chỉ mục"
+  },
+  "knowledgeSteps": {
+    "connecting": "Đang kết nối kho mã…",
+    "reading": "Đang đọc tài liệu…",
+    "architecture": "Đang tìm hiểu kiến trúc dự án…",
+    "stack": "Đang phát hiện công nghệ sử dụng…",
+    "findingTests": "Đang tìm các bài kiểm thử Playwright hiện có…",
+    "pageObjects": "Đang khám phá page object…",
+    "conventions": "Đang học quy ước lập trình…",
+    "building": "Đang xây dựng cơ sở tri thức dự án…",
+    "optimizing": "Đang tối ưu ngữ cảnh AI…",
+    "ready": "Cơ sở tri thức đã sẵn sàng."
+  }
+}
