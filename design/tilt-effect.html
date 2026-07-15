@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>3D Tilt Hover — Q-Agent</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:#0a0a0f;color:#ECECF1;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;padding:56px 40px 80px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:0 0 6px}
+  .sub{color:#8f8fa2;font-size:14px;margin:0 0 40px}
+  .section-label{font-size:11px;font-weight:700;letter-spacing:.14em;color:#6b6b7e;text-transform:uppercase;margin:0 0 16px}
+  .logo-stage{display:flex;justify-content:center;margin:0 0 44px;perspective:900px}
+  .logo{width:360px;max-width:70%;height:auto;filter:drop-shadow(0 16px 26px rgba(0,0,0,.6));cursor:pointer}
+
+  /* ---- The tilt effect (copy this) ---- */
+  .tilt{transition:transform .3s cubic-bezier(.2,.7,.3,1), box-shadow .3s ease, border-color .3s ease;transform-style:preserve-3d;will-change:transform}
+  .tilt:hover{box-shadow:0 18px 50px -22px rgba(139,92,246,.5);border-color:rgba(139,92,246,.32)}
+  .logo.tilt:hover{box-shadow:none;border-color:transparent}
+  /* -------------------------------------- */
+
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:48px}
+  .card{padding:22px;border-radius:20px;background:rgba(255,255,255,.035);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.07)}
+  .card .k{font-size:11px;font-weight:600;letter-spacing:.08em;color:#8f8fa2;text-transform:uppercase}
+  .card .v{font-size:30px;font-weight:800;margin-top:10px;letter-spacing:-.02em}
+  .card .d{font-size:12px;color:#6ee7b7;margin-top:8px}
+
+  .hero{grid-column:span 4;padding:28px;border-radius:22px;background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.09));border:1px solid rgba(139,92,246,.26)}
+  .hero h2{margin:0 0 6px;font-size:20px;font-weight:800}
+  .hero p{margin:0;color:#c7c7d4;font-size:14px}
+
+  pre{background:#111119;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:20px 22px;overflow:auto;font-family:'JetBrains Mono','SF Mono',Consolas,monospace;font-size:12.5px;line-height:1.7;color:#d6d6e0;margin:0 0 22px}
+  pre .c{color:#6b6b7e}
+  pre .t{color:#c4b5fd}
+  pre .s{color:#7dd3fc}
+  .note{font-size:13px;color:#9a9aad;line-height:1.7;background:rgba(255,255,255,.03);border-left:3px solid rgba(139,92,246,.5);border-radius:0 10px 10px 0;padding:14px 18px;margin:0 0 22px}
+  .note b{color:#ECECF1}
+  code.inl{background:rgba(255,255,255,.07);padding:2px 6px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo-stage">
+      <img src="assets/eme-3d-logo-cut.png" alt="EMESOFT" class="logo tilt"/>
+    </div>
+
+    <h1>3D Tilt Hover Effect</h1>
+    <p class="sub">Cursor-tracked tilt with a top-pinned pivot (won't clip on hover) — vanilla JS + CSS, no framework.</p>
+
+    <p class="section-label">Live demo — hover the cards</p>
+    <div class="grid">
+      <div class="card tilt"><div class="k">Passed</div><div class="v">1,284</div><div class="d">+4.2% this week</div></div>
+      <div class="card tilt"><div class="k">Coverage</div><div class="v">92%</div><div class="d">+1.1% this week</div></div>
+      <div class="card tilt"><div class="k">Flaky</div><div class="v">7</div><div class="d">−3 this week</div></div>
+      <div class="card tilt"><div class="k">Avg run</div><div class="v">4m 12s</div><div class="d">−18s this week</div></div>
+      <div class="hero tilt">
+        <h2>Ship with confidence</h2>
+        <p>Move your cursor across any card — the tilt follows the pointer and pivots from the top edge, so lifted cards never slide under a header or nav bar.</p>
+      </div>
+    </div>
+
+    <p class="section-label">1 · HTML</p>
+    <pre><span class="c">&lt;!-- add class="tilt" to any card --&gt;</span>
+&lt;<span class="t">div</span> <span class="s">class</span>=<span class="s">"card tilt"</span>&gt;…&lt;/<span class="t">div</span>&gt;</pre>
+
+    <p class="section-label">2 · CSS</p>
+    <pre>.<span class="t">tilt</span> {
+  <span class="s">transition</span>: transform .3s cubic-bezier(.2,.7,.3,1),
+              box-shadow .3s ease, border-color .3s ease;
+  <span class="s">transform-style</span>: preserve-3d;
+  <span class="s">will-change</span>: transform;
+}
+.<span class="t">tilt</span>:hover {
+  <span class="s">box-shadow</span>: 0 18px 50px -22px rgba(139,92,246,.5);
+  <span class="s">border-color</span>: rgba(139,92,246,.32);
+}</pre>
+
+    <p class="section-label">3 · JavaScript</p>
+    <pre><span class="c">// tune these two for strength</span>
+<span class="t">const</span> MAX_X = <span class="s">10</span>, MAX_Y = <span class="s">13</span>, SCALE = <span class="s">1.045</span>;
+
+<span class="t">function</span> <span class="t">bindTilt</span>(el) {
+  el.addEventListener(<span class="s">'mousemove'</span>, (e) =&gt; {
+    <span class="t">const</span> r = el.getBoundingClientRect();
+    <span class="t">const</span> px = (e.clientX - r.left) / r.width;
+    <span class="t">const</span> py = (e.clientY - r.top) / r.height;
+    <span class="t">const</span> rx = (<span class="s">0.5</span> - py) * MAX_X;   <span class="c">// tilt up/down</span>
+    <span class="t">const</span> ry = (px - <span class="s">0.5</span>) * MAX_Y;   <span class="c">// tilt left/right</span>
+    el.style.transformOrigin = <span class="s">'50% 0%'</span>;  <span class="c">// pivot from TOP → no clip</span>
+    el.style.transform =
+      <span class="s">`perspective(780px) rotateX(${rx}deg) rotateY(${ry}deg) scale(${SCALE})`</span>;
+    el.style.zIndex = <span class="s">'20'</span>;              <span class="c">// float above siblings</span>
+  });
+  el.addEventListener(<span class="s">'mouseleave'</span>, () =&gt; {
+    el.style.transform = <span class="s">''</span>;
+    el.style.zIndex = <span class="s">''</span>;
+    el.style.transformOrigin = <span class="s">''</span>;
+  });
+}
+
+document.querySelectorAll(<span class="s">'.tilt'</span>).forEach(bindTilt);</pre>
+
+    <div class="note">
+      <b>Why it never gets cut off:</b> <code class="inl">transformOrigin: '50% 0%'</code> pins the pivot to each card's top edge, so it tilts and scales <b>downward</b> instead of rising up. Combined with no <code class="inl">translateY</code>, the top never moves — a card in the first row can't slide under a fixed header or nav bar.
+    </div>
+    <div class="note">
+      <b>Tuning:</b> raise <code class="inl">MAX_X</code>/<code class="inl">MAX_Y</code> (try 14/18) for a stronger tilt, or lower them (6/8) for subtle. Drop <code class="inl">SCALE</code> to <code class="inl">1</code> if you don't want the card to grow.
+    </div>
+  </div>
+
+  <script>
+    const MAX_X = 10, MAX_Y = 13, SCALE = 1.045;
+    function bindTilt(el){
+      el.addEventListener('mousemove', (e) => {
+        const r = el.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width;
+        const py = (e.clientY - r.top) / r.height;
+        const rx = (0.5 - py) * MAX_X;
+        const ry = (px - 0.5) * MAX_Y;
+        el.style.transformOrigin = '50% 0%';
+        el.style.transform = `perspective(780px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) scale(${SCALE})`;
+        el.style.zIndex = '20';
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.transform = '';
+        el.style.zIndex = '';
+        el.style.transformOrigin = '';
+      });
+    }
+    document.querySelectorAll('.tilt').forEach(bindTilt);
+  </script>
+</body>
+</html>
