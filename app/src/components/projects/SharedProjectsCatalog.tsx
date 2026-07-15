@@ -7,6 +7,7 @@
  */
 
 import { Boxes, Check, Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Pill, providerGlyph } from "@/components/ui/badges";
@@ -16,6 +17,7 @@ import { useCloneSharedProject, useSharedProjects } from "@/hooks/queries";
 import type { ProviderKind, SharedProjectOut } from "@/types/api";
 
 export function SharedProjectsCatalog() {
+  const { t } = useTranslation("projects");
   const { data: shared, isLoading } = useSharedProjects();
   const clone = useCloneSharedProject();
 
@@ -31,10 +33,8 @@ export function SharedProjectsCatalog() {
           <Boxes size={16} strokeWidth={2.2} />
         </span>
         <div>
-          <div className="text-[14px] font-bold">Clone from shared</div>
-          <div className="text-[11.5px] text-[#8b8b9e]">
-            Ready-built projects maintained by admins — clone one instead of rebuilding knowledge.
-          </div>
+          <div className="text-[14px] font-bold">{t("shared.title")}</div>
+          <div className="text-[11.5px] text-[#8b8b9e]">{t("shared.subtitle")}</div>
         </div>
       </div>
 
@@ -61,6 +61,7 @@ function SharedProjectRow({
   cloning: boolean;
   onClone: () => void;
 }) {
+  const { t } = useTranslation("projects");
   const kind = (project.providerKind || "ado") as ProviderKind;
   const [glyph, glyphBg] = providerGlyph[kind] ?? ["?", "#6b7280"];
   const glyphColor = kind === "github" ? "#12121a" : "#fff";
@@ -83,7 +84,7 @@ function SharedProjectRow({
         <div className="truncate text-[13px] font-bold">{project.name}</div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {project.knowledge.length === 0 ? (
-            <span className="text-[11px] text-[#6c6c7e]">No knowledge built yet</span>
+            <span className="text-[11px] text-[#6c6c7e]">{t("shared.noKnowledge")}</span>
           ) : (
             project.knowledge.map((k) => {
               const [label, color, bg] = knowledgeStatusStyle(k.status);
@@ -100,7 +101,7 @@ function SharedProjectRow({
       </div>
       {project.alreadyCloned ? (
         <span className="flex shrink-0 items-center gap-1.5 text-[12px] font-semibold text-[#6ee7b7]">
-          <Check size={14} strokeWidth={2.4} /> Cloned
+          <Check size={14} strokeWidth={2.4} /> {t("shared.cloned")}
         </span>
       ) : (
         <Button
@@ -109,10 +110,10 @@ function SharedProjectRow({
           className="shrink-0"
           disabled={cloning || !ready}
           onClick={onClone}
-          title={ready ? undefined : "Not ready — no knowledge built yet"}
+          title={ready ? undefined : t("shared.notReady")}
         >
           {cloning ? <Spinner size={13} /> : <Copy size={13} strokeWidth={2.2} />}
-          {cloning ? "Cloning…" : "Clone"}
+          {cloning ? t("shared.cloning") : t("shared.clone")}
         </Button>
       )}
     </div>

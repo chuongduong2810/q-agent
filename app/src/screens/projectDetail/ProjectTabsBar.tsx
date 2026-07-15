@@ -1,11 +1,12 @@
+import { useTranslation } from "react-i18next";
 import { type ProjectTab } from "@/store/ui";
 
-export const TABS: { id: ProjectTab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "knowledge", label: "Project Knowledge" },
-  { id: "tickets", label: "Tickets" },
-  { id: "runs", label: "Runs" },
-  { id: "settings", label: "Settings" },
+export const TABS: { id: ProjectTab; labelKey: string }[] = [
+  { id: "overview", labelKey: "tabs.overview" },
+  { id: "knowledge", labelKey: "tabs.knowledge" },
+  { id: "tickets", labelKey: "tabs.tickets" },
+  { id: "runs", labelKey: "tabs.runs" },
+  { id: "settings", labelKey: "tabs.settings" },
 ];
 
 /** Project detail tab bar. Highlights the active tab; each click is delegated to
@@ -17,14 +18,15 @@ export function ProjectTabsBar({
   active: ProjectTab;
   onSelect: (id: ProjectTab) => void;
 }) {
+  const { t } = useTranslation("projects");
   return (
     <div className="mb-[18px] flex flex-wrap gap-2 border-b border-white/[0.06] pb-4">
-      {TABS.map((t) => {
-        const isActive = active === t.id;
+      {TABS.map((tab) => {
+        const isActive = active === tab.id;
         return (
           <button
-            key={t.id}
-            onClick={() => onSelect(t.id)}
+            key={tab.id}
+            onClick={() => onSelect(tab.id)}
             className="cursor-pointer whitespace-nowrap rounded-[11px] border-none px-[15px] py-[9px] text-[13px] font-semibold"
             style={
               isActive
@@ -36,7 +38,7 @@ export function ProjectTabsBar({
                 : { background: "rgba(255,255,255,.04)", color: "#a0a0b2" }
             }
           >
-            {t.label}
+            {t(tab.labelKey)}
           </button>
         );
       })}

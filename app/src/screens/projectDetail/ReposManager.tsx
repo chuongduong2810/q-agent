@@ -1,5 +1,6 @@
 import { Plus, Search, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { useConnectionRepos } from "@/hooks/queries";
@@ -23,6 +24,7 @@ export function ReposManager({
   repos: ProjectRepo[];
   setRepos: (updater: (r: ProjectRepo[]) => ProjectRepo[]) => void;
 }) {
+  const { t } = useTranslation("projects");
   const [discovering, setDiscovering] = useState(false);
   const { data: available, isFetching } = useConnectionRepos(repoConnectionId, discovering);
 
@@ -49,31 +51,31 @@ export function ReposManager({
   return (
     <GlassCard className="p-5">
       <div className="mb-1 flex flex-wrap items-center gap-2">
-        <div className="flex-1 text-[14px] font-bold">Repositories</div>
+        <div className="flex-1 text-[14px] font-bold">{t("repos.repositories")}</div>
         <Button
           variant="glass"
           onClick={() => setDiscovering(true)}
           disabled={isFetching || !repoConnectionId}
-          title={repoConnectionId ? undefined : "Bind a repository provider above first"}
+          title={repoConnectionId ? undefined : t("repos.bindProviderFirst")}
         >
           <Search size={14} strokeWidth={2.4} />{" "}
           {isFetching
-            ? "Discovering…"
-            : `Discover from ${repoConnectionName || "repository provider"}`}
+            ? t("repos.discovering")
+            : t("repos.discoverFrom", { name: repoConnectionName || t("repos.repositoryProvider") })}
         </Button>
         <Button
           variant="glass"
           onClick={() => addRepo({ name: "", repoUrl: "", defaultBranch: "", localRepoPath: "", default: false })}
         >
-          <Plus size={14} strokeWidth={2.4} /> Add manually
+          <Plus size={14} strokeWidth={2.4} /> {t("repos.addManually")}
         </Button>
       </div>
       <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
-        Each repository gets its own knowledge base (built from the Project Knowledge tab). The{" "}
-        <Star size={11} className="inline align-[-1px]" color="#fbbf24" fill="#fbbf24" /> default repo
-        is the one automation targets when a run doesn&apos;t specify one. Repos are cloned/pulled to{" "}
-        <span className="font-mono">workspace/repos/&lt;project&gt;/&lt;repo&gt;</span> (private repos
-        use the provider PAT), or use a local path if set.
+        {t("repos.blurb1")}{" "}
+        <Star size={11} className="inline align-[-1px]" color="#fbbf24" fill="#fbbf24" />{" "}
+        {t("repos.blurb2")}{" "}
+        <span className="font-mono">workspace/repos/&lt;project&gt;/&lt;repo&gt;</span>
+        {t("repos.blurb3")}
       </p>
 
       {available?.error && discovering && (
@@ -85,7 +87,7 @@ export function ReposManager({
       {discovered.length > 0 && (
         <div className="mb-3.5 rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-2.5">
           <div className="mb-1.5 px-1 text-[11px] font-semibold tracking-wider text-faint">
-            DISCOVERED — click to add
+            {t("repos.discoveredHint")}
           </div>
           <div className="flex flex-wrap gap-2">
             {discovered.map((r) => (
@@ -110,7 +112,7 @@ export function ReposManager({
       )}
 
       {repos.length === 0 ? (
-        <div className="text-[12.5px] text-[#6c6c7e]">No repositories configured yet.</div>
+        <div className="text-[12.5px] text-[#6c6c7e]">{t("repos.noRepositories")}</div>
       ) : (
         <div className="flex flex-col gap-3">
           {repos.map((r, i) => (
@@ -121,7 +123,7 @@ export function ReposManager({
               <div className="mb-2 flex items-center gap-2.5">
                 <button
                   onClick={() => setDefault(i)}
-                  title={r.default ? "Default automation target" : "Set as default"}
+                  title={r.default ? t("repos.defaultTarget") : t("repos.setDefault")}
                   className="flex h-6 w-6 items-center justify-center rounded-[7px]"
                   style={{ background: r.default ? "rgba(251,191,36,.16)" : "rgba(255,255,255,.05)" }}
                 >
@@ -129,20 +131,20 @@ export function ReposManager({
                 </button>
                 <input
                   className={`${inputCls} max-w-[220px] font-mono`}
-                  placeholder="repo-name"
+                  placeholder={t("repos.namePlaceholder")}
                   value={r.name}
                   onChange={(e) => updateRepo(i, { name: e.target.value })}
                 />
                 {r.default && (
                   <span className="rounded-md bg-[rgba(251,191,36,.14)] px-2 py-0.5 text-[10.5px] font-bold text-[#fbbf24]">
-                    default
+                    {t("repos.defaultBadge")}
                   </span>
                 )}
                 <div className="flex-1" />
                 <button
                   onClick={() => removeRepo(i)}
                   className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.03] text-[#e06c75] hover:bg-white/[0.06]"
-                  title="Remove repository"
+                  title={t("repos.removeRepository")}
                 >
                   <Trash2 size={14} strokeWidth={2.1} />
                 </button>
@@ -150,13 +152,13 @@ export function ReposManager({
               <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[2fr_1fr]">
                 <input
                   className={inputCls}
-                  placeholder="clone URL (https://…) — used when no local path is set"
+                  placeholder={t("repos.cloneUrlPlaceholder")}
                   value={r.repoUrl}
                   onChange={(e) => updateRepo(i, { repoUrl: e.target.value })}
                 />
                 <input
                   className={inputCls}
-                  placeholder="local path (optional)"
+                  placeholder={t("repos.localPathPlaceholder")}
                   value={r.localRepoPath}
                   onChange={(e) => updateRepo(i, { localRepoPath: e.target.value })}
                 />

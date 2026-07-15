@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Dropdown";
@@ -38,6 +39,7 @@ export function ProjectSettingsForm({
   onSave: (patch: ProjectConfigUpdate) => void;
   renderManualLogin?: (hasBaseUrl: boolean) => ReactNode;
 }) {
+  const { t } = useTranslation("projects");
   const { data: providers } = useProviders();
 
   const [baseUrl, setBaseUrl] = useState("");
@@ -102,42 +104,41 @@ export function ProjectSettingsForm({
   return (
     <div className="flex flex-col gap-3.5">
       <GlassCard className="p-5">
-        <div className="mb-1 text-[14px] font-bold">Provider connections</div>
+        <div className="mb-1 text-[14px] font-bold">{t("settingsForm.providerConnections")}</div>
         <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
-          Bind this project to a work-item source (where its tickets come from) and a repository
-          source (where its code lives) — chosen independently. Manage connections in Settings.
+          {t("settingsForm.providerConnectionsDesc")}
         </p>
         <div className="grid max-w-[560px] grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <label className={labelCls}>Work Item Provider</label>
+            <label className={labelCls}>{t("settingsForm.workItemProvider")}</label>
             <Select
               value={workItemConnectionId != null ? String(workItemConnectionId) : null}
               options={workItemOptions}
-              placeholder="Select a connection"
+              placeholder={t("settingsForm.selectConnection")}
               onChange={(v) => setWorkItemConnectionId(v ? Number(v) : null)}
-              emptyLabel="No work-item connections"
+              emptyLabel={t("settingsForm.noWorkItemConnections")}
             />
           </div>
           <div>
-            <label className={labelCls}>Repository Provider</label>
+            <label className={labelCls}>{t("settingsForm.repositoryProvider")}</label>
             <Select
               value={repositoryConnectionId != null ? String(repositoryConnectionId) : null}
               options={repositoryOptions}
-              placeholder="Select a connection"
+              placeholder={t("settingsForm.selectConnection")}
               onChange={(v) => setRepositoryConnectionId(v ? Number(v) : null)}
-              emptyLabel="No repository connections"
+              emptyLabel={t("settingsForm.noRepositoryConnections")}
             />
           </div>
         </div>
       </GlassCard>
 
       <GlassCard className="p-5">
-        <div className="mb-1 text-[14px] font-bold">Application</div>
+        <div className="mb-1 text-[14px] font-bold">{t("settingsForm.application")}</div>
         <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
-          The default application URL the generated Playwright automation targets.
+          {t("settingsForm.applicationDesc")}
         </p>
         <div className="max-w-[420px]">
-          <label className={labelCls}>Base URL</label>
+          <label className={labelCls}>{t("settingsForm.baseUrl")}</label>
           <input
             className={inputCls}
             placeholder="https://staging.example.com"
@@ -149,15 +150,14 @@ export function ProjectSettingsForm({
 
       <GlassCard className="p-5">
         <ToggleRow
-          title="Manual login before run"
-          description="Open a real browser on the host so an operator can log in before the run starts."
+          title={t("settingsForm.manualLoginTitle")}
+          description={t("settingsForm.manualLoginDesc")}
           checked={manualAuth}
           onChange={setManualAuth}
           bordered={false}
         />
         <p className="mt-1 text-[12.5px] leading-relaxed text-ink-dim">
-          Before a run, a real browser opens on the machine running Q&#8209;Agent so you can log in
-          (e.g. Microsoft Entra); the session is reused until cleared.
+          {t("settingsForm.manualLoginNote")}
         </p>
         {manualAuth && renderManualLogin?.(baseUrl.trim().length > 0)}
       </GlassCard>
@@ -171,31 +171,30 @@ export function ProjectSettingsForm({
 
       <GlassCard className="p-5">
         <div className="mb-1 flex items-center gap-2">
-          <div className="flex-1 text-[14px] font-bold">Test accounts</div>
+          <div className="flex-1 text-[14px] font-bold">{t("settingsForm.testAccounts")}</div>
           <Button
             variant="glass"
             onClick={() =>
               setAccounts((a) => [...a, { role: "", username: "", password: "", notes: "", hasPassword: false }])
             }
           >
-            <Plus size={14} strokeWidth={2.4} /> Add account
+            <Plus size={14} strokeWidth={2.4} /> {t("settingsForm.addAccount")}
           </Button>
         </div>
         <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
-          Credentials used by generated specs. Passwords are encrypted at rest and never shown —
-          leave the password blank to keep the stored one.
+          {t("settingsForm.testAccountsDesc")}
         </p>
         {accounts.length === 0 && (
-          <div className="text-[12.5px] text-[#6c6c7e]">No test accounts configured yet.</div>
+          <div className="text-[12.5px] text-[#6c6c7e]">{t("settingsForm.noAccounts")}</div>
         )}
         <div className="flex flex-col gap-3">
           {accounts.map((acct, i) => (
             <div key={i} className="grid grid-cols-1 items-end gap-2.5 md:grid-cols-[1fr_1fr_1fr_1.2fr_auto]">
               <div>
-                <label className={labelCls}>Role</label>
+                <label className={labelCls}>{t("settingsForm.role")}</label>
                 <input
                   className={inputCls}
-                  placeholder="Internal Admin"
+                  placeholder={t("settingsForm.rolePlaceholder")}
                   value={acct.role}
                   onChange={(e) =>
                     setAccounts((a) => a.map((x, j) => (j === i ? { ...x, role: e.target.value } : x)))
@@ -203,7 +202,7 @@ export function ProjectSettingsForm({
                 />
               </div>
               <div>
-                <label className={labelCls}>Username</label>
+                <label className={labelCls}>{t("settingsForm.username")}</label>
                 <input
                   className={inputCls}
                   placeholder="qa@example.com"
@@ -214,11 +213,11 @@ export function ProjectSettingsForm({
                 />
               </div>
               <div>
-                <label className={labelCls}>Password</label>
+                <label className={labelCls}>{t("settingsForm.password")}</label>
                 <input
                   type="password"
                   className={inputCls}
-                  placeholder={acct.hasPassword ? "•••••••• (unchanged)" : "password"}
+                  placeholder={acct.hasPassword ? t("settingsForm.passwordUnchanged") : t("settingsForm.passwordNew")}
                   value={acct.password}
                   onChange={(e) =>
                     setAccounts((a) => a.map((x, j) => (j === i ? { ...x, password: e.target.value } : x)))
@@ -226,10 +225,10 @@ export function ProjectSettingsForm({
                 />
               </div>
               <div>
-                <label className={labelCls}>Notes</label>
+                <label className={labelCls}>{t("settingsForm.notes")}</label>
                 <input
                   className={inputCls}
-                  placeholder="optional"
+                  placeholder={t("settingsForm.optional")}
                   value={acct.notes}
                   onChange={(e) =>
                     setAccounts((a) => a.map((x, j) => (j === i ? { ...x, notes: e.target.value } : x)))
@@ -239,7 +238,7 @@ export function ProjectSettingsForm({
               <button
                 onClick={() => setAccounts((a) => a.filter((_, j) => j !== i))}
                 className="mb-0.5 flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.03] text-[#e06c75] hover:bg-white/[0.06]"
-                title="Remove account"
+                title={t("settingsForm.removeAccount")}
               >
                 <Trash2 size={15} strokeWidth={2.1} />
               </button>
@@ -250,28 +249,28 @@ export function ProjectSettingsForm({
 
       <GlassCard className="p-5">
         <div className="mb-1 flex items-center gap-2">
-          <div className="flex-1 text-[14px] font-bold">Environments</div>
+          <div className="flex-1 text-[14px] font-bold">{t("settingsForm.environments")}</div>
           <Button
             variant="glass"
             onClick={() => setEnvironments((e) => [...e, { name: "", baseUrl: "", notes: "" }])}
           >
-            <Plus size={14} strokeWidth={2.4} /> Add environment
+            <Plus size={14} strokeWidth={2.4} /> {t("settingsForm.addEnvironment")}
           </Button>
         </div>
         <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
-          Per-environment URLs. A run picks the environment matching its name (e.g. Staging).
+          {t("settingsForm.environmentsDesc")}
         </p>
         {environments.length === 0 && (
-          <div className="text-[12.5px] text-[#6c6c7e]">No environments configured yet.</div>
+          <div className="text-[12.5px] text-[#6c6c7e]">{t("settingsForm.noEnvironments")}</div>
         )}
         <div className="flex flex-col gap-3">
           {environments.map((env, i) => (
             <div key={i} className="grid grid-cols-1 items-end gap-2.5 md:grid-cols-[1fr_1.4fr_1fr_auto]">
               <div>
-                <label className={labelCls}>Name</label>
+                <label className={labelCls}>{t("settingsForm.name")}</label>
                 <input
                   className={inputCls}
-                  placeholder="Staging"
+                  placeholder={t("settingsForm.namePlaceholder")}
                   value={env.name}
                   onChange={(e) =>
                     setEnvironments((v) => v.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
@@ -279,7 +278,7 @@ export function ProjectSettingsForm({
                 />
               </div>
               <div>
-                <label className={labelCls}>Base URL</label>
+                <label className={labelCls}>{t("settingsForm.baseUrl")}</label>
                 <input
                   className={inputCls}
                   placeholder="https://staging.example.com"
@@ -290,10 +289,10 @@ export function ProjectSettingsForm({
                 />
               </div>
               <div>
-                <label className={labelCls}>Notes</label>
+                <label className={labelCls}>{t("settingsForm.notes")}</label>
                 <input
                   className={inputCls}
-                  placeholder="optional"
+                  placeholder={t("settingsForm.optional")}
                   value={env.notes}
                   onChange={(e) =>
                     setEnvironments((v) => v.map((x, j) => (j === i ? { ...x, notes: e.target.value } : x)))
@@ -303,7 +302,7 @@ export function ProjectSettingsForm({
               <button
                 onClick={() => setEnvironments((v) => v.filter((_, j) => j !== i))}
                 className="mb-0.5 flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.03] text-[#e06c75] hover:bg-white/[0.06]"
-                title="Remove environment"
+                title={t("settingsForm.removeEnvironment")}
               >
                 <Trash2 size={15} strokeWidth={2.1} />
               </button>
@@ -314,33 +313,33 @@ export function ProjectSettingsForm({
 
       <GlassCard className="p-5">
         <div className="mb-1 flex items-center gap-2">
-          <div className="flex-1 text-[14px] font-bold">Additional settings</div>
+          <div className="flex-1 text-[14px] font-bold">{t("settingsForm.additionalSettings")}</div>
           <Button variant="glass" onClick={() => setExtra((x) => [...x, { k: "", v: "" }])}>
-            <Plus size={14} strokeWidth={2.4} /> Add value
+            <Plus size={14} strokeWidth={2.4} /> {t("settingsForm.addValue")}
           </Button>
         </div>
         <p className="mb-4 text-[12.5px] leading-relaxed text-ink-dim">
-          Arbitrary project-specific key/values the automation generator can reference.
+          {t("settingsForm.additionalSettingsDesc")}
         </p>
         <div className="flex flex-col gap-2.5">
           {extra.map((row, i) => (
             <div key={i} className="grid grid-cols-1 items-center gap-2.5 md:grid-cols-[1fr_1.4fr_auto]">
               <input
                 className={inputCls}
-                placeholder="key"
+                placeholder={t("settingsForm.keyPlaceholder")}
                 value={row.k}
                 onChange={(e) => setExtra((x) => x.map((r, j) => (j === i ? { ...r, k: e.target.value } : r)))}
               />
               <input
                 className={inputCls}
-                placeholder="value"
+                placeholder={t("settingsForm.valuePlaceholder")}
                 value={row.v}
                 onChange={(e) => setExtra((x) => x.map((r, j) => (j === i ? { ...r, v: e.target.value } : r)))}
               />
               <button
                 onClick={() => setExtra((x) => x.filter((_, j) => j !== i))}
                 className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.03] text-[#e06c75] hover:bg-white/[0.06]"
-                title="Remove value"
+                title={t("settingsForm.removeValue")}
               >
                 <Trash2 size={15} strokeWidth={2.1} />
               </button>
@@ -357,7 +356,7 @@ export function ProjectSettingsForm({
           disabled={saving}
           className="w-full md:w-auto"
         >
-          {saving ? "Saving…" : "Save settings"}
+          {saving ? t("settingsForm.saving") : t("settingsForm.save")}
         </Button>
       </div>
     </div>

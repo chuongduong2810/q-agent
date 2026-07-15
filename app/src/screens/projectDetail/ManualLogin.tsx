@@ -1,5 +1,6 @@
 import { Loader2, LogIn, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import {
@@ -28,6 +29,7 @@ export function ManualLoginStatus({
   projectKey: string;
   hasBaseUrl: boolean;
 }) {
+  const { t } = useTranslation("projects");
   const { data: auth } = useProjectAuth(projectKey);
   const { data: settings } = useSettings();
   const clear = useClearProjectAuth(projectKey);
@@ -42,14 +44,14 @@ export function ManualLoginStatus({
       onCapture={() =>
         capture.mutate(undefined, {
           onError: (err) =>
-            toast.error(err instanceof Error ? err.message : "Failed to capture login"),
+            toast.error(err instanceof Error ? err.message : t("manualLogin.captureFailed")),
         })
       }
       onClear={() =>
         clear.mutate(undefined, {
-          onSuccess: () => toast.success("Saved login cleared"),
+          onSuccess: () => toast.success(t("manualLogin.cleared")),
           onError: (err) =>
-            toast.error(err instanceof Error ? err.message : "Failed to clear login"),
+            toast.error(err instanceof Error ? err.message : t("manualLogin.clearFailed")),
         })
       }
     />
@@ -82,11 +84,12 @@ export function ManualLoginStatusView({
    * guidance instead of the (impossible-here) "Capture login now" button. */
   localAgentMode?: boolean;
 }) {
+  const { t } = useTranslation("projects");
   // Fire a one-time success toast when a capture we started finishes.
   const wasCapturing = useRef(false);
   useEffect(() => {
     if (wasCapturing.current && !capturing && auth?.exists) {
-      toast.success("Login captured");
+      toast.success(t("manualLogin.captured"));
     }
     wasCapturing.current = capturing;
   }, [capturing, auth?.exists]);
@@ -98,17 +101,16 @@ export function ManualLoginStatusView({
           <>
             <span className="h-2 w-2 shrink-0 rounded-full bg-[#6ee7b7]" />
             <span className="flex-1 text-[12.5px] font-semibold text-ink-soft">
-              Saved login captured{" "}
-              {auth.capturedAt ? new Date(auth.capturedAt).toLocaleString() : ""}
+              {t("manualLogin.savedCaptured", {
+                date: auth.capturedAt ? new Date(auth.capturedAt).toLocaleString() : "",
+              })}
             </span>
           </>
         ) : (
           <>
             <span className="h-2 w-2 shrink-0 rounded-full bg-[#8b8b9e]" />
             <span className="flex-1 text-[12.5px] text-ink-dim">
-              {localAgentMode
-                ? "No saved login yet — capture now and a browser opens on your Local Agent, or it opens automatically on the first run."
-                : "No saved login yet — capture one now, or a browser will open on the first run."}
+              {localAgentMode ? t("manualLogin.noLoginLocalAgent") : t("manualLogin.noLogin")}
             </span>
           </>
         )}
@@ -118,31 +120,30 @@ export function ManualLoginStatusView({
             size="sm"
             onClick={onCapture}
             disabled={capturing || !hasBaseUrl}
-            title={hasBaseUrl ? undefined : "Set a base URL first"}
+            title={hasBaseUrl ? undefined : t("manualLogin.setBaseUrlFirst")}
           >
             {capturing ? (
               <>
-                <Loader2 size={13} strokeWidth={2.2} className="animate-spin" /> Capturing…
+                <Loader2 size={13} strokeWidth={2.2} className="animate-spin" />{" "}
+                {t("manualLogin.capturing")}
               </>
             ) : (
               <>
-                <LogIn size={13} strokeWidth={2.2} /> Capture login now
+                <LogIn size={13} strokeWidth={2.2} /> {t("manualLogin.captureNow")}
               </>
             )}
           </Button>
           {auth?.exists && (
             <Button variant="glass" size="sm" onClick={onClear} disabled={clearing}>
               <Trash2 size={13} strokeWidth={2.2} />{" "}
-              {clearing ? "Clearing…" : "Clear saved login"}
+              {clearing ? t("manualLogin.clearing") : t("manualLogin.clearSaved")}
             </Button>
           )}
         </div>
       </div>
       {capturing && (
         <p className="mt-2.5 text-[12px] leading-relaxed text-ink-dim">
-          {localAgentMode
-            ? "A browser is opening on your Local Agent — log in there, then close the window to finish."
-            : "A browser opened on this machine — log in, then close the window to finish."}
+          {localAgentMode ? t("manualLogin.capturingLocalAgent") : t("manualLogin.capturingHost")}
         </p>
       )}
     </div>

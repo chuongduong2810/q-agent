@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, FolderKanban, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +17,8 @@ interface KnowledgeSummary {
   confidence: number;
   lastIndexed: string | null;
   framework: string;
-  repoLabel: string;
+  indexedRepos: number;
+  totalRepos: number;
 }
 function summarize(rows: ProjectKnowledgeOut[]): KnowledgeSummary | undefined {
   if (!rows.length) return undefined;
@@ -30,7 +32,8 @@ function summarize(rows: ProjectKnowledgeOut[]): KnowledgeSummary | undefined {
       : 0,
     lastIndexed,
     framework: rows[0]?.framework || "Playwright",
-    repoLabel: `${indexed.length}/${rows.length} repos indexed`,
+    indexedRepos: indexed.length,
+    totalRepos: rows.length,
   };
 }
 
@@ -41,6 +44,7 @@ function summarize(rows: ProjectKnowledgeOut[]): KnowledgeSummary | undefined {
  */
 export function Projects() {
   const navigate = useNavigate();
+  const { t } = useTranslation("projects");
 
   const { data: projects, isLoading } = useProjects();
   const { data: providers } = useProviders();
@@ -86,14 +90,15 @@ export function Projects() {
       <div className="mb-5 flex items-end justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-muted">
-            Across {connectedCount} connected provider{connectedCount === 1 ? "" : "s"} &middot;
-            Q&#8209;Agent learns each project before it tests
+            {t("list.subtitle", { count: connectedCount })}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Projects</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">
+            {t("list.title")}
+          </h1>
         </div>
         <Button variant="glass" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
           {refresh.isPending ? <Spinner size={14} /> : <RefreshCw size={15} strokeWidth={2.2} />}
-          Refresh
+          {t("list.refresh")}
         </Button>
       </div>
 
@@ -108,15 +113,15 @@ export function Projects() {
       ) : !projects?.length ? (
         <EmptyState
           icon={<FolderKanban size={28} className="text-muted" />}
-          title="No connected projects"
-          body="Connect Azure DevOps, Jira or GitHub in Settings, then refresh to pull your projects in."
+          title={t("list.emptyTitle")}
+          body={t("list.emptyBody")}
           action={
             <div className="flex gap-2.5">
               <Button variant="primary" onClick={() => navigate("/settings")}>
-                Open Settings
+                {t("list.openSettings")}
               </Button>
               <Button variant="glass" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
-                <RefreshCw size={15} strokeWidth={2.2} /> Refresh
+                <RefreshCw size={15} strokeWidth={2.2} /> {t("list.refresh")}
               </Button>
             </div>
           }
@@ -149,17 +154,22 @@ function ProjectCard({
   index: number;
   onOpen: () => void;
 }) {
+  const { t } = useTranslation("projects");
   const status = summary?.status ?? "not_indexed";
   const indexed = status === "indexed";
   const confidence = summary?.confidence ?? 0;
   const baseLabel = knowledgeStatusStyle(status);
   const [, statusColor, statusBg, statusDot] = baseLabel;
-  const statusLabel = summary?.repoLabel ?? baseLabel[0];
+  const statusLabel = summary
+    ? t("card.reposIndexed", { indexed: summary.indexedRepos, total: summary.totalRepos })
+    : baseLabel[0];
   const [glyph, glyphBg] = providerGlyph[project.providerKind] ?? ["?", "#6b7280"];
   const glyphColor = project.providerKind === "github" ? "#12121a" : "#fff";
   const framework = summary?.framework || "Playwright";
   const lastIndexed =
-    indexed && summary?.lastIndexed ? new Date(summary.lastIndexed).toLocaleDateString() : "Never";
+    indexed && summary?.lastIndexed
+      ? new Date(summary.lastIndexed).toLocaleDateString()
+      : t("card.never");
 
   return (
     <motion.div
@@ -186,7 +196,7 @@ function ProjectCard({
             className="rounded-full px-[9px] py-[3px] text-[10px] font-bold"
             style={{ background: "rgba(139,92,246,.24)", color: "#c4b5fd" }}
           >
-            Active
+            {t("card.active")}
           </span>
         )}
       </div>
@@ -197,22 +207,22 @@ function ProjectCard({
       >
         <span className="h-2 w-2 rounded-full" style={{ background: statusDot }} />
         <span className="text-[12px] font-bold" style={{ color: statusColor }}>
-          Knowledge: {statusLabel}
+          {t("card.knowledge", { status: statusLabel })}
         </span>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-x-3 gap-y-2.5">
-        <Field label="Last indexed" value={lastIndexed} />
-        <Field label="Confidence" value={`${confidence}%`} valueColor={confidenceColor(confidence)} />
-        <Field label="Framework" value={framework} />
-        <Field label="Provider" value={providerLabel[project.providerKind]} />
+        <Field label={t("card.lastIndexed")} value={lastIndexed} />
+        <Field label={t("card.confidence")} value={`${confidence}%`} valueColor={confidenceColor(confidence)} />
+        <Field label={t("card.framework")} value={framework} />
+        <Field label={t("card.provider")} value={providerLabel[project.providerKind]} />
       </div>
 
       {indexed ? (
         <div className="mt-auto flex items-center justify-between border-t border-white/[0.06] pt-3">
-          <span className="text-[11.5px] text-[#8b8b9e]">Knowledge base ready</span>
+          <span className="text-[11.5px] text-[#8b8b9e]">{t("card.ready")}</span>
           <span className="flex items-center gap-[5px] text-[12px] font-bold text-violet">
-            Open <ArrowRight size={13} strokeWidth={2.4} />
+            {t("card.open")} <ArrowRight size={13} strokeWidth={2.4} />
           </span>
         </div>
       ) : (
@@ -224,7 +234,7 @@ function ProjectCard({
             onOpen();
           }}
         >
-          <Sparkles size={15} strokeWidth={2.2} /> Set up repositories &amp; knowledge
+          <Sparkles size={15} strokeWidth={2.2} /> {t("card.setup")}
         </Button>
       )}
     </motion.div>
