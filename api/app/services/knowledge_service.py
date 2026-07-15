@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from app import db as db_module
@@ -605,6 +606,155 @@ def merge_discovered_dom(
     except Exception as exc:  # noqa: BLE001 - heal->KB feedback is best-effort
         db.rollback()
         logger.warning("Self-heal KB DOM merge failed for {}: {}", project_key, exc)
+        return 0
+    finally:
+        db.close()
+
+
+def merge_verified_discovery(
+    project_key: str,
+    repo: str,
+    discovered: dict[str, Any],
+    *,
+    owner_id: int | None = None,
+    source: str = "exploration",
+) -> int:
+    """Best-effort: record RUNTIME-VERIFIED routes/selectors into the KB (#325, ADR 0010 §5).
+
+    When the DOM Exploration Agent drives the live app and observes real routes and
+    selectors, those discoveries are — by definition — runtime facts. This merges
+    them into the target repo's ``ProjectKnowledge`` row, stamping each merged entry
+    with ``verified_at_runtime`` (ISO-8601 UTC) and ``source``; selector entries
+    additionally carry the locator ``strategy`` that actually worked. Runtime-verified
+    entries take priority over source-inferred ones during later generation (ADR 0010 §6).
+
+    Merge semantics (extends ``merge_discovered_dom``): dedup by ``path`` (routes) and
+    by ``selector`` value (selectors). NO-CLOBBER — an existing entry that already has
+    a truthy ``verified_at_runtime`` is never overwritten (the colliding discovery is
+    skipped, leaving the verified entry intact). A discovery colliding with an existing
+    UN-verified (source-inferred) entry UPGRADES it in place to verified, preserving the
+    existing entry's other keys. Non-colliding discoveries are appended.
+
+    Looks up the per-repo row first, falling back to the legacy project-level row
+    (mirrors ``propose_selector_fix`` / ``merge_discovered_dom``). Opens its own session
+    and never raises — KB enrichment is additive, not correctness-critical.
+
+    Args:
+        project_key: The project the discovery belongs to.
+        repo: Target repository name ("" for the legacy project-level row).
+        discovered: ``{"routes": [{"path", "description"?, "auth_required"?}],
+            "selectors": [{"screen", "element", "selector", "strategy"?}]}`` — the
+            routes/selectors an exploration session observed on the live app.
+        owner_id: The knowledge row's owner (ADR 0009) — scopes the lookup.
+        source: Provenance stamp for merged entries (default ``"exploration"``).
+
+    Returns:
+        The number of entries merged (appended) or upgraded (0 if nothing to do,
+        no matching row, every discovery collided with a verified entry, or on error).
+    """
+    if not project_key:
+        return 0
+    now = datetime.now(timezone.utc).isoformat()
+    routes_in = [
+        r
+        for r in (discovered.get("routes") or [])
+        if isinstance(r, dict) and (r.get("path") or "").strip()
+    ]
+    selectors_in = [
+        s
+        for s in (discovered.get("selectors") or [])
+        if isinstance(s, dict) and (s.get("selector") or "").strip()
+    ]
+    if not routes_in and not selectors_in:
+        return 0
+
+    db = db_module.SessionLocal()
+    try:
+        row = None
+        if repo:
+            row = (
+                db.query(ProjectKnowledge)
+                .filter(
+                    ProjectKnowledge.key == compose_key(project_key, repo),
+                    ProjectKnowledge.owner_id == owner_id,
+                )
+                .first()
+            )
+        if row is None:
+            row = (
+                db.query(ProjectKnowledge)
+                .filter(ProjectKnowledge.key == project_key, ProjectKnowledge.owner_id == owner_id)
+                .first()
+            )
+        if row is None:
+            return 0
+
+        kn = dict(row.knowledge or {})
+        merged = 0
+
+        if routes_in:
+            routes = list(kn.get("routes") or [])
+            index_by_path: dict[str, int] = {}
+            for i, r in enumerate(routes):
+                if isinstance(r, dict) and r.get("path"):
+                    index_by_path.setdefault(r["path"], i)
+            for r in routes_in:
+                path = r["path"].strip()
+                entry = {**r, "path": path, "verified_at_runtime": now, "source": source}
+                i = index_by_path.get(path)
+                if i is None:
+                    routes.append(entry)
+                    index_by_path[path] = len(routes) - 1
+                    merged += 1
+                elif routes[i].get("verified_at_runtime"):
+                    continue  # no-clobber: leave the existing verified entry intact
+                else:
+                    routes[i] = {**routes[i], **entry}  # upgrade in place, preserve other keys
+                    merged += 1
+            kn["routes"] = routes
+
+        if selectors_in:
+            sels = list(kn.get("selectors") or [])
+            index_by_sel: dict[str, int] = {}
+            for i, s in enumerate(sels):
+                if isinstance(s, dict) and s.get("selector"):
+                    index_by_sel.setdefault(s["selector"], i)
+            for s in selectors_in:
+                selector = s["selector"].strip()
+                entry = {
+                    **s,
+                    "selector": selector,
+                    "strategy": s.get("strategy") or "css",
+                    "verified_at_runtime": now,
+                    "source": source,
+                }
+                i = index_by_sel.get(selector)
+                if i is None:
+                    sels.append(entry)
+                    index_by_sel[selector] = len(sels) - 1
+                    merged += 1
+                elif sels[i].get("verified_at_runtime"):
+                    continue  # no-clobber: leave the existing verified entry intact
+                else:
+                    sels[i] = {**sels[i], **entry}  # upgrade in place, preserve other keys
+                    merged += 1
+            kn["selectors"] = sels
+
+        if not merged:
+            return 0
+
+        row.knowledge = kn  # reassign so SQLAlchemy tracks the JSON change
+        db.commit()
+        write_knowledge_files(row)
+        logger.info(
+            "Exploration merged {} verified KB entr{} for {} (source={!r}, {} routes, {} selectors)",
+            merged, "y" if merged == 1 else "ies", project_key, source,
+            len(routes_in), len(selectors_in),
+        )
+        return merged
+    except Exception as exc:  # noqa: BLE001 - KB enrichment is best-effort
+        db.rollback()
+        logger.warning("Verified-discovery KB merge failed for {}: {}", project_key, exc)
         return 0
     finally:
         db.close()
