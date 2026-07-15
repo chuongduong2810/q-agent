@@ -1,0 +1,75 @@
+{
+  "run": {
+    "processing": "Processing",
+    "review": "Review",
+    "sync": "Create & Link",
+    "automation": "Automation",
+    "executing": "Executing",
+    "evidence": "Evidence",
+    "comment": "Publishing",
+    "done": "Done",
+    "cancelled": "Cancelled",
+    "failed": "Failed",
+    "incomplete": "Incomplete"
+  },
+  "runBadge": {
+    "processing": "Analyzing",
+    "review": "In review",
+    "sync": "Creating & linking",
+    "automation": "Automation",
+    "executing": "Executing",
+    "evidence": "Evidence",
+    "comment": "Publishing",
+    "done": "Completed",
+    "cancelled": "Cancelled",
+    "failed": "Failed",
+    "incomplete": "Incomplete"
+  },
+  "runMeta_one": "{{count}} ticket",
+  "runMeta_other": "{{count}} tickets",
+  "timeAgo": {
+    "now": "now",
+    "minutes": "{{count}}m ago",
+    "hours": "{{count}}h ago",
+    "days_one": "{{count}} day ago",
+    "days_other": "{{count}} days ago"
+  },
+  "timeShort": {
+    "now": "now",
+    "minutes": "{{count}}m",
+    "hours": "{{count}}h",
+    "days": "{{count}}d"
+  },
+  "approval": {
+    "pending": "Pending",
+    "approved": "Approved",
+    "rejected": "Rejected"
+  },
+  "exec": {
+    "pending": "Queued",
+    "running": "Running",
+    "pass": "Passed",
+    "fail": "Failed",
+    "skipped": "Skipped"
+  },
+  "productDefect": "Product defect",
+  "knowledge": {
+    "indexed": "Indexed",
+    "indexing": "Building…",
+    "stale": "Needs refresh",
+    "error": "Build failed",
+    "none": "Not indexed"
+  },
+  "knowledgeSteps": {
+    "connecting": "Connecting repository…",
+    "reading": "Reading documentation…",
+    "architecture": "Understanding project architecture…",
+    "stack": "Detecting technology stack…",
+    "findingTests": "Finding existing Playwright tests…",
+    "pageObjects": "Discovering page objects…",
+    "conventions": "Learning coding conventions…",
+    "building": "Building project knowledge base…",
+    "optimizing": "Optimizing AI context…",
+    "ready": "Knowledge base ready."
+  }
+}

@@ -12,7 +12,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
-import { Pill, execColors, productDefectStyle } from "@/components/ui/badges";
+import { Pill, execStyle, productDefectStyle } from "@/components/ui/badges";
 import { ProgressRing, Spinner } from "@/components/ui/misc";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { ApiError } from "@/lib/api";
@@ -285,9 +285,7 @@ function ExecRow({ result }: { result: ExecutionResultOut }) {
   // distinctly from a plain red script "Failed". Any other status — or a fail that
   // is unclassified / not a product defect — renders with the shared execColors.
   const isProductDefect = result.status === "fail" && result.failureClass === "product_defect";
-  const [color, label] = isProductDefect
-    ? productDefectStyle
-    : (execColors[result.status] ?? execColors.pending);
+  const [color, label] = isProductDefect ? productDefectStyle() : execStyle(result.status);
   return (
     <div className="flex items-center gap-3 rounded-xl p-[11px_13px] transition-colors hover:bg-white/[0.04]">
       {result.status === "running" && <Spinner size={15} />}

@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
+import i18n from "@/i18n";
 
-/** Colour maps shared across screens (ticket status, priority, approval, exec). */
+/** Colour maps shared across screens (ticket status, priority, approval, exec).
+ * Human labels are localized via the `status` i18n namespace and resolved
+ * through the i18next singleton (consumers already call `useTranslation`, so
+ * they re-render on language switch). */
 
 export const statusColors: Record<string, [string, string]> = {
   "Ready for QA": ["#6ee7b7", "rgba(16,185,129,.14)"],
@@ -9,19 +13,30 @@ export const statusColors: Record<string, [string, string]> = {
   Done: ["#6ee7b7", "rgba(16,185,129,.14)"],
 };
 
-export const approvalColors: Record<string, [string, string, string]> = {
-  pending: ["#fbbf24", "Pending", "rgba(251,191,36,.14)"],
-  approved: ["#6ee7b7", "Approved", "rgba(16,185,129,.14)"],
-  rejected: ["#fb7185", "Rejected", "rgba(244,63,94,.14)"],
+const approvalColor: Record<string, [string, string]> = {
+  pending: ["#fbbf24", "rgba(251,191,36,.14)"],
+  approved: ["#6ee7b7", "rgba(16,185,129,.14)"],
+  rejected: ["#fb7185", "rgba(244,63,94,.14)"],
 };
 
-export const execColors: Record<string, [string, string]> = {
-  pending: ["#6b7280", "Queued"],
-  running: ["#f59e0b", "Running"],
-  pass: ["#10b981", "Passed"],
-  fail: ["#f43f5e", "Failed"],
-  skipped: ["#6b7280", "Skipped"],
+/** `[color, label, bg]` for a test-case approval state. */
+export function approvalStyle(approval: string): [string, string, string] {
+  const [color, bg] = approvalColor[approval] ?? approvalColor.pending;
+  return [color, i18n.t(`status:approval.${approval}`, { defaultValue: approval }), bg];
+}
+
+const execColor: Record<string, string> = {
+  pending: "#6b7280",
+  running: "#f59e0b",
+  pass: "#10b981",
+  fail: "#f43f5e",
+  skipped: "#6b7280",
 };
+
+/** `[color, label]` for an execution result status. */
+export function execStyle(status: string): [string, string] {
+  return [execColor[status] ?? execColor.pending, i18n.t(`status:exec.${status}`, { defaultValue: status })];
+}
 
 /**
  * Visual token ([color, label]) for a confirmed product defect — a failed case
@@ -29,7 +44,9 @@ export const execColors: Record<string, [string, string]> = {
  * the script-fail red (#f43f5e), so a genuine product bug reads distinctly from a
  * plain test failure. Kept in sync with the Automation slice's product-defect hue.
  */
-export const productDefectStyle: [string, string] = ["#d946ef", "Product defect"];
+export function productDefectStyle(): [string, string] {
+  return ["#d946ef", i18n.t("status:productDefect")];
+}
 
 export function priorityColor(p: string): string {
   return p === "High" ? "#fb7185" : p === "Medium" ? "#fbbf24" : "#94a3b8";

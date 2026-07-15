@@ -1,12 +1,14 @@
 import { motion } from "framer-motion";
 import { Check, Sparkles } from "lucide-react";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { KNOWLEDGE_STEPS } from "@/data/projects";
 import { Spinner } from "@/components/ui/misc";
 import { useUI } from "@/store/ui";
 
 /** Full-screen "Learning <project>" overlay shown while the knowledge base builds. */
 export function KnowledgeBuildOverlay() {
+  const { t } = useTranslation("status");
   const building = useUI((s) => s.knowledgeBuilding);
   const name = useUI((s) => s.buildProjectName);
   const step = useUI((s) => s.knowledgeStep);
@@ -61,11 +63,11 @@ export function KnowledgeBuildOverlay() {
           </div>
         </div>
         <div className="flex flex-col gap-[3px] p-[6px_30px_30px]">
-          {KNOWLEDGE_STEPS.map((text, i) => {
+          {KNOWLEDGE_STEPS.map((stepKey, i) => {
             if (i > step) return null;
             const done = i < step;
             return (
-              <div key={text} className="flex items-center gap-[13px] py-2">
+              <div key={stepKey} className="flex items-center gap-[13px] py-2">
                 {done ? (
                   <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-success">
                     <Check size={13} color="#fff" strokeWidth={3} />
@@ -77,7 +79,7 @@ export function KnowledgeBuildOverlay() {
                   className="text-[13.5px]"
                   style={{ color: done ? "#8b8b9e" : "#ececf1", fontWeight: done ? 400 : 600 }}
                 >
-                  {text}
+                  {t(`knowledgeSteps.${stepKey}`)}
                 </span>
               </div>
             );
