@@ -22,8 +22,8 @@ export function GlobalSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  // Stronger tilt for the hero brand logo than the default card tilt.
-  const logoTilt = useTilt({ maxX: 13, maxY: 17, scale: 1.06, perspective: 900 });
+  // Much stronger tilt for the hero brand logo than the default card tilt.
+  const logoTilt = useTilt({ maxX: 20, maxY: 26, scale: 1.1, perspective: 760 });
 
   // Identity comes from the authenticated principal (/auth/me) — the app subtree
   // renders only behind RequireAuth, so `user` is present in normal use. The

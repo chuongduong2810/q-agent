@@ -34,12 +34,13 @@ export interface TiltBinding {
  * Honours `prefers-reduced-motion` (handlers become inert) and ignores touch
  * input (tilt is a fine-pointer affordance).
  *
- * @param options tilt strength — see {@link TiltOptions}. Defaults mirror the
- *   design demo (10° / 13° / scale 1.045 / perspective 780).
+ * @param options tilt strength — see {@link TiltOptions}. Defaults are a subtle
+ *   card tilt (7° / 9° / scale 1.03 / perspective 780); the sidebar logo passes
+ *   stronger values.
  * @returns `{ style, onPointerMove, onPointerLeave }` — see {@link TiltBinding}.
  */
 export function useTilt(options: TiltOptions = {}): TiltBinding {
-  const { maxX = 10, maxY = 13, scale = 1.045, perspective = 780 } = options;
+  const { maxX = 7, maxY = 9, scale = 1.03, perspective = 780 } = options;
 
   const rotateX = useMotionValue(0);
   const rotateY = useMotionValue(0);
