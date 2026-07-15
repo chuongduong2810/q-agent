@@ -1,0 +1,128 @@
+{
+  "reports": {
+    "header": {
+      "subtitle": "Last 7 days · across all runs",
+      "title": "Reports",
+      "export": "Export"
+    },
+    "toast": {
+      "exported": "Report exported"
+    },
+    "summary": {
+      "passRate": "pass rate",
+      "noReportsYet": "No reports yet",
+      "firstReportedRun": "First reported run",
+      "ptsVsPrevious": "{{value}} pts vs previous run",
+      "avgRunDuration": "Avg run duration",
+      "envLatestRun": "{{env}} · latest run",
+      "noReportsYetLower": "no reports yet",
+      "flakyRate": "Flaky rate",
+      "flakyWatch_one": "watch {{count}} case",
+      "flakyWatch_other": "watch {{count}} cases",
+      "noFlakyTests": "no flaky tests"
+    },
+    "trend": {
+      "title": "Pass rate trend",
+      "notEnough": "Not enough runs yet to chart a trend."
+    },
+    "recentRuns": {
+      "title": "Recent runs",
+      "empty": "No runs yet.",
+      "tickets": "{{count}} tickets"
+    },
+    "status": {
+      "done": "Done",
+      "inProgress": "In progress"
+    },
+    "flaky": {
+      "title": "Flaky tests",
+      "needsAttention": "Needs attention",
+      "empty": "No flaky tests detected."
+    }
+  },
+  "audit": {
+    "subtitle": "Every app event, user action and AI operation · retained 90 days",
+    "title": "Audit Log",
+    "exportCsv": "Export CSV",
+    "clearLog": "Clear log",
+    "clearing": "Clearing…",
+    "confirmClear": "Delete all audit events? This clears the audit_logs table and cannot be undone.",
+    "toast": {
+      "cleared_one": "Cleared {{count}} audit event",
+      "cleared_other": "Cleared {{count}} audit events",
+      "clearFailed": "Failed to clear audit log"
+    },
+    "tabs": {
+      "activity": "Activity",
+      "backend": "Backend Logs"
+    },
+    "stats": {
+      "eventsToday": "Events today",
+      "aiActions": "AI actions",
+      "userActions": "User actions",
+      "failuresWarnings": "Failed / warnings",
+      "logVolume": "Log volume · 24h",
+      "servicesHealthy": "Services healthy",
+      "warnings1h": "Warnings · 1h",
+      "errors1h": "Errors · 1h"
+    },
+    "searchActivity": "Search events, actors, targets…",
+    "searchBackend": "Search message, service, trace…",
+    "liveTail": "Live tail",
+    "liveTailOn": "Live tail on",
+    "table": {
+      "timestamp": "TIMESTAMP",
+      "event": "EVENT",
+      "actor": "ACTOR",
+      "status": "STATUS"
+    },
+    "field": {
+      "eventId": "EVENT ID",
+      "timestamp": "TIMESTAMP",
+      "target": "TARGET",
+      "ipAddress": "IP ADDRESS",
+      "details": "DETAILS"
+    },
+    "empty": {
+      "eventsTitle": "No events match your filters",
+      "eventsHint": "Try a different category, actor, or search term.",
+      "logsTitle": "No log lines match your filters",
+      "logsHint": "Try a different level, service, or search term."
+    },
+    "showingEvents": "Showing {{count}} events",
+    "lines": "{{count}} lines",
+    "categories": {
+      "ai": "AI",
+      "sync": "Sync",
+      "review": "Review",
+      "execution": "Execution",
+      "auth": "Auth",
+      "knowledge": "Knowledge",
+      "integration": "Integration",
+      "run": "Run",
+      "comment": "Comment",
+      "settings": "Settings",
+      "other": "Other"
+    },
+    "statuses": {
+      "success": "Success",
+      "warning": "Warning",
+      "error": "Failed"
+    },
+    "levels": {
+      "info": "Info",
+      "warn": "Warn",
+      "error": "Error",
+      "debug": "Debug"
+    },
+    "chips": {
+      "allEvents": "All events",
+      "everyone": "Everyone",
+      "people": "People",
+      "qAgent": "Q-Agent",
+      "system": "System",
+      "all": "All",
+      "allServices": "All services"
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronRight, Download, Search, Trash2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import {
@@ -10,18 +11,19 @@ import {
 } from "@/hooks/queries";
 import type { AuditEventOut } from "@/types/api";
 
-// Colour maps copied verbatim from the design export.
+// Colour maps copied verbatim from the design export; the first tuple element is
+// an i18n key (under the `audit.` namespace prefix), resolved with t() at render.
 const CAT: Record<string, [string, string, string]> = {
-  ai: ["AI", "#a78bfa", "rgba(139,92,246,.14)"],
-  sync: ["Sync", "#67e8f9", "rgba(34,211,238,.13)"],
-  review: ["Review", "#6ee7b7", "rgba(16,185,129,.14)"],
-  execution: ["Execution", "#fbbf24", "rgba(251,191,36,.13)"],
-  auth: ["Auth", "#f9a8d4", "rgba(244,114,182,.14)"],
-  knowledge: ["Knowledge", "#c4b5fd", "rgba(196,181,253,.14)"],
-  integration: ["Integration", "#93c5fd", "rgba(147,197,253,.14)"],
-  run: ["Run", "#fca5a5", "rgba(252,165,165,.13)"],
-  comment: ["Comment", "#5eead4", "rgba(94,234,212,.13)"],
-  settings: ["Settings", "#d4d4d8", "rgba(212,212,216,.12)"],
+  ai: ["categories.ai", "#a78bfa", "rgba(139,92,246,.14)"],
+  sync: ["categories.sync", "#67e8f9", "rgba(34,211,238,.13)"],
+  review: ["categories.review", "#6ee7b7", "rgba(16,185,129,.14)"],
+  execution: ["categories.execution", "#fbbf24", "rgba(251,191,36,.13)"],
+  auth: ["categories.auth", "#f9a8d4", "rgba(244,114,182,.14)"],
+  knowledge: ["categories.knowledge", "#c4b5fd", "rgba(196,181,253,.14)"],
+  integration: ["categories.integration", "#93c5fd", "rgba(147,197,253,.14)"],
+  run: ["categories.run", "#fca5a5", "rgba(252,165,165,.13)"],
+  comment: ["categories.comment", "#5eead4", "rgba(94,234,212,.13)"],
+  settings: ["categories.settings", "#d4d4d8", "rgba(212,212,216,.12)"],
 };
 const ACTOR: Record<string, [string, string]> = {
   user: ["#c4b5fd", "rgba(139,92,246,.16)"],
@@ -29,9 +31,9 @@ const ACTOR: Record<string, [string, string]> = {
   system: ["#93c5fd", "rgba(147,197,253,.16)"],
 };
 const STATUS: Record<string, [string, string, string]> = {
-  success: ["#6ee7b7", "rgba(16,185,129,.14)", "Success"],
-  warning: ["#fbbf24", "rgba(251,191,36,.13)", "Warning"],
-  error: ["#fb7185", "rgba(244,63,94,.14)", "Failed"],
+  success: ["#6ee7b7", "rgba(16,185,129,.14)", "statuses.success"],
+  warning: ["#fbbf24", "rgba(251,191,36,.13)", "statuses.warning"],
+  error: ["#fb7185", "rgba(244,63,94,.14)", "statuses.error"],
 };
 const LEVEL: Record<string, [string, string, string]> = {
   info: ["INFO", "#6ee7b7", "rgba(16,185,129,.14)"],
@@ -40,15 +42,16 @@ const LEVEL: Record<string, [string, string, string]> = {
   debug: ["DEBUG", "#93c5fd", "rgba(147,197,253,.14)"],
 };
 
+// Chip labels are i18n keys (under the `audit.` prefix), resolved with t() at render.
 const CAT_CHIPS: Array<[string, string]> = [
-  ["all", "All events"], ["ai", "AI"], ["sync", "Sync"], ["review", "Review"],
-  ["execution", "Execution"], ["auth", "Auth"], ["integration", "Integration"], ["settings", "Settings"],
+  ["all", "chips.allEvents"], ["ai", "categories.ai"], ["sync", "categories.sync"], ["review", "categories.review"],
+  ["execution", "categories.execution"], ["auth", "categories.auth"], ["integration", "categories.integration"], ["settings", "categories.settings"],
 ];
 const ACTOR_CHIPS: Array<[string, string]> = [
-  ["all", "Everyone"], ["user", "People"], ["ai", "Q-Agent"], ["system", "System"],
+  ["all", "chips.everyone"], ["user", "chips.people"], ["ai", "chips.qAgent"], ["system", "chips.system"],
 ];
 const LEVEL_CHIPS: Array<[string, string]> = [
-  ["all", "All"], ["info", "Info"], ["warn", "Warn"], ["error", "Error"], ["debug", "Debug"],
+  ["all", "chips.all"], ["info", "levels.info"], ["warn", "levels.warn"], ["error", "levels.error"], ["debug", "levels.debug"],
 ];
 
 const panel: React.CSSProperties = {
@@ -85,6 +88,7 @@ function toCsv(events: AuditEventOut[]): string {
 }
 
 export function AuditLog() {
+  const { t } = useTranslation("reports");
   const [view, setView] = useState<"activity" | "backend">("activity");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -109,10 +113,10 @@ export function AuditLog() {
   const clearEvents = useClearAuditEvents();
 
   const clearAll = () => {
-    if (!window.confirm("Delete all audit events? This clears the audit_logs table and cannot be undone.")) return;
+    if (!window.confirm(t("audit.confirmClear"))) return;
     clearEvents.mutate(undefined, {
-      onSuccess: (r) => toast.success(`Cleared ${r.deleted} audit event${r.deleted === 1 ? "" : "s"}`),
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to clear audit log"),
+      onSuccess: (r) => toast.success(t("audit.toast.cleared", { count: r.deleted })),
+      onError: (e) => toast.error(e instanceof Error ? e.message : t("audit.toast.clearFailed")),
     });
   };
 
@@ -138,23 +142,23 @@ export function AuditLog() {
       <div className="mb-[18px] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-[#8b8b9e]">
-            Every app event, user action and AI operation &middot; retained 90 days
+            {t("audit.subtitle")}
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Audit Log</h1>
+          <h1 className="m-0 text-[28px] font-black tracking-tight">{t("audit.title")}</h1>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={exportCsv}
             className="flex flex-1 items-center justify-center gap-[7px] rounded-xl border border-white/[0.09] bg-white/[0.05] px-[15px] py-2.5 text-[13px] font-semibold text-[#dcdce4] hover:bg-white/[0.1] md:flex-none"
           >
-            <Download size={15} /> Export CSV
+            <Download size={15} /> {t("audit.exportCsv")}
           </button>
           <button
             onClick={clearAll}
             disabled={clearEvents.isPending || rows.length === 0}
             className="flex flex-1 items-center justify-center gap-[7px] rounded-xl border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.13)] px-[15px] py-2.5 text-[13px] font-semibold text-[#fb7185] hover:bg-[rgba(244,63,94,.2)] disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
           >
-            <Trash2 size={15} /> {clearEvents.isPending ? "Clearing…" : "Clear log"}
+            <Trash2 size={15} /> {clearEvents.isPending ? t("audit.clearing") : t("audit.clearLog")}
           </button>
         </div>
       </div>
@@ -175,7 +179,7 @@ export function AuditLog() {
                 : { background: "rgba(255,255,255,.04)", color: "#a0a0b2" }
             }
           >
-            {v === "activity" ? "Activity" : "Backend Logs"}
+            {v === "activity" ? t("audit.tabs.activity") : t("audit.tabs.backend")}
           </button>
         ))}
       </div>
@@ -183,10 +187,10 @@ export function AuditLog() {
       {view === "activity" ? (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3.5 md:grid-cols-4">
-            <StatCard label="Events today" value={String(stats?.eventsToday ?? 0)} color="#a78bfa" />
-            <StatCard label="AI actions" value={String(stats?.aiActions ?? 0)} color="#67e8f9" />
-            <StatCard label="User actions" value={String(stats?.userActions ?? 0)} color="#6ee7b7" />
-            <StatCard label="Failed / warnings" value={String(stats?.failures ?? 0)} color="#fb7185" />
+            <StatCard label={t("audit.stats.eventsToday")} value={String(stats?.eventsToday ?? 0)} color="#a78bfa" />
+            <StatCard label={t("audit.stats.aiActions")} value={String(stats?.aiActions ?? 0)} color="#67e8f9" />
+            <StatCard label={t("audit.stats.userActions")} value={String(stats?.userActions ?? 0)} color="#6ee7b7" />
+            <StatCard label={t("audit.stats.failuresWarnings")} value={String(stats?.failures ?? 0)} color="#fb7185" />
           </div>
 
           <div style={panel} className="mb-3.5 flex flex-col gap-2.5 rounded-2xl px-3.5 py-3 md:flex-row md:flex-wrap md:items-center">
@@ -195,7 +199,7 @@ export function AuditLog() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search events, actors, targets…"
+                placeholder={t("audit.searchActivity")}
                 className="flex-1 bg-transparent text-[13px] text-ink outline-none"
               />
             </div>
@@ -207,7 +211,7 @@ export function AuditLog() {
                   className="shrink-0 whitespace-nowrap rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
                   style={chipStyle(actor === id, "cyan")}
                 >
-                  {label}
+                  {t(`audit.${label}`)}
                 </button>
               ))}
             </div>
@@ -221,7 +225,7 @@ export function AuditLog() {
                 className="shrink-0 whitespace-nowrap rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
                 style={chipStyle(category === id, "violet")}
               >
-                {label}
+                {t(`audit.${label}`)}
               </button>
             ))}
           </div>
@@ -232,7 +236,7 @@ export function AuditLog() {
               className="grid gap-3 border-b border-white/[0.06] bg-white/[0.04] px-[18px] py-[11px] text-[10px] font-bold tracking-[0.06em] text-[#7a7a8c]"
               style={{ gridTemplateColumns: "150px 1fr 130px 108px 26px" }}
             >
-              <span>TIMESTAMP</span><span>EVENT</span><span>ACTOR</span><span>STATUS</span><span />
+              <span>{t("audit.table.timestamp")}</span><span>{t("audit.table.event")}</span><span>{t("audit.table.actor")}</span><span>{t("audit.table.status")}</span><span />
             </div>
             {rows.map((e) => {
               const cat = CAT[e.category] ?? ["Other", "#c3c3d0", "rgba(255,255,255,.08)"];
@@ -259,7 +263,7 @@ export function AuditLog() {
                           className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
                           style={{ background: cat[2], color: cat[1] }}
                         >
-                          {cat[0]}
+                          {t(`audit.${cat[0]}`)}
                         </span>
                         <span className="truncate text-[13.5px] font-semibold">{e.action}</span>
                       </div>
@@ -285,7 +289,7 @@ export function AuditLog() {
                         className="rounded-full px-2.5 py-[3px] text-[11px] font-bold"
                         style={{ background: st[1], color: st[0] }}
                       >
-                        {st[2]}
+                        {t(`audit.${st[2]}`)}
                       </span>
                     </div>
                     <ChevronRight
@@ -300,12 +304,12 @@ export function AuditLog() {
                         className="grid gap-x-[22px] gap-y-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3.5"
                         style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}
                       >
-                        <Field label="EVENT ID" value={e.id} mono color="#67e8f9" />
-                        <Field label="TIMESTAMP" value={e.ts.replace("T", " ").slice(0, 19)} mono />
-                        <Field label="TARGET" value={e.target} />
-                        <Field label="IP ADDRESS" value={e.ip} mono />
+                        <Field label={t("audit.field.eventId")} value={e.id} mono color="#67e8f9" />
+                        <Field label={t("audit.field.timestamp")} value={e.ts.replace("T", " ").slice(0, 19)} mono />
+                        <Field label={t("audit.field.target")} value={e.target} />
+                        <Field label={t("audit.field.ipAddress")} value={e.ip} mono />
                         <div className="col-span-full">
-                          <div className="mb-[3px] text-[10.5px] text-[#7a7a8c]">DETAILS</div>
+                          <div className="mb-[3px] text-[10.5px] text-[#7a7a8c]">{t("audit.field.details")}</div>
                           <div className="text-[12.5px] leading-relaxed text-[#c3c3d0]">{e.meta}</div>
                         </div>
                       </div>
@@ -316,8 +320,8 @@ export function AuditLog() {
             })}
             {rows.length === 0 && (
               <div className="flex flex-col items-center px-8 py-12 text-center">
-                <div className="mb-1 text-[14px] font-semibold">No events match your filters</div>
-                <div className="text-[12.5px] text-[#8b8b9e]">Try a different category, actor, or search term.</div>
+                <div className="mb-1 text-[14px] font-semibold">{t("audit.empty.eventsTitle")}</div>
+                <div className="text-[12.5px] text-[#8b8b9e]">{t("audit.empty.eventsHint")}</div>
               </div>
             )}
           </div>
@@ -352,7 +356,7 @@ export function AuditLog() {
                         className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
                         style={{ background: cat[2], color: cat[1] }}
                       >
-                        {cat[0]}
+                        {t(`audit.${cat[0]}`)}
                       </span>
                       <span className="font-mono text-[10.5px] text-[#7a7a8c]">
                         {day} {time}
@@ -381,19 +385,19 @@ export function AuditLog() {
                         className="ml-auto shrink-0 rounded-full px-2 py-[2px] text-[10px] font-bold"
                         style={{ background: st[1], color: st[0] }}
                       >
-                        {st[2]}
+                        {t(`audit.${st[2]}`)}
                       </span>
                     </div>
                     <div className="truncate text-[13px] font-semibold">{e.action}</div>
                     <div className="truncate text-[11.5px] text-[#8b8b9e]">{e.target}</div>
                     {open && (
                       <div className="animate-fade-in-up mt-3 grid grid-cols-1 gap-y-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
-                        <Field label="EVENT ID" value={e.id} mono color="#67e8f9" />
-                        <Field label="TIMESTAMP" value={e.ts.replace("T", " ").slice(0, 19)} mono />
-                        <Field label="TARGET" value={e.target} />
-                        <Field label="IP ADDRESS" value={e.ip} mono />
+                        <Field label={t("audit.field.eventId")} value={e.id} mono color="#67e8f9" />
+                        <Field label={t("audit.field.timestamp")} value={e.ts.replace("T", " ").slice(0, 19)} mono />
+                        <Field label={t("audit.field.target")} value={e.target} />
+                        <Field label={t("audit.field.ipAddress")} value={e.ip} mono />
                         <div>
-                          <div className="mb-[3px] text-[10.5px] text-[#7a7a8c]">DETAILS</div>
+                          <div className="mb-[3px] text-[10.5px] text-[#7a7a8c]">{t("audit.field.details")}</div>
                           <div className="text-[12.5px] leading-relaxed text-[#c3c3d0]">{e.meta}</div>
                         </div>
                       </div>
@@ -404,26 +408,26 @@ export function AuditLog() {
             })}
             {rows.length === 0 && (
               <div style={panel} className="flex flex-col items-center rounded-[18px] px-8 py-12 text-center">
-                <div className="mb-1 text-[14px] font-semibold">No events match your filters</div>
-                <div className="text-[12.5px] text-[#8b8b9e]">Try a different category, actor, or search term.</div>
+                <div className="mb-1 text-[14px] font-semibold">{t("audit.empty.eventsTitle")}</div>
+                <div className="text-[12.5px] text-[#8b8b9e]">{t("audit.empty.eventsHint")}</div>
               </div>
             )}
           </div>
           {rows.length > 0 && (
-            <div className="mt-3.5 text-center text-[12px] text-[#7a7a8c]">Showing {rows.length} events</div>
+            <div className="mt-3.5 text-center text-[12px] text-[#7a7a8c]">{t("audit.showingEvents", { count: rows.length })}</div>
           )}
         </>
       ) : (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3.5 md:grid-cols-4">
-            <StatCard label="Log volume · 24h" value={(logStats?.logVolume ?? 0).toLocaleString()} color="#67e8f9" />
+            <StatCard label={t("audit.stats.logVolume")} value={(logStats?.logVolume ?? 0).toLocaleString()} color="#67e8f9" />
             <StatCard
-              label="Services healthy"
+              label={t("audit.stats.servicesHealthy")}
               value={`${logStats?.servicesHealthy ?? 0} / ${logStats?.servicesTotal ?? 0}`}
               color="#6ee7b7"
             />
-            <StatCard label="Warnings · 1h" value={String(logStats?.warnings ?? 0)} color="#fbbf24" />
-            <StatCard label="Errors · 1h" value={String(logStats?.errors ?? 0)} color="#fb7185" />
+            <StatCard label={t("audit.stats.warnings1h")} value={String(logStats?.warnings ?? 0)} color="#fbbf24" />
+            <StatCard label={t("audit.stats.errors1h")} value={String(logStats?.errors ?? 0)} color="#fb7185" />
           </div>
 
           <div style={panel} className="mb-3.5 flex flex-col gap-2.5 rounded-2xl px-3.5 py-3 md:flex-row md:flex-wrap md:items-center">
@@ -432,7 +436,7 @@ export function AuditLog() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search message, service, trace…"
+                placeholder={t("audit.searchBackend")}
                 className="flex-1 bg-transparent text-[13px] text-ink outline-none"
               />
             </div>
@@ -444,7 +448,7 @@ export function AuditLog() {
                   className="shrink-0 whitespace-nowrap rounded-[10px] px-[13px] py-[7px] text-[12.5px] font-semibold"
                   style={chipStyle(level === id, "violet")}
                 >
-                  {label}
+                  {t(`audit.${label}`)}
                 </button>
               ))}
             </div>
@@ -461,19 +465,19 @@ export function AuditLog() {
                 className="h-2 w-2 rounded-full"
                 style={{ background: liveTail ? "#10b981" : "#6b7280", animation: liveTail ? "pulseDot 1.4s infinite" : undefined }}
               />
-              {liveTail ? "Live tail on" : "Live tail"}
+              {liveTail ? t("audit.liveTailOn") : t("audit.liveTail")}
             </button>
           </div>
 
           <div className="scrollbar-none mb-4 flex gap-[7px] overflow-x-auto md:flex-wrap md:overflow-visible">
-            {[["all", "All services"], ...services.map((s) => [s, s] as [string, string])].map(([id, label]) => (
+            {[["all", "chips.allServices"], ...services.map((s) => [s, s] as [string, string])].map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setService(id)}
                 className="shrink-0 whitespace-nowrap rounded-[9px] px-3 py-1.5 font-mono text-[11.5px] font-semibold"
                 style={chipStyle(service === id, "cyan")}
               >
-                {label}
+                {id === "all" ? t(`audit.${label}`) : label}
               </button>
             ))}
           </div>
@@ -487,7 +491,7 @@ export function AuditLog() {
               <span className="h-[11px] w-[11px] shrink-0 rounded-full" style={{ background: "#fbbf24" }} />
               <span className="h-[11px] w-[11px] shrink-0 rounded-full" style={{ background: "#10b981" }} />
               <span className="ml-2 truncate font-mono text-[12px] text-[#8b8b9e]">q-agent · kubectl logs -f --all-services</span>
-              <span className="ml-auto shrink-0 font-mono text-[11px] text-[#7a7a8c]">{logRows.length} lines</span>
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-[#7a7a8c]">{t("audit.lines", { count: logRows.length })}</span>
             </div>
             <div className="max-h-[520px] overflow-y-auto font-mono text-[12px]">
               {/* Desktop: fixed-column terminal row. Mobile: stacked compact line (see below). */}
@@ -537,8 +541,8 @@ export function AuditLog() {
               })}
               {logRows.length === 0 && (
                 <div className="flex flex-col items-center px-8 py-12 text-center" style={{ fontFamily: "var(--font-sans, sans-serif)" }}>
-                  <div className="mb-1 text-[14px] font-semibold">No log lines match your filters</div>
-                  <div className="text-[12.5px] text-[#8b8b9e]">Try a different level, service, or search term.</div>
+                  <div className="mb-1 text-[14px] font-semibold">{t("audit.empty.logsTitle")}</div>
+                  <div className="text-[12.5px] text-[#8b8b9e]">{t("audit.empty.logsHint")}</div>
                 </div>
               )}
             </div>
