@@ -43,7 +43,17 @@ from app.models.execution import Execution, ExecutionResult
 from app.models.run import Run
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.user import User
-from app.services import agent_capture_service, agent_device_service, evidence_service, execution_service, heal_service, project_config_service, settings_store, spec_service
+from app.schemas import (
+    ExploreClaimOut,
+    ExploreDecideRequest,
+    ExploreDecideStartOut,
+    ExploreDecideStatusOut,
+    ExploreEventRequest,
+    ExploreFinalizeOut,
+    ExploreFinalizeRequest,
+    ExploreTarget,
+)
+from app.services import agent_capture_service, agent_device_service, agent_explore_service, evidence_service, execution_service, exploration_agent, heal_service, knowledge_service, project_config_service, run_context, settings_store, spec_service
 from app.services.auth_service import AuthError
 from app.services.ownership import get_owned_or_404
 from app.services.playwright_runner import _resolve_project_for_run
@@ -480,3 +490,210 @@ def agent_heal_finalize(
     case, run = _owned_case_and_run(db, case_id, user)
     heal_service.finalize_agent_heal(db, case, run, body)
     return {"ok": True}
+
+
+# --------------------------------------------------- agent DOM exploration (#337)
+# Mirrors the agent self-heal server-assist: the observe→decide→act LOOP runs on
+# the paired device (Playwright + app access); these endpoints do the parts that
+# need the server — claim a queued session, the per-step Claude decide (async
+# start+poll, beating the ~100s proxy cap), progress relay, and the KB write.
+# See app.services.agent_explore_service + app.services.exploration_agent.
+
+
+def _run_explore_decide_job(
+    job_id: str,
+    *,
+    target: dict,
+    observation: dict,
+    history: list[dict],
+    steps_taken: int,
+    run_id: int | None,
+    owner_id: int | None,
+    max_steps: int,
+    allow_state_changing: bool,
+) -> None:
+    """Background worker: run :func:`exploration_agent.decide_next_action` off the
+    request thread (the decide is one ~minutes-long Claude call).
+
+    Uses its own DB session (the request's closes once the POST returns) and runs
+    under ``run_context.set_run(run_id)`` so the per-step Claude spend + credentials
+    attribute to the run owner (mirrors :func:`heal_service.plan_fix`). Never raises
+    — a failure is recorded as an ``error`` job the agent can surface.
+    """
+    db = SessionLocal()
+    previous_run = run_context.get_run()
+    if run_id is not None:
+        run_context.set_run(run_id)
+    try:
+        result = exploration_agent.decide_next_action(
+            db,
+            target=target,
+            observation=observation,
+            history=history,
+            steps_taken=steps_taken,
+            run_id=run_id,
+            owner_id=owner_id,
+            max_steps=max_steps,
+            allow_state_changing=allow_state_changing,
+        )
+        agent_explore_service.finish_decide_job(job_id, result=result)
+    except Exception as exc:  # noqa: BLE001 - surface to the agent, never crash the thread
+        logger.error("Explore decide job {} failed: {}", job_id, exc)
+        agent_explore_service.finish_decide_job(job_id, error=str(exc))
+    finally:
+        if run_id is not None:
+            run_context.set_run(previous_run)
+        db.close()
+
+
+@router.post("/explore/next")
+def agent_explore_next(
+    response: Response, user: User = Depends(require_agent), db: Session = Depends(get_db)
+) -> dict | None:
+    """Claim the oldest queued exploration session for this device's owner (#337).
+
+    The paired agent then drives the observe→decide→act loop locally, calling
+    ``/agent/explore/{id}/decide`` per step and ``/agent/explore/{id}/finalize`` at
+    the end. Returns the frozen claim payload, or 204 when nothing is queued.
+    """
+    claim = agent_explore_service.claim_next(user.id)
+    if claim is None:
+        response.status_code = 204
+        return None
+    return ExploreClaimOut(
+        session_id=claim["session_id"],
+        base_url=claim["base_url"],
+        origin=claim["origin"],
+        target=ExploreTarget(**(claim["target"] or {})),
+        max_steps=claim["max_steps"],
+        allow_state_changing=claim["allow_state_changing"],
+        project_key=claim["project_key"],
+        repo=claim["repo"],
+        run_id=claim.get("run_id"),
+    ).model_dump(by_alias=True)
+
+
+@router.post("/explore/{session_id}/decide", response_model=ExploreDecideStartOut)
+def agent_explore_decide(
+    session_id: str,
+    body: ExploreDecideRequest,
+    user: User = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> ExploreDecideStartOut:
+    """Start an async decide job for one exploration step and return its id (#337).
+
+    The decide is a Claude call (server holds the LLM creds + enforces the cost
+    budget), so it runs on a background thread — a synchronous response would
+    exceed a fronting proxy's ~100s cap (mirrors :func:`agent_heal_fix`). The agent
+    then polls :func:`agent_explore_decide_status`.
+    """
+    session = agent_explore_service.get_session(session_id, user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Exploration session not found")
+    job_id = agent_explore_service.start_decide_job()
+    threading.Thread(
+        target=_run_explore_decide_job,
+        kwargs={
+            "job_id": job_id,
+            "target": session["target"] or {},
+            "observation": body.observation or {},
+            "history": body.history or [],
+            "steps_taken": body.steps_taken,
+            "run_id": session.get("run_id"),
+            "owner_id": user.id,
+            "max_steps": session["max_steps"],
+            "allow_state_changing": session["allow_state_changing"],
+        },
+        daemon=True,
+    ).start()
+    return ExploreDecideStartOut(job_id=job_id, status="running")
+
+
+@router.get("/explore/{session_id}/decide/{job_id}", response_model=ExploreDecideStatusOut)
+def agent_explore_decide_status(
+    session_id: str,
+    job_id: str,
+    user: User = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> ExploreDecideStatusOut:
+    """Poll a decide job started by :func:`agent_explore_decide` (#337).
+
+    ``{status:"running"}`` while deciding, or the terminal
+    ``{status:"done", result:{action,args,reasoning,stop?,stopReason?}}`` /
+    ``{status:"error", error}``. Terminal jobs are popped on delivery. 404 for an
+    unknown id (e.g. the API restarted mid-decide).
+    """
+    job = agent_explore_service.take_decide_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Explore decide job not found")
+    if job["status"] == "done":
+        return ExploreDecideStatusOut(status="done", result=job["result"])
+    if job["status"] == "error":
+        return ExploreDecideStatusOut(status="error", error=job["error"])
+    return ExploreDecideStatusOut(status="running")
+
+
+@router.post("/explore/{session_id}/events")
+def agent_explore_events(
+    session_id: str,
+    body: ExploreEventRequest,
+    user: User = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Relay an agent-reported exploration progress event onto the run's WS channel.
+
+    When the session carries a ``run_id`` the SPA's ``explore.progress`` subscribers
+    see live steps exactly like the in-process loop's; a session with no run is a
+    no-op (still ``{ok:true}``).
+    """
+    session = agent_explore_service.get_session(session_id, user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Exploration session not found")
+    run_id = session.get("run_id")
+    if run_id is not None:
+        hub.publish(str(run_id), body.event, body.payload or {})
+    return {"ok": True}
+
+
+@router.post("/explore/{session_id}/finalize", response_model=ExploreFinalizeOut)
+def agent_explore_finalize(
+    session_id: str,
+    body: ExploreFinalizeRequest,
+    user: User = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> ExploreFinalizeOut:
+    """Persist an exploration session's terminal outcome + KB-merge observed data (#337).
+
+    Writes to the Knowledge Base ONLY when ``discovered`` carries observed
+    routes/selectors (never invent — an unreachable target writes nothing and the
+    case stays blocked, ADR 0010 §8), via
+    :func:`knowledge_service.merge_verified_discovery`. Stores the terminal result
+    so ``/explore/status`` can report the agent path. Returns ``{ok, wroteKb}``.
+    """
+    session = agent_explore_service.get_session(session_id, user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Exploration session not found")
+    discovered = body.discovered or {}
+    routes = discovered.get("routes") or []
+    selectors = discovered.get("selectors") or []
+    wrote_kb = False
+    if routes or selectors:
+        merged = knowledge_service.merge_verified_discovery(
+            session["project_key"],
+            session["repo"],
+            {"routes": routes, "selectors": selectors},
+            owner_id=user.id,
+        )
+        wrote_kb = merged > 0
+    agent_explore_service.set_result(
+        session_id,
+        {
+            "status": "done",
+            "stopReason": body.stop_reason,
+            "stepsTaken": body.steps_taken,
+            "wroteKb": wrote_kb,
+            "discoveredRoutes": len(routes),
+            "discoveredSelectors": len(selectors),
+        },
+    )
+    return ExploreFinalizeOut(ok=True, wrote_kb=wrote_kb)

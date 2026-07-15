@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import crypto
+from app.config import settings
 from app.db import SessionLocal, get_db
 from app.deps_auth import current_user
 from app.logging import logger
@@ -37,6 +38,7 @@ from app.schemas import (
 from app.models.agent_device import AgentDevice
 from app.services import (
     agent_capture_service,
+    agent_explore_service,
     connection_service,
     exploration_agent,
     knowledge_service,
@@ -566,6 +568,40 @@ def start_exploration(
     session_id = uuid.uuid4().hex
     owner_id = user.id if user else None
     target = body.target.model_dump()
+
+    # Where the loop runs. The server image ships no Playwright + can't reach the
+    # app-under-test, so on a local-agent deployment exploration must run on the
+    # paired device: enqueue a session the agent claims via /agent/explore/next
+    # (mirrors the heal dispatch in automation.py). Server-target keeps the
+    # in-process background-thread loop below.
+    if settings_store.load_settings().get("executionTarget", "server") == "local-agent":
+        has_device = (
+            db.query(AgentDevice)
+            .filter(AgentDevice.owner_id == owner_id, AgentDevice.revoked_at.is_(None))
+            .first()
+            is not None
+        )
+        if not has_device:
+            raise HTTPException(
+                status_code=409, detail="No local agent paired — start your local agent"
+            )
+        base_url = exploration_agent._resolve_base_url(db, key, repo, owner_id)
+        max_steps = max(1, min(int(settings.explore_max_steps), 20))
+        agent_explore_service.request_exploration(
+            session_id,
+            owner_id=owner_id,
+            project_key=key,
+            repo=repo,
+            base_url=base_url,
+            origin=agent_capture_service.origin_of(base_url),
+            target=target,
+            max_steps=max_steps,
+            allow_state_changing=body.allow_state_changing,
+            run_id=body.run_id,
+            case_id=body.case_id,
+        )
+        return ExploreStartOut(started=True, session_id=session_id, mode="local-agent")
+
     with _explore_lock:
         _exploring[(key, repo)] = session_id
     threading.Thread(
@@ -605,6 +641,14 @@ def exploration_status(
 
     if in_flight is not None:
         return ExploreStatusOut(exploring=True, session_id=in_flight)
+
+    # Agent-path (local-agent dispatch): a session queued/running on the paired
+    # device, then its finalize summary. Reported alongside the server path so the
+    # UI's in-flight/terminal state is correct regardless of executionTarget.
+    agent_in_flight = agent_explore_service.in_flight_session_id(key, repo)
+    if agent_in_flight is not None:
+        return ExploreStatusOut(exploring=True, session_id=agent_in_flight)
+
     if last and last["status"] == "done":
         result = last["result"]
         discovered = result.discovered or {}
@@ -616,5 +660,17 @@ def exploration_status(
             wrote_kb=result.wrote_kb,
             discovered_routes=len(discovered.get("routes") or []),
             discovered_selectors=len(discovered.get("selectors") or []),
+        )
+
+    agent_last = agent_explore_service.get_result_for(key, repo)
+    if agent_last and agent_last.get("status") == "done":
+        return ExploreStatusOut(
+            exploring=False,
+            session_id=agent_last.get("sessionId"),
+            stop_reason=agent_last.get("stopReason"),
+            steps_taken=agent_last.get("stepsTaken"),
+            wrote_kb=agent_last.get("wroteKb"),
+            discovered_routes=agent_last.get("discoveredRoutes"),
+            discovered_selectors=agent_last.get("discoveredSelectors"),
         )
     return ExploreStatusOut(exploring=False, session_id=None)

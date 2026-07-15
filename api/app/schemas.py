@@ -271,10 +271,15 @@ class ExploreRequest(ApiModel):
 
 
 class ExploreStartOut(ApiModel):
-    """Immediate response — the session started; poll/WS for progress (ADR 0010 §7)."""
+    """Immediate response — the session started; poll/WS for progress (ADR 0010 §7).
+
+    ``mode`` distinguishes the dispatch path (``"local-agent"`` when the session
+    was queued for a paired device, ``None``/``"server"`` for the in-process
+    loop) so the SPA can label where exploration is running (epic #336)."""
 
     started: bool
     session_id: str
+    mode: str | None = None
 
 
 class ExploreStatusOut(ApiModel):
@@ -312,6 +317,72 @@ class ExplorationResultOut(ApiModel):
             budget_spent=result.budget_spent,
             wrote_kb=result.wrote_kb,
         )
+
+
+# ---------------------------------------- Agent-driven exploration (epic #336)
+class ExploreClaimOut(ApiModel):
+    """The claim payload the paired agent gets from ``POST /agent/explore/next``
+    (the frozen wire contract) — everything it needs to drive the loop locally."""
+
+    session_id: str
+    base_url: str
+    origin: str
+    target: ExploreTarget
+    max_steps: int
+    allow_state_changing: bool
+    project_key: str
+    repo: str
+    run_id: int | None = None
+
+
+class ExploreDecideRequest(ApiModel):
+    """Body for ``POST /agent/explore/{id}/decide`` — the agent's current page
+    state + action history, from which the server asks Claude for the next step."""
+
+    observation: dict = Field(default_factory=dict)
+    history: list[dict] = Field(default_factory=list)
+    steps_taken: int = 0
+
+
+class ExploreDecideStartOut(ApiModel):
+    """Immediate response — the async decide job started; poll for its result."""
+
+    job_id: str
+    status: str = "running"
+
+
+class ExploreDecideStatusOut(ApiModel):
+    """Poll response for a decide job: ``running`` | ``done`` (with ``result``) |
+    ``error``. ``result`` is ``{action, args, reasoning, stop?, stopReason?}``."""
+
+    status: str
+    result: dict | None = None
+    error: str | None = None
+
+
+class ExploreEventRequest(ApiModel):
+    """Body for ``POST /agent/explore/{id}/events`` — a progress event to relay
+    onto the run WebSocket (when the session has a run)."""
+
+    event: str
+    payload: dict = Field(default_factory=dict)
+
+
+class ExploreFinalizeRequest(ApiModel):
+    """Body for ``POST /agent/explore/{id}/finalize`` — the session's terminal
+    outcome; ``discovered`` is KB-merged only when it carries observed data."""
+
+    discovered: dict = Field(default_factory=dict)
+    log: list[dict] = Field(default_factory=list)
+    stop_reason: str | None = None
+    steps_taken: int = 0
+
+
+class ExploreFinalizeOut(ApiModel):
+    """Finalize response — whether the observed discovery was written to the KB."""
+
+    ok: bool = True
+    wrote_kb: bool = False
 
 
 # ------------------------------------------------------- Shared namespace (#120)
