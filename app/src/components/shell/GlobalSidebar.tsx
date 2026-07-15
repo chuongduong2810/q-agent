@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import { useTilt } from "@/hooks/useTilt";
 import { useLogout } from "@/hooks/useLogout";
-import emeLogo from "@/public/eme-3d-logo.png";
+import emeLogo from "@/public/eme-3d-logo-cut.png";
 import { useAuth } from "@/store/auth";
 import {
   ADMIN_NAV,
@@ -141,25 +141,18 @@ export function GlobalSidebar() {
 
   return (
     <aside className="glass-strong flex w-[248px] shrink-0 flex-col rounded-[22px] p-[20px_14px] shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)]">
-      {/* EMESOFT 3D brand logo on a rounded dark plate — cursor-tracked tilt
-          (see useTilt). The asset is a photographic 3D render with a baked-in
-          dark backdrop (no transparent cut exists), so we frame it as an
-          intentional brand tile whose dark plate merges with that backdrop
-          instead of exposing a hard rectangle against the glass sidebar. */}
-      <div className="mb-1 px-1 pb-2.5 pt-0.5">
-        <motion.div
+      {/* EMESOFT 3D brand logo (background keyed out) — floats transparently on
+          the sidebar with a cursor-tracked tilt (see useTilt). */}
+      <div className="flex justify-center px-2 pb-3 pt-1">
+        <motion.img
+          src={emeLogo}
+          alt="EMESOFT"
+          draggable={false}
           onPointerMove={logoTilt.onPointerMove}
           onPointerLeave={logoTilt.onPointerLeave}
           style={logoTilt.style}
-          className="flex justify-center overflow-hidden rounded-2xl bg-[#0c0c11] px-3 py-3 ring-1 ring-white/[0.06] shadow-[0_10px_30px_-14px_rgba(0,0,0,.8)]"
-        >
-          <img
-            src={emeLogo}
-            alt="EMESOFT"
-            draggable={false}
-            className="h-auto w-full max-w-[176px] select-none"
-          />
-        </motion.div>
+          className="h-auto w-full max-w-[188px] select-none drop-shadow-[0_10px_16px_rgba(0,0,0,0.5)]"
+        />
       </div>
 
       <div className="flex items-center gap-[11px] px-2 pb-[18px] pt-1.5">
