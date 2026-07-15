@@ -10,11 +10,12 @@ import { ChildProcess, spawn } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as readline from "readline";
 import * as api from "./api";
 import { emit } from "./bus";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
-import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorCaptureScript } from "./paths";
+import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorCaptureScript, vendorExploreScript } from "./paths";
 import { applyFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedAttachment, ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
@@ -618,6 +619,303 @@ async function processHealJob(cfg: AgentConfig, job: api.Job, heal: { caseId: nu
   }
 }
 
+// ── DOM exploration (#338) ────────────────────────────────────────────────
+// Mirror the agent-driven self-heal loop for exploration sessions: the browser
+// + observe→decide→act loop run HERE (on the paired device); the server only
+// does the Claude decide step (+ cost budget) and KB-merges the finalized
+// discovery. Frozen wire contract: epic #336.
+
+/** One observation returned by the vendored driver's `{cmd:"observe"}`. */
+interface ExploreObservationResult {
+  ok: boolean;
+  url: string;
+  path: string;
+  a11y: unknown;
+  elements: unknown;
+  error?: string;
+}
+
+/** Result of the driver's `{cmd:"act"}`. */
+interface ExploreActResult {
+  ok: boolean;
+  error: string | null;
+  changed: boolean;
+}
+
+/** Minimal request/response interface over the persistent explore_session.cjs
+ * subprocess. Injected into {@link runExplorationLoop} so the loop is unit-
+ * testable with a fake driver (no real browser). */
+interface ExploreDriver {
+  observe(): Promise<ExploreObservationResult>;
+  act(action: string, args: Record<string, unknown>): Promise<ExploreActResult>;
+  close(): Promise<void>;
+}
+
+/** Actions that mutate app/server state — gated by `allowStateChanging`. `goto`
+ * (navigation) and `expectVisible` (a pure probe) are always allowed. */
+const STATE_CHANGING_ACTIONS = new Set(["click", "fill"]);
+
+/** How long to wait for any single driver command before giving up on it (a
+ * hung observe/act must not stall the whole loop; the loop tolerates the error
+ * and finalizes). Generous because a `goto` can load a slow page. */
+const EXPLORE_CMD_TIMEOUT_MS = 120_000;
+
+/** The `{strategy,value}` of a locator, for the discovered-selectors log. */
+function describeSelector(args: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  if (!args) return null;
+  if (args.testId) return { strategy: "testId", value: args.testId };
+  if (args.role) return { strategy: "role", value: args.role, name: args.name };
+  if (args.selector) return { strategy: "selector", value: args.selector };
+  return null;
+}
+
+/**
+ * The pure exploration loop, decoupled from the subprocess/HTTP so it can be
+ * unit-tested with fakes. Observes → asks the server to decide → acts, up to
+ * `maxSteps`, stopping on `done`, on a server `stop` (e.g. budget), or on
+ * repeat detection (a url+a11y signature seen before). A gated state-changing
+ * action is SKIPPED (recorded, not executed). Never throws: any error is logged
+ * and the session is finalized with whatever was accumulated.
+ */
+export async function runExplorationLoop(
+  cfg: AgentConfig,
+  session: api.ExplorationSession,
+  driver: ExploreDriver,
+  apiClient: Pick<typeof api, "postExploreDecide" | "postExploreEvent" | "postExploreFinalize">,
+  emitFn: (type: string, data?: Record<string, unknown>) => void
+): Promise<void> {
+  const history: Array<Record<string, unknown>> = [];
+  const log: Array<Record<string, unknown>> = [];
+  const discovered: { routes: unknown[]; selectors: unknown[] } = { routes: [], selectors: [] };
+  const seen = new Set<string>();
+  let stopReason = "maxSteps";
+  let stepsTaken = 0;
+
+  try {
+    for (let step = 0; step < session.maxSteps; step++) {
+      const obs = await driver.observe();
+      if (!obs || !obs.ok) {
+        stopReason = "observe-error";
+        log.push({ step, phase: "observe", error: (obs && obs.error) || "observe failed" });
+        break;
+      }
+
+      // Repeat detection: identical url + a11y snapshot means we're looping.
+      const signature = `${obs.url}::${JSON.stringify(obs.a11y)}`;
+      if (seen.has(signature)) {
+        stopReason = "repeat";
+        log.push({ step, phase: "repeat", url: obs.url });
+        break;
+      }
+      seen.add(signature);
+
+      let decision: api.DecideResult;
+      try {
+        decision = await apiClient.postExploreDecide(cfg, session.sessionId, {
+          observation: { accessibility: obs.a11y, elements: obs.elements, url: obs.url, path: obs.path },
+          history,
+          stepsTaken,
+        });
+      } catch (err) {
+        stopReason = "decide-error";
+        log.push({ step, phase: "decide", error: (err as Error).message });
+        break;
+      }
+
+      history.push({ action: decision.action, args: decision.args, reasoning: decision.reasoning });
+
+      if (decision.stop || decision.action === "done") {
+        stopReason = decision.action === "done" ? "done" : decision.stopReason || "stop";
+        log.push({ step, action: decision.action, reasoning: decision.reasoning, stop: true, stopReason });
+        break;
+      }
+
+      const gated = STATE_CHANGING_ACTIONS.has(decision.action) && !session.allowStateChanging;
+      const rec: Record<string, unknown> = {
+        step,
+        action: decision.action,
+        args: decision.args,
+        reasoning: decision.reasoning,
+      };
+      if (gated) {
+        // Do NOT execute a state-changing action when it isn't allowed — record
+        // the skip and move on so the server sees it was considered.
+        rec.skipped = true;
+        rec.skipReason = "state-changing action gated (allowStateChanging=false)";
+        log.push(rec);
+      } else {
+        let result: ExploreActResult;
+        try {
+          result = await driver.act(decision.action, decision.args || {});
+        } catch (err) {
+          result = { ok: false, error: (err as Error).message, changed: false };
+        }
+        rec.result = result;
+        log.push(rec);
+        if (result.ok) {
+          // Record the route/selector that actually worked (with its strategy).
+          if (decision.action === "goto") {
+            const route = (decision.args && decision.args.url) || obs.path || obs.url;
+            if (route) discovered.routes.push(route);
+          } else {
+            const sel = describeSelector(decision.args);
+            if (sel) discovered.selectors.push({ action: decision.action, ...sel });
+          }
+        }
+      }
+
+      stepsTaken++;
+
+      const progress = {
+        step: step + 1,
+        action: decision.action,
+        reasoning: decision.reasoning,
+        skipped: gated,
+        stepsTaken,
+        maxSteps: session.maxSteps,
+      };
+      await apiClient.postExploreEvent(cfg, session.sessionId, "explore.progress", progress).catch(() => {});
+      emitFn("explore-progress", progress);
+    }
+  } catch (err) {
+    // Belt-and-braces: the loop already guards each awaited step, but never let
+    // an unexpected throw escape — finalize with what we have.
+    stopReason = "error";
+    log.push({ phase: "loop", error: (err as Error).message });
+  } finally {
+    try {
+      await driver.close();
+    } catch {
+      // Driver already gone.
+    }
+    await apiClient
+      .postExploreFinalize(cfg, session.sessionId, { discovered, log, stopReason, stepsTaken })
+      .catch((err) => console.error("postExploreFinalize failed:", err));
+    emitFn("explore-complete", { sessionId: session.sessionId, stopReason, stepsTaken });
+  }
+}
+
+/**
+ * Wrap the persistent explore_session.cjs subprocess in an {@link ExploreDriver}:
+ * a serialized newline-delimited-JSON request/response channel. The driver emits
+ * one unsolicited `{ok,ready}` line at startup (consumed by {@link ExploreDriver.observe}'s
+ * first caller via `ready()`); thereafter it is strictly one response line per
+ * command. Any command that outlives {@link EXPLORE_CMD_TIMEOUT_MS} or a dead
+ * process resolves with an error object rather than hanging.
+ */
+function makeExploreDriver(child: ChildProcess): ExploreDriver & { ready(): Promise<ExploreObservationResult> } {
+  const rl = readline.createInterface({ input: child.stdout! });
+  const pending: Array<(v: Record<string, unknown>) => void> = [];
+  let gotReady = false;
+  let readyResolve: (v: Record<string, unknown>) => void;
+  const readyPromise = new Promise<Record<string, unknown>>((r) => {
+    readyResolve = r;
+  });
+
+  rl.on("line", (line) => {
+    if (!line.trim()) return;
+    let obj: Record<string, unknown>;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      return; // ignore non-JSON diagnostic lines
+    }
+    if (!gotReady) {
+      gotReady = true;
+      readyResolve(obj);
+      return;
+    }
+    const resolve = pending.shift();
+    if (resolve) resolve(obj);
+  });
+
+  const failAll = () => {
+    if (!gotReady) {
+      gotReady = true;
+      readyResolve({ ok: false, error: "driver exited before ready" });
+    }
+    while (pending.length) {
+      const resolve = pending.shift();
+      if (resolve) resolve({ ok: false, error: "driver process closed" });
+    }
+  };
+  child.on("close", failAll);
+  child.on("error", failAll);
+
+  const request = (cmd: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        const idx = pending.indexOf(wrapped);
+        if (idx >= 0) pending.splice(idx, 1);
+        resolve({ ok: false, error: "driver command timed out" });
+      }, EXPLORE_CMD_TIMEOUT_MS);
+      const wrapped = (v: Record<string, unknown>) => {
+        clearTimeout(timer);
+        resolve(v);
+      };
+      pending.push(wrapped);
+      try {
+        child.stdin!.write(JSON.stringify(cmd) + "\n");
+      } catch {
+        // stdin closed — the close/error handler will resolve pending.
+      }
+    });
+
+  return {
+    ready: () => readyPromise as unknown as Promise<ExploreObservationResult>,
+    observe: () => request({ cmd: "observe" }) as unknown as Promise<ExploreObservationResult>,
+    act: (action, args) => request({ cmd: "act", action, args }) as unknown as Promise<ExploreActResult>,
+    close: async () => {
+      try {
+        child.stdin!.write(JSON.stringify({ cmd: "close" }) + "\n");
+      } catch {
+        // already gone
+      }
+    },
+  };
+}
+
+/**
+ * Process one claimed exploration session end-to-end (#338): reuse a saved
+ * local session for the origin (auth never leaves this machine), spawn the
+ * vendored persistent Playwright driver, run the observe→decide→act loop, then
+ * finalize. The driver subprocess is ALWAYS killed in `finally`.
+ */
+export async function processExplorationJob(cfg: AgentConfig, session: api.ExplorationSession): Promise<void> {
+  // Reuse a captured session for the origin if one exists (exploration never
+  // prompts for a headed login — it explores with whatever auth is available).
+  let origin = session.origin;
+  if (!origin && session.baseUrl) {
+    try {
+      origin = new URL(session.baseUrl).origin;
+    } catch {
+      origin = "";
+    }
+  }
+  const storageState = origin && hasValidSession(origin) ? sessionPathsForOrigin(origin).storageStatePath : "";
+
+  const script = vendorExploreScript();
+  const nm = agentNodeModules();
+  const args = [script, session.baseUrl];
+  if (storageState) args.push(storageState);
+  const child = spawn(nodeBin(), args, { cwd: nm, env: nodePathEnv(nm) });
+  activeChild = child;
+  const driver = makeExploreDriver(child);
+
+  try {
+    // Wait for the driver's readiness signal before the first observe.
+    await driver.ready();
+    await runExplorationLoop(cfg, session, driver, api, emit);
+  } finally {
+    try {
+      child.kill();
+    } catch {
+      // Already gone.
+    }
+    if (activeChild === child) activeChild = null;
+  }
+}
+
 /**
  * Long-poll loop: claim → process → repeat, backing off `IDLE_POLL_MS`
  * between empty claims. Runs until `signal.aborted`.
@@ -647,6 +945,25 @@ export async function runAgentLoop(cfg: AgentConfig, signal: { aborted: boolean 
       }
       if (capture) {
         await processCapture(cfg, capture);
+        continue;
+      }
+      // No capture either — check for a queued DOM-exploration session (#338).
+      let explore: api.ExplorationSession | null = null;
+      try {
+        explore = await api.claimNextExploration(cfg);
+      } catch (err) {
+        console.error("Exploration claim failed:", (err as Error).message);
+      }
+      if (explore) {
+        console.log(`Claimed exploration ${explore.sessionId} (${explore.target?.goal || explore.baseUrl})`);
+        emit("explore-claimed", { sessionId: explore.sessionId, goal: explore.target?.goal });
+        try {
+          await processExplorationJob(cfg, explore);
+          console.log(`Exploration ${explore.sessionId} complete`);
+        } catch (err) {
+          console.error(`Exploration ${explore.sessionId} crashed:`, err);
+          emit("error", { message: `Exploration ${explore.sessionId} crashed: ${(err as Error).message}` });
+        }
         continue;
       }
       await new Promise((r) => setTimeout(r, IDLE_POLL_MS));

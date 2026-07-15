@@ -286,6 +286,120 @@ export async function postHealFinalize(
   await throwIfNotOk(res);
 }
 
+/** A claimed DOM-exploration session (#338): drive a real browser on THIS
+ * machine through the observe→decide→act loop for one target. Mirrors the
+ * frozen `/agent/explore/next` contract (epic #336). */
+export interface ExplorationSession {
+  sessionId: string;
+  baseUrl: string;
+  origin: string;
+  target: { ticket: string; screen: string; goal: string };
+  maxSteps: number;
+  allowStateChanging: boolean;
+  projectKey: string;
+  repo: string;
+  runId?: string;
+}
+
+/** One observation snapshot handed to the server's decide step. */
+export interface ExploreObservation {
+  accessibility: unknown;
+  elements: unknown;
+  url: string;
+  path: string;
+}
+
+/** The server's decision for one exploration step (Claude call + budget live
+ * server-side). `stop` (with `stopReason`) short-circuits the loop — e.g. the
+ * server sets `stop:true, stopReason:"budget"` when the cost budget is spent. */
+export interface DecideResult {
+  action: string;
+  args: Record<string, unknown>;
+  reasoning: string;
+  stop?: boolean;
+  stopReason?: string;
+}
+
+/** Claim the next queued exploration session for this device's owner. `null` on 204. */
+export async function claimNextExploration(cfg: AgentConfig): Promise<ExplorationSession | null> {
+  const res = await fetch(`${cfg.serverUrl}/agent/explore/next`, {
+    method: "POST",
+    headers: authHeaders(cfg.deviceToken),
+  });
+  if (res.status === 204) return null;
+  await throwIfNotOk(res);
+  return (await res.json()) as ExplorationSession;
+}
+
+/** Ask the server to decide the next exploration step (Claude + budget live
+ * server-side). Starts an async job then polls for the result — same async
+ * start-then-poll shape as {@link postHealFix} so a long decide never trips the
+ * ~100s proxy edge cap. */
+export async function postExploreDecide(
+  cfg: AgentConfig,
+  sessionId: string,
+  body: { observation: ExploreObservation; history: Array<Record<string, unknown>>; stepsTaken: number }
+): Promise<DecideResult> {
+  const startRes = await fetchWithTimeout(
+    `${cfg.serverUrl}/agent/explore/${sessionId}/decide`,
+    {
+      method: "POST",
+      headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    HEAL_FIX_REQUEST_TIMEOUT_MS
+  );
+  await throwIfNotOk(startRes);
+  const { jobId } = (await startRes.json()) as { jobId?: string };
+  if (!jobId) throw new Error("Explore decide did not return a job id");
+
+  const deadline = Date.now() + HEAL_FIX_TOTAL_TIMEOUT_MS;
+  for (;;) {
+    const res = await fetchWithTimeout(
+      `${cfg.serverUrl}/agent/explore/${sessionId}/decide/${jobId}`,
+      { method: "GET", headers: authHeaders(cfg.deviceToken) },
+      HEAL_FIX_REQUEST_TIMEOUT_MS
+    );
+    await throwIfNotOk(res);
+    const data = (await res.json()) as { status: string; result?: DecideResult; error?: string };
+    if (data.status === "done" && data.result) return data.result;
+    if (data.status === "error") throw new Error(data.error || "Explore decide failed on the server");
+    if (Date.now() > deadline) throw new Error("Explore decide timed out waiting for the server");
+    await sleep(HEAL_FIX_POLL_INTERVAL_MS);
+  }
+}
+
+/** Push one exploration progress event; the server relays it to the run WS
+ * (`explore.progress`) when the session carries a runId. */
+export async function postExploreEvent(
+  cfg: AgentConfig,
+  sessionId: string,
+  event: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(`${cfg.serverUrl}/agent/explore/${sessionId}/events`, {
+    method: "POST",
+    headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+    body: JSON.stringify({ event, payload }),
+  });
+  await throwIfNotOk(res);
+}
+
+/** Finalize an exploration session: the server KB-merges the observed
+ * discovery (`merge_verified_discovery`) and stores the terminal result. */
+export async function postExploreFinalize(
+  cfg: AgentConfig,
+  sessionId: string,
+  body: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(`${cfg.serverUrl}/agent/explore/${sessionId}/finalize`, {
+    method: "POST",
+    headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  await throwIfNotOk(res);
+}
+
 /** Finalize an execution with its aggregate counts + captured log tail. */
 export async function postComplete(
   cfg: AgentConfig,
