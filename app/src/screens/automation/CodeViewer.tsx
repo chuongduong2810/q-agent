@@ -137,16 +137,21 @@ export function CodeHighlight({
 
   // Scroll the first edited line into view when a chat edit lands. Keyed on
   // scrollSignal (not scrollToLine) so consecutive edits touching the same line
-  // still re-scroll; instant under prefers-reduced-motion.
+  // still re-scroll; instant under prefers-reduced-motion. `code` is a dep too so
+  // that when the target line isn't rendered yet (the re-typed code is still
+  // filling in), we retry on the next frame; the ref guard fires the scroll once
+  // per signal, the first render where the target line actually exists.
   const reducedMotion = usePrefersReducedMotion();
   const scrollTargetRef = useRef<HTMLDivElement | null>(null);
+  const lastScrolledSignal = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (scrollSignal === undefined || scrollToLine === undefined) return;
-    scrollTargetRef.current?.scrollIntoView({
-      block: "center",
-      behavior: reducedMotion ? "auto" : "smooth",
-    });
-  }, [scrollSignal, scrollToLine, reducedMotion]);
+    if (lastScrolledSignal.current === scrollSignal) return;
+    const el = scrollTargetRef.current;
+    if (!el) return;
+    lastScrolledSignal.current = scrollSignal;
+    el.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+  }, [scrollSignal, scrollToLine, code, reducedMotion]);
 
   // Line indices hidden because they sit inside a currently-collapsed region.
   const hidden = useMemo(() => {
