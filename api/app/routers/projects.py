@@ -7,12 +7,16 @@ Endpoints to implement:
 
 from __future__ import annotations
 
+import threading
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import crypto
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.deps_auth import current_user
+from app.logging import logger
 from app.models.knowledge import ProjectKnowledge, compose_key
 from app.models.project import Project
 from app.models.provider_connection import ProviderConnection
@@ -20,6 +24,9 @@ from app.models.user import User
 from app.schemas import (
     AuthStateOut,
     AvailableReposOut,
+    ExploreRequest,
+    ExploreStartOut,
+    ExploreStatusOut,
     KnowledgeBuildRequest,
     ProjectConfigOut,
     ProjectConfigUpdate,
@@ -31,6 +38,7 @@ from app.models.agent_device import AgentDevice
 from app.services import (
     agent_capture_service,
     connection_service,
+    exploration_agent,
     knowledge_service,
     playwright_runner,
     project_config_service,
@@ -39,6 +47,7 @@ from app.services import (
 from app.services.adapters import get_adapter
 from app.services.adapters.base import ProviderError
 from app.services.ownership import check_owned_or_404, owned, stamp_owner
+from app.ws import hub
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -452,3 +461,160 @@ def build_repo_knowledge(
         db.refresh(row)
         knowledge_service.start_build(row_key)
     return row
+
+
+# --- DOM exploration agent (ADR 0010 §7) ----------------------------------
+# Exploration drives a real browser + one Claude call per step, so a session runs
+# for minutes — inline behind a fronting proxy it would trip the ~100s edge cap
+# (Cloudflare 524). So the POST starts a background thread and returns a session
+# id immediately; the caller polls ``.../explore/status`` (and, when a runId is
+# given, watches ``explore.progress`` on the run WS). Mirrors the self-heal
+# async-start pattern (``routers/agent.py::_heal_fix_jobs``).
+_explore_lock = threading.Lock()
+# (project_key, repo) -> session_id of the currently in-flight session (guard so
+# status can report in-flight and the UI can't double-trigger).
+_exploring: dict[tuple[str, str], str] = {}
+# (project_key, repo) -> latest terminal outcome: {"sessionId", "status", "result"|"error"}.
+_explore_results: dict[tuple[str, str], dict] = {}
+
+
+def _resolve_repo_or_404(db: Session, key: str, repo: str, user: User | None) -> None:
+    """Resolve + authorize a project config and assert ``repo`` is configured.
+
+    Mirrors :func:`build_repo_knowledge`'s resolve pattern: another user's config
+    404s (ownership), and an unconfigured repo name 404s. Raises ``HTTPException``;
+    returns nothing on success.
+    """
+    config = project_config_service.get_config(db, key)
+    check_owned_or_404(config, user, not_found=f"Project config '{key}' not found")
+    repos = project_config_service.get_repos(config)
+    if next((r for r in repos if r["name"] == repo), None) is None:
+        raise HTTPException(
+            status_code=404, detail=f"Repo '{repo}' is not configured for project '{key}'"
+        )
+
+
+def _run_exploration(
+    session_id: str,
+    key: str,
+    repo: str,
+    target: dict,
+    run_id: int | None,
+    case_id: int | None,
+    owner_id: int | None,
+    allow_state_changing: bool,
+) -> None:
+    """Background worker: run :func:`exploration_agent.explore` off the request thread.
+
+    Opens its own DB session (the request's is closed once the POST returns),
+    streams each step to the run WebSocket as ``explore.progress`` (only when a
+    ``run_id`` is given), and records the terminal outcome for status polling.
+    Never raises — a failure is stored as an ``error`` result.
+    """
+    db = SessionLocal()
+
+    def on_step(step: dict) -> None:
+        if run_id is not None:
+            hub.publish(str(run_id), "explore.progress", {**step, "sessionId": session_id})
+
+    try:
+        result = exploration_agent.explore(
+            db,
+            project_key=key,
+            repo=repo,
+            target=target,
+            run_id=run_id,
+            case_id=case_id,
+            owner_id=owner_id,
+            on_step=on_step,
+            allow_state_changing=allow_state_changing,
+        )
+        with _explore_lock:
+            _explore_results[(key, repo)] = {
+                "sessionId": session_id, "status": "done", "result": result
+            }
+    except Exception as exc:  # noqa: BLE001 - surface via status, never crash the thread
+        logger.error("Exploration session {} failed: {}", session_id, exc)
+        with _explore_lock:
+            _explore_results[(key, repo)] = {
+                "sessionId": session_id, "status": "error", "error": str(exc)
+            }
+    finally:
+        with _explore_lock:
+            if _exploring.get((key, repo)) == session_id:
+                _exploring.pop((key, repo), None)
+        db.close()
+
+
+@router.post("/{key}/repos/{repo}/explore", response_model=ExploreStartOut)
+def start_exploration(
+    key: str,
+    repo: str,
+    body: ExploreRequest,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> ExploreStartOut:
+    """Start a DOM-exploration session for a repo's target screen (ADR 0010 §7).
+
+    Resolves + authorizes the project config and repo (foreign config / unconfigured
+    repo 404), then spawns a background thread running the observe→decide→act loop
+    and returns ``{started, sessionId}`` immediately. Progress streams as
+    ``explore.progress`` on the run WebSocket when ``runId`` is set; poll
+    :func:`exploration_status` for navigation-survival status.
+    """
+    _resolve_repo_or_404(db, key, repo, user)
+    session_id = uuid.uuid4().hex
+    owner_id = user.id if user else None
+    target = body.target.model_dump()
+    with _explore_lock:
+        _exploring[(key, repo)] = session_id
+    threading.Thread(
+        target=_run_exploration,
+        args=(
+            session_id,
+            key,
+            repo,
+            target,
+            body.run_id,
+            body.case_id,
+            owner_id,
+            body.allow_state_changing,
+        ),
+        daemon=True,
+    ).start()
+    return ExploreStartOut(started=True, session_id=session_id)
+
+
+@router.get("/{key}/repos/{repo}/explore/status", response_model=ExploreStatusOut)
+def exploration_status(
+    key: str,
+    repo: str,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(current_user),
+) -> ExploreStatusOut:
+    """Report whether an exploration session is in-flight for this repo (ADR 0010 §7).
+
+    Lets the UI restore the 'exploring' state after navigating away/back. When idle
+    and a session has completed, returns a summary of the latest terminal result
+    (stop reason, steps, whether the KB was written, discovered counts).
+    """
+    _resolve_repo_or_404(db, key, repo, user)
+    with _explore_lock:
+        in_flight = _exploring.get((key, repo))
+        last = _explore_results.get((key, repo))
+
+    if in_flight is not None:
+        return ExploreStatusOut(exploring=True, session_id=in_flight)
+    if last and last["status"] == "done":
+        result = last["result"]
+        discovered = result.discovered or {}
+        return ExploreStatusOut(
+            exploring=False,
+            session_id=last["sessionId"],
+            stop_reason=result.stop_reason,
+            steps_taken=result.steps_taken,
+            wrote_kb=result.wrote_kb,
+            discovered_routes=len(discovered.get("routes") or []),
+            discovered_selectors=len(discovered.get("selectors") or []),
+        )
+    return ExploreStatusOut(exploring=False, session_id=None)

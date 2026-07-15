@@ -252,6 +252,68 @@ class RepoKnowledgeOut(ApiModel):
     last_indexed: datetime | None = None
 
 
+# ------------------------------------------------------- DOM exploration (ADR 0010)
+class ExploreTarget(ApiModel):
+    """What the exploration agent should find — a blocked case's screen/goal."""
+
+    ticket: str | None = None
+    screen: str | None = None
+    goal: str | None = None
+
+
+class ExploreRequest(ApiModel):
+    """Body for ``POST /projects/{key}/repos/{repo}/explore`` (ADR 0010 §7)."""
+
+    target: ExploreTarget
+    run_id: int | None = None
+    case_id: int | None = None
+    allow_state_changing: bool = False
+
+
+class ExploreStartOut(ApiModel):
+    """Immediate response — the session started; poll/WS for progress (ADR 0010 §7)."""
+
+    started: bool
+    session_id: str
+
+
+class ExploreStatusOut(ApiModel):
+    """Navigation-survival poll: whether a session is in-flight for this repo, plus
+    the latest terminal result summary when one has completed."""
+
+    exploring: bool
+    session_id: str | None = None
+    stop_reason: str | None = None
+    steps_taken: int | None = None
+    wrote_kb: bool | None = None
+    discovered_routes: int | None = None
+    discovered_selectors: int | None = None
+
+
+class ExplorationResultOut(ApiModel):
+    """The full outcome of one exploration session (maps the
+    :class:`app.services.exploration_agent.ExplorationResult` dataclass)."""
+
+    discovered: dict = Field(default_factory=dict)
+    log: list[dict] = Field(default_factory=list)
+    stop_reason: str
+    steps_taken: int
+    budget_spent: dict = Field(default_factory=dict)
+    wrote_kb: bool = False
+
+    @classmethod
+    def from_result(cls, result) -> "ExplorationResultOut":  # noqa: ANN001 - ExplorationResult
+        """Build the wire model from an ``ExplorationResult`` dataclass instance."""
+        return cls(
+            discovered=result.discovered,
+            log=result.log,
+            stop_reason=result.stop_reason,
+            steps_taken=result.steps_taken,
+            budget_spent=result.budget_spent,
+            wrote_kb=result.wrote_kb,
+        )
+
+
 # ------------------------------------------------------- Shared namespace (#120)
 class SharedProjectKnowledgeOut(ApiModel):
     """One repo's (or the bare project's, when ``repo`` is blank) knowledge status
