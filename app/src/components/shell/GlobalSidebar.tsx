@@ -2,6 +2,7 @@ import { LogOut, Sparkles, User, UserRound } from "lucide-react";
 import { motion, useMotionTemplate, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import { useTilt } from "@/hooks/useTilt";
@@ -21,6 +22,7 @@ import {
 export function GlobalSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { t } = useTranslation("nav");
 
   // Much stronger tilt for the hero brand logo than the default card tilt.
   const logoTilt = useTilt({ maxX: 20, maxY: 26, scale: 1.1, perspective: 760 });
@@ -80,7 +82,7 @@ export function GlobalSidebar() {
         <span className="flex w-[18px] justify-center">
           <Icon size={18} strokeWidth={2} />
         </span>
-        <span className="flex-1">{n.label}</span>
+        <span className="flex-1">{t(`items.${n.key}`)}</span>
       </button>
     );
   };
@@ -194,17 +196,17 @@ export function GlobalSidebar() {
         <div>
           <div className="text-[16px] font-black leading-tight tracking-tight">Q&#8209;Agent</div>
           <div className="text-[10.5px] font-medium tracking-[0.04em] text-[#7a7a8c]">
-            QA OPERATING SYSTEM
+            {t("brand.tagline")}
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-[9.5px] font-semibold tracking-[0.08em] text-[#5c5c6e]">
             <span className="h-1 w-1 rounded-full bg-[#8b5cf6]" />
-            AN EMESOFT PRODUCT
+            {t("brand.product")}
           </div>
         </div>
       </div>
 
       <div className="px-2.5 pb-2 pt-1 text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
-        WORKSPACE
+        {t("sections.workspace")}
       </div>
 
       <nav className="-mx-1 flex flex-col gap-0.5 overflow-y-auto px-1">
@@ -215,10 +217,10 @@ export function GlobalSidebar() {
           <>
             <div className="flex items-center gap-2 px-2.5 pb-2 pt-3.5">
               <span className="text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
-                ADMIN
+                {t("sections.admin")}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-[7px] py-[1.5px] text-[8.5px] font-bold uppercase tracking-[0.07em] text-[#7a7a8c]">
-                Restricted
+                {t("sections.restricted")}
               </span>
             </div>
             {ADMIN_NAV.map(renderItem)}
@@ -240,10 +242,10 @@ export function GlobalSidebar() {
           {avatar}
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12.5px] font-semibold">
-              {hasIdentity ? displayName : "Set your identity"}
+              {hasIdentity ? displayName : t("account.setIdentity")}
             </div>
             <div className="truncate text-[10.5px] capitalize text-[#7a7a8c]">
-              {hasIdentity ? displayRole || "—" : "Settings → Profile"}
+              {hasIdentity ? displayRole || "—" : t("account.settingsProfile")}
             </div>
           </div>
         </button>
@@ -267,7 +269,7 @@ export function GlobalSidebar() {
               className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-ink-dim transition-colors hover:bg-white/[0.06] hover:text-white"
             >
               <UserRound size={16} strokeWidth={2} />
-              <span>Profile</span>
+              <span>{t("account.profile")}</span>
             </button>
             <hr className="mx-1 my-1.5 border-0 border-t border-white/[0.08]" />
             <button
@@ -276,7 +278,7 @@ export function GlobalSidebar() {
               className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-rose-300 transition-colors hover:bg-rose-500/10 hover:text-rose-200"
             >
               <LogOut size={16} strokeWidth={2} />
-              <span>Log out</span>
+              <span>{t("account.logout")}</span>
             </button>
           </div>,
           document.body,

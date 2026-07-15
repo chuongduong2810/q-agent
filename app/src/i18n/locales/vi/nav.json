@@ -1,0 +1,97 @@
+{
+  "items": {
+    "dashboard": "Bảng điều khiển",
+    "projects": "Dự án",
+    "tickets": "Công việc",
+    "runs": "Lượt chạy",
+    "reports": "Báo cáo",
+    "gettingStarted": "Bắt đầu",
+    "localAgent": "Tác nhân cục bộ",
+    "settings": "Cài đặt",
+    "users": "Người dùng",
+    "claudeCredentials": "Thông tin đăng nhập Claude",
+    "sharedWorkspace": "Không gian dùng chung",
+    "auditLog": "Nhật ký kiểm toán"
+  },
+  "sections": {
+    "workspace": "KHÔNG GIAN LÀM VIỆC",
+    "admin": "QUẢN TRỊ",
+    "restricted": "Hạn chế",
+    "global": "TOÀN CỤC",
+    "pipeline": "QUY TRÌNH"
+  },
+  "brand": {
+    "tagline": "HỆ ĐIỀU HÀNH QA",
+    "product": "SẢN PHẨM CỦA EMESOFT"
+  },
+  "account": {
+    "setIdentity": "Thiết lập danh tính",
+    "settingsProfile": "Cài đặt → Hồ sơ",
+    "profile": "Hồ sơ",
+    "logout": "Đăng xuất"
+  },
+  "topbar": {
+    "searchPlaceholder": "Tìm kiếm hoặc hỏi Q‑Agent bất cứ điều gì…",
+    "newRun": "Lượt chạy mới",
+    "switchRun": "Chuyển lượt chạy",
+    "stageOfNine": "giai đoạn {{stage}} / 9"
+  },
+  "run": {
+    "back": "Toàn bộ Q‑Agent",
+    "loading": "Đang tải lượt chạy…",
+    "screenTag": "màn hình",
+    "meta": "{{count}} công việc · {{framework}} · {{env}}",
+    "switchHint": "CHUYỂN LƯỢT CHẠY — GIỮ NGUYÊN GIAI ĐOẠN"
+  },
+  "pipeline": {
+    "syncSelect": "Đồng bộ & Chọn",
+    "analyze": "Phân tích",
+    "review": "Đánh giá",
+    "link": "Liên kết",
+    "automation": "Tự động hóa",
+    "execution": "Thực thi",
+    "evidence": "Bằng chứng",
+    "publish": "Xuất bản"
+  },
+  "mobile": {
+    "stage": {
+      "overview": "Tổng quan lượt chạy",
+      "review": "Trung tâm đánh giá",
+      "sync": "Đồng bộ",
+      "automation": "Tự động hóa",
+      "execution": "Thực thi",
+      "evidence": "Bằng chứng",
+      "comment": "Xuất bản",
+      "fallback": "Lượt chạy"
+    },
+    "global": {
+      "dashboard": { "t": "Bảng điều khiển", "s": "Trung tâm điều hành" },
+      "project": { "t": "Dự án", "s": "Chi tiết dự án" },
+      "projects": { "t": "Dự án", "s": "Không gian làm việc" },
+      "ticket": { "t": "Công việc", "s": "Chi tiết công việc" },
+      "tickets": { "t": "Công việc", "s": "Danh sách chờ" },
+      "runs": { "t": "Lượt chạy", "s": "Lượt chạy QA" },
+      "reports": { "t": "Báo cáo", "s": "Phân tích" },
+      "audit": { "t": "Nhật ký kiểm toán", "s": "Hoạt động" },
+      "users": { "t": "Nhóm", "s": "Quản trị" },
+      "claudeCreds": { "t": "Thông tin đăng nhập Claude", "s": "Quản trị" },
+      "sharedWorkspace": { "t": "Không gian dùng chung", "s": "Quản trị" },
+      "settings": { "t": "Cài đặt", "s": "Tùy chọn" },
+      "gettingStarted": { "t": "Bắt đầu", "s": "Hướng dẫn" },
+      "localAgent": { "t": "Tác nhân cục bộ", "s": "Trình chạy" },
+      "profile": { "t": "Hồ sơ", "s": "Tài khoản" },
+      "fallback": { "t": "Q-Agent", "s": "" }
+    }
+  },
+  "language": {
+    "label": "Ngôn ngữ",
+    "description": "Ngôn ngữ hiển thị của giao diện."
+  },
+  "aria": {
+    "openNav": "Mở điều hướng",
+    "closeNav": "Đóng điều hướng",
+    "newRun": "Lượt chạy mới",
+    "exitRun": "Thoát lượt chạy",
+    "logout": "Đăng xuất"
+  }
+}

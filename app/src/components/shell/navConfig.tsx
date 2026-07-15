@@ -23,7 +23,10 @@ import { type ComponentType } from "react";
  */
 export interface NavItem {
   path: string;
+  /** English source label — kept for the stable `data-tour` id and as fallback. */
   label: string;
+  /** i18n key into the `nav` namespace (`items.<key>`); see ADR 0011. */
+  key: string;
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
 }
 
@@ -31,17 +34,17 @@ export interface NavItem {
  * appear here — they exist only inside a run's workspace (see RunSidebar /
  * MobileDrawer in-run mode), which is what prevents opening them without a run. */
 export const PRIMARY_NAV: NavItem[] = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/projects", label: "Projects", icon: FolderKanban },
-  { path: "/tickets", label: "Tickets", icon: Ticket },
-  { path: "/runs", label: "Runs", icon: SquareStack },
+  { path: "/", label: "Dashboard", key: "dashboard", icon: LayoutDashboard },
+  { path: "/projects", label: "Projects", key: "projects", icon: FolderKanban },
+  { path: "/tickets", label: "Tickets", key: "tickets", icon: Ticket },
+  { path: "/runs", label: "Runs", key: "runs", icon: SquareStack },
 ];
 
 export const SECONDARY_NAV: NavItem[] = [
-  { path: "/reports", label: "Reports", icon: BarChart3 },
-  { path: "/getting-started", label: "Getting Started", icon: GraduationCap },
-  { path: "/local-agent", label: "Local Agent", icon: Laptop },
-  { path: "/settings", label: "Settings", icon: Settings },
+  { path: "/reports", label: "Reports", key: "reports", icon: BarChart3 },
+  { path: "/getting-started", label: "Getting Started", key: "gettingStarted", icon: GraduationCap },
+  { path: "/local-agent", label: "Local Agent", key: "localAgent", icon: Laptop },
+  { path: "/settings", label: "Settings", key: "settings", icon: Settings },
 ];
 
 /** Claude credentials nav icon — the Claude sunburst as a monochrome *stroked*
@@ -64,10 +67,10 @@ export const ClaudeNavIcon = ({ size = 18, strokeWidth = 2 }: LucideProps) => (
 
 /** Admin-only navigation — rendered in a dedicated, gated ADMIN section. */
 export const ADMIN_NAV: NavItem[] = [
-  { path: "/settings/users", label: "Users", icon: Users },
-  { path: "/settings/claude-credentials", label: "Claude credentials", icon: ClaudeNavIcon },
-  { path: "/settings/shared-workspace", label: "Shared workspace", icon: Boxes },
-  { path: "/audit", label: "Audit Log", icon: ShieldCheck },
+  { path: "/settings/users", label: "Users", key: "users", icon: Users },
+  { path: "/settings/claude-credentials", label: "Claude credentials", key: "claudeCredentials", icon: ClaudeNavIcon },
+  { path: "/settings/shared-workspace", label: "Shared workspace", key: "sharedWorkspace", icon: Boxes },
+  { path: "/audit", label: "Audit Log", key: "auditLog", icon: ShieldCheck },
 ];
 
 /**
@@ -94,22 +97,22 @@ export function activeNavPath(items: NavItem[], pathname: string): string | null
 /** Pipeline stages as the run's navigation. `stage` is the 1-based index in the
  * global pipeline (see `runStatusToStage`) used for done/current styling; `seg`
  * is the run sub-route this step opens (null = non-navigable phase marker). */
-export const PIPELINE: { label: string; stage: number; seg: string | null }[] = [
-  { label: "Sync & Select", stage: 2, seg: null },
-  { label: "Analyze", stage: 3, seg: null },
-  { label: "Review", stage: 4, seg: "review" },
-  { label: "Link", stage: 5, seg: "sync" },
-  { label: "Automation", stage: 6, seg: "automation" },
-  { label: "Execution", stage: 7, seg: "execution" },
-  { label: "Evidence", stage: 8, seg: "evidence" },
-  { label: "Publish", stage: 9, seg: "comment" },
+export const PIPELINE: { label: string; key: string; stage: number; seg: string | null }[] = [
+  { label: "Sync & Select", key: "syncSelect", stage: 2, seg: null },
+  { label: "Analyze", key: "analyze", stage: 3, seg: null },
+  { label: "Review", key: "review", stage: 4, seg: "review" },
+  { label: "Link", key: "link", stage: 5, seg: "sync" },
+  { label: "Automation", key: "automation", stage: 6, seg: "automation" },
+  { label: "Execution", key: "execution", stage: 7, seg: "execution" },
+  { label: "Evidence", key: "evidence", stage: 8, seg: "evidence" },
+  { label: "Publish", key: "publish", stage: 9, seg: "comment" },
 ];
 
 /** Pinned global mini-row shown at the foot of the run workspace nav. */
 export const GLOBAL_MINI: NavItem[] = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/tickets", label: "Tickets", icon: Ticket },
-  { path: "/runs", label: "Runs", icon: SquareStack },
-  { path: "/reports", label: "Reports", icon: BarChart3 },
-  { path: "/settings", label: "Settings", icon: Settings },
+  { path: "/", label: "Dashboard", key: "dashboard", icon: LayoutDashboard },
+  { path: "/tickets", label: "Tickets", key: "tickets", icon: Ticket },
+  { path: "/runs", label: "Runs", key: "runs", icon: SquareStack },
+  { path: "/reports", label: "Reports", key: "reports", icon: BarChart3 },
+  { path: "/settings", label: "Settings", key: "settings", icon: Settings },
 ];

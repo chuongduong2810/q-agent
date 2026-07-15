@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
+import { LanguageSwitcher } from "@/components/shell/LanguageSwitcher";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Select } from "@/components/ui/Dropdown";
 import { Spinner } from "@/components/ui/misc";
@@ -42,6 +44,7 @@ export function Settings() {
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettings = useUpdateSettings();
   const location = useLocation();
+  const { t: tNav } = useTranslation("nav");
 
   // Settings edit as a local draft — controls mutate `draft`, never the server,
   // until the user hits "Save changes". `settings` only changes on save (cache
@@ -350,6 +353,13 @@ export function Settings() {
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">INTERFACE</div>
       <GlassCard className="p-[22px]">
+        <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
+          <div>
+            <div className="text-[14px] font-semibold">{tNav("language.label")}</div>
+            <div className="text-[12px] text-muted">{tNav("language.description")}</div>
+          </div>
+          <LanguageSwitcher />
+        </div>
         {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />

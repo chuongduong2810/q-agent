@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, LogOut, Sparkles, User, UserRound, X } from "lucide-react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import {
@@ -30,6 +31,7 @@ export function MobileDrawer() {
   const open = useUI((s) => s.drawerOpen);
   const closeDrawer = useUI((s) => s.closeDrawer);
   const navigate = useNavigate();
+  const { t } = useTranslation("nav");
   const { pathname } = useLocation();
   const runId = useRunRouteId();
   const { data: run } = useRun(runId ?? null);
@@ -71,7 +73,7 @@ export function MobileDrawer() {
         <span className="flex w-[18px] justify-center">
           <Icon size={18} strokeWidth={2} />
         </span>
-        <span className="flex-1">{n.label}</span>
+        <span className="flex-1">{t(`items.${n.key}`)}</span>
       </button>
     );
   };
@@ -111,12 +113,12 @@ export function MobileDrawer() {
               <div className="flex-1">
                 <div className="text-[17px] font-black leading-tight tracking-tight">Q&#8209;Agent</div>
                 <div className="text-[10px] font-medium tracking-[0.04em] text-[#7a7a8c]">
-                  QA OPERATING SYSTEM
+                  {t("brand.tagline")}
                 </div>
               </div>
               <button
                 onClick={closeDrawer}
-                aria-label="Close navigation"
+                aria-label={t("aria.closeNav")}
                 className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.05] text-ink-dim active:bg-white/[0.12]"
               >
                 <X size={16} strokeWidth={2.2} />
@@ -150,11 +152,15 @@ export function MobileDrawer() {
                     )}
                   </div>
                   <div className="text-[13px] font-extrabold leading-[1.25] tracking-tight">
-                    {run?.name ?? "Loading run…"}
+                    {run?.name ?? t("run.loading")}
                   </div>
                   {run && (
                     <div className="mt-[5px] text-[10px] text-[#b9a8e6]">
-                      {run.ticketIds.length} tickets · {run.framework} · {run.env}
+                      {t("run.meta", {
+                        count: run.ticketIds.length,
+                        framework: run.framework,
+                        env: run.env,
+                      })}
                     </div>
                   )}
                 </div>
@@ -163,14 +169,14 @@ export function MobileDrawer() {
                   className="flex w-full items-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-[12px] font-semibold text-ink-dim active:bg-white/[0.08]"
                 >
                   <ArrowLeft size={14} strokeWidth={2} />
-                  All of Q&#8209;Agent
+                  {t("run.back")}
                 </button>
               </div>
             )}
 
             {/* Nav groups */}
             <div className="px-1 pb-2 text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
-              WORKSPACE
+              {t("sections.workspace")}
             </div>
             <nav className="flex flex-col gap-0.5">
               {PRIMARY_NAV.map(renderItem)}
@@ -181,9 +187,9 @@ export function MobileDrawer() {
             {isAdmin && !inRun && (
               <>
                 <div className="flex items-center gap-2 px-1 pb-2 pt-4">
-                  <span className="text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">ADMIN</span>
+                  <span className="text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">{t("sections.admin")}</span>
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-[7px] py-[1.5px] text-[8.5px] font-bold uppercase tracking-[0.07em] text-[#7a7a8c]">
-                    Restricted
+                    {t("sections.restricted")}
                   </span>
                 </div>
                 <nav className="flex flex-col gap-0.5">{ADMIN_NAV.map(renderItem)}</nav>
@@ -212,17 +218,17 @@ export function MobileDrawer() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12.5px] font-semibold">
-                    {displayName || "Set your identity"}
+                    {displayName || t("account.setIdentity")}
                   </div>
                   <div className="truncate text-[10.5px] capitalize text-[#7a7a8c]">
-                    {user?.role || "Settings → Profile"}
+                    {user?.role || t("account.settingsProfile")}
                   </div>
                 </div>
                 <UserRound size={16} strokeWidth={2} className="shrink-0 text-ink-dim" />
               </button>
               <button
                 onClick={logout}
-                aria-label="Log out"
+                aria-label={t("aria.logout")}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-300 active:bg-rose-500/20"
               >
                 <LogOut size={16} strokeWidth={2} />

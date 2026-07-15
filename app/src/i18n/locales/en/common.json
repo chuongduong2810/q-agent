@@ -1,0 +1,13 @@
+{
+  "save": "Save changes",
+  "cancel": "Cancel",
+  "discard": "Discard",
+  "loading": "Loading…",
+  "search": "Search",
+  "close": "Close",
+  "confirm": "Confirm",
+  "delete": "Delete",
+  "edit": "Edit",
+  "retry": "Retry",
+  "unsavedChanges": "You have unsaved changes"
+}

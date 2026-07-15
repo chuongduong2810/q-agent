@@ -1,0 +1,97 @@
+{
+  "items": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "tickets": "Tickets",
+    "runs": "Runs",
+    "reports": "Reports",
+    "gettingStarted": "Getting Started",
+    "localAgent": "Local Agent",
+    "settings": "Settings",
+    "users": "Users",
+    "claudeCredentials": "Claude credentials",
+    "sharedWorkspace": "Shared workspace",
+    "auditLog": "Audit Log"
+  },
+  "sections": {
+    "workspace": "WORKSPACE",
+    "admin": "ADMIN",
+    "restricted": "Restricted",
+    "global": "GLOBAL",
+    "pipeline": "PIPELINE"
+  },
+  "brand": {
+    "tagline": "QA OPERATING SYSTEM",
+    "product": "AN EMESOFT PRODUCT"
+  },
+  "account": {
+    "setIdentity": "Set your identity",
+    "settingsProfile": "Settings → Profile",
+    "profile": "Profile",
+    "logout": "Log out"
+  },
+  "topbar": {
+    "searchPlaceholder": "Search or ask Q‑Agent anything…",
+    "newRun": "New Run",
+    "switchRun": "Switch run",
+    "stageOfNine": "stage {{stage}} of 9"
+  },
+  "run": {
+    "back": "All of Q‑Agent",
+    "loading": "Loading run…",
+    "screenTag": "screen",
+    "meta": "{{count}} tickets · {{framework}} · {{env}}",
+    "switchHint": "SWITCH RUN — KEEPS YOU ON THIS STAGE"
+  },
+  "pipeline": {
+    "syncSelect": "Sync & Select",
+    "analyze": "Analyze",
+    "review": "Review",
+    "link": "Link",
+    "automation": "Automation",
+    "execution": "Execution",
+    "evidence": "Evidence",
+    "publish": "Publish"
+  },
+  "mobile": {
+    "stage": {
+      "overview": "Run overview",
+      "review": "Review Center",
+      "sync": "Sync",
+      "automation": "Automation",
+      "execution": "Execution",
+      "evidence": "Evidence",
+      "comment": "Publish",
+      "fallback": "Run"
+    },
+    "global": {
+      "dashboard": { "t": "Dashboard", "s": "Mission control" },
+      "project": { "t": "Project", "s": "Project detail" },
+      "projects": { "t": "Projects", "s": "Workspaces" },
+      "ticket": { "t": "Ticket", "s": "Ticket detail" },
+      "tickets": { "t": "Tickets", "s": "Backlog" },
+      "runs": { "t": "Runs", "s": "QA runs" },
+      "reports": { "t": "Reports", "s": "Analytics" },
+      "audit": { "t": "Audit Log", "s": "Activity" },
+      "users": { "t": "Team", "s": "Admin" },
+      "claudeCreds": { "t": "Claude Credentials", "s": "Admin" },
+      "sharedWorkspace": { "t": "Shared Workspace", "s": "Admin" },
+      "settings": { "t": "Settings", "s": "Preferences" },
+      "gettingStarted": { "t": "Getting Started", "s": "Onboarding" },
+      "localAgent": { "t": "Local Agent", "s": "Runner" },
+      "profile": { "t": "Profile", "s": "Account" },
+      "fallback": { "t": "Q-Agent", "s": "" }
+    }
+  },
+  "language": {
+    "label": "Language",
+    "description": "Display language for the interface."
+  },
+  "aria": {
+    "openNav": "Open navigation",
+    "closeNav": "Close navigation",
+    "newRun": "New run",
+    "exitRun": "Exit run",
+    "logout": "Log out"
+  }
+}
