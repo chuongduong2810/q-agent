@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
 import { useTilt } from "@/hooks/useTilt";
+import { TiltGlare } from "@/components/ui/TiltGlare";
 import { runColor, runEffectiveStatus, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
 import { useAuditEvents, useReports, useRunCases, useRuns } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
@@ -214,6 +215,7 @@ export function Dashboard() {
               </Button>
             </div>
           </div>
+          <TiltGlare px={heroTilt.px} py={heroTilt.py} glow={heroTilt.glow} />
         </motion.div>
 
         <GlassCard className="flex flex-col p-[22px]">
