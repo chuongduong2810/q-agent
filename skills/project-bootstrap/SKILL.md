@@ -76,7 +76,7 @@ secure store by role). Anything genuinely undiscoverable goes under **Missing In
 4. **Catalog real routes** — the concrete routes/URL patterns a test would navigate to,
    noting which require authentication.
 5. **Inventory automation assets** — existing test framework, config, Page Objects, fixtures, helpers, test data factories (record their **names** so downstream can reuse them).
-6. **Determine locator strategy + real selectors** — the project's actual selector priority (data-testid → getByRole → getByLabel → CSS → XPath), with **real selector/testid examples** discovered in the code, mapped to their screen/element.
+6. **Determine locator strategy + real selectors** — the project's actual selector priority (data-testid → getByRole → getByLabel → CSS → XPath), with **real selector/testid examples** discovered in the code, mapped to their screen/element. Note: the KB may later gain routes/selectors stamped `verified_at_runtime` (confirmed live by the DOM exploration agent). Those are **preferred** over the source-inferred entries you record here; never overwrite a verified entry with a source-inferred one.
 7. **Learn authentication** — login flow, **login URL**, session handling, reusable auth helpers / storage state, and which configured test-account role logs in where.
 8. **Extract coding standards** — naming, folder conventions, assertion style, async pattern, error handling, comment density.
 9. **Extract business domain knowledge** — entities, user roles, workflows, business rules, glossary — from docs and code.

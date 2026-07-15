@@ -89,6 +89,27 @@ def test_gate_spec_passes_clean_grounded_spec():
     assert result["outcome"] == "passed"
 
 
+def test_gate_spec_verified_entries_count_as_grounding():
+    """A spec grounded ONLY on ``verified_at_runtime`` entries passes — the extra
+    stamp keys must not stop routes/selectors from being recognized as known (#329)."""
+    grounded = {
+        "routes": [
+            {"path": "/login", "verified_at_runtime": "2026-07-15T00:00:00Z", "source": "exploration"}
+        ],
+        "selectors": [
+            {
+                "selector": "login-btn",
+                "strategy": "data-testid",
+                "verified_at_runtime": "2026-07-15T00:00:00Z",
+                "source": "exploration",
+            }
+        ],
+        "base_url": "https://x",
+    }
+    result = placeholder_gate.gate_spec(_clean_spec(), grounded)
+    assert result["outcome"] == "passed"
+
+
 # --- template-literal goto() targets (parameterized routes) --------------------
 # A goto() built from grounded constants — `${BASE_URL}/employers/${ID}/...` — is
 # the idiomatic way to parameterize a route. It must not be mistaken for an

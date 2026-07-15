@@ -81,6 +81,11 @@ From the Knowledge Base, use directly (do not invent):
 - The names of existing **Page Objects / fixtures / utilities** — informational context only (see
   above); never import them.
 
+Some routes/selectors may be stamped `verified_at_runtime` — discovered live by the DOM exploration
+agent rather than inferred from source. These are marked `✓ runtime-verified` in the injected project
+context and **must be preferred** over source-inferred entries for the same screen/element, using the
+verified selector's `strategy`.
+
 If any prerequisite is missing, stop and request that `project-bootstrap` (for the KB) or
 `test-case-generator` / `test-case-reviewer` (for the approved case) be run first.
 
