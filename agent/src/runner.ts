@@ -898,7 +898,12 @@ export async function processExplorationJob(cfg: AgentConfig, session: api.Explo
   const nm = agentNodeModules();
   const args = [script, session.baseUrl];
   if (storageState) args.push(storageState);
-  const child = spawn(nodeBin(), args, { cwd: nm, env: nodePathEnv(nm) });
+  // Run the explore browser HEADED on the paired device: the user watches the
+  // session, and a headed browser dodges WAF/bot-protection that blocks headless.
+  const child = spawn(nodeBin(), args, {
+    cwd: nm,
+    env: { ...nodePathEnv(nm), QAGENT_EXPLORE_HEADED: "1" },
+  });
   activeChild = child;
   // Capture the driver's stderr so a launch failure (missing browser, bad
   // Playwright resolution, …) is visible instead of a silent "complete".

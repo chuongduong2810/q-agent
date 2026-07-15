@@ -682,9 +682,13 @@ def agent_explore_finalize(
     session = agent_explore_service.get_session(session_id, user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Exploration session not found")
-    discovered = body.discovered or {}
-    routes = discovered.get("routes") or []
-    selectors = discovered.get("selectors") or []
+    # Coerce the agent's raw discovered shape (route strings + {strategy,value}
+    # selectors) into the KB writer's {path}/{screen,element,selector,strategy}
+    # contract, else the merge writes nothing.
+    screen = (session.get("target") or {}).get("screen") or ""
+    discovered = exploration_agent.normalize_discovered(body.discovered or {}, screen=screen)
+    routes = discovered["routes"]
+    selectors = discovered["selectors"]
     wrote_kb = False
     if routes or selectors:
         merged = knowledge_service.merge_verified_discovery(
