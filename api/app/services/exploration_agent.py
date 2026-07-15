@@ -358,6 +358,7 @@ def decide_next_action(
     owner_id: int | None,
     max_steps: int,
     allow_state_changing: bool = False,
+    baseline_usd: float = 0.0,
 ) -> dict[str, Any]:
     """Decide the next exploration action for one observed page state (ADR 0010 §3-4).
 
@@ -394,7 +395,11 @@ def decide_next_action(
         model output). The caller stops the loop on any ``stop`` result.
     """
     budget_usd = float(settings.explore_cost_budget_usd)
-    spent_usd = _session_spend(db, run_id)["usd"]
+    # Charge only THIS session's spend: subtract the run's pre-exploration
+    # baseline (captured at the first decide). Without this the whole run's
+    # cumulative AI cost (analysis/generation, typically far over the budget)
+    # would trip the ceiling on step 0 and stop exploration immediately.
+    spent_usd = max(0.0, _session_spend(db, run_id)["usd"] - baseline_usd)
     if spent_usd >= budget_usd:
         return {
             "action": "done",

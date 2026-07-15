@@ -511,6 +511,7 @@ def _run_explore_decide_job(
     owner_id: int | None,
     max_steps: int,
     allow_state_changing: bool,
+    baseline_usd: float,
 ) -> None:
     """Background worker: run :func:`exploration_agent.decide_next_action` off the
     request thread (the decide is one ~minutes-long Claude call).
@@ -535,6 +536,7 @@ def _run_explore_decide_job(
             owner_id=owner_id,
             max_steps=max_steps,
             allow_state_changing=allow_state_changing,
+            baseline_usd=baseline_usd,
         )
         agent_explore_service.finish_decide_job(job_id, result=result)
     except Exception as exc:  # noqa: BLE001 - surface to the agent, never crash the thread
@@ -590,6 +592,12 @@ def agent_explore_decide(
     session = agent_explore_service.get_session(session_id, user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Exploration session not found")
+    run_id = session.get("run_id")
+    # Capture the run's pre-exploration spend once, so the cost budget charges
+    # only this session's decide calls (not the run's lifetime AI cost, which
+    # would otherwise trip the ceiling on step 0).
+    current_spend_usd = exploration_agent._session_spend(db, run_id)["usd"] if run_id is not None else 0.0
+    baseline_usd = agent_explore_service.ensure_baseline(session_id, current_spend_usd)
     job_id = agent_explore_service.start_decide_job()
     threading.Thread(
         target=_run_explore_decide_job,
@@ -599,10 +607,11 @@ def agent_explore_decide(
             "observation": body.observation or {},
             "history": body.history or [],
             "steps_taken": body.steps_taken,
-            "run_id": session.get("run_id"),
+            "run_id": run_id,
             "owner_id": user.id,
             "max_steps": session["max_steps"],
             "allow_state_changing": session["allow_state_changing"],
+            "baseline_usd": baseline_usd,
         },
         daemon=True,
     ).start()
