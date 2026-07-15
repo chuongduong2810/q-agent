@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { QRCodeSVG } from "qrcode.react";
 import { Check, Copy } from "lucide-react";
@@ -9,6 +10,7 @@ import { Modal, Spinner } from "./Modal";
 
 /** Copyable inline value (secret / otpauth URI). */
 function CopyRow({ label, value }: { label: string; value: string }) {
+  const { t } = useTranslation("auth");
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -16,7 +18,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch {
-      toast.error("Couldn't copy to clipboard");
+      toast.error(t("twofaModal.copyError"));
     }
   };
   return (
@@ -29,11 +31,11 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         <button
           type="button"
           onClick={copy}
-          aria-label={`Copy ${label}`}
+          aria-label={t("twofaModal.copyAria", { label })}
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-soft transition-colors hover:bg-white/10"
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("twofaModal.copied") : t("twofaModal.copy")}
         </button>
       </div>
     </div>
@@ -57,6 +59,7 @@ export function TwoFactorModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { t } = useTranslation("auth");
   const [setup, setSetup] = useState<TwoFactorSetup | null>(null);
   const [loadingSetup, setLoadingSetup] = useState(false);
   const [code, setCode] = useState("");
@@ -75,7 +78,7 @@ export function TwoFactorModal({
       })
       .catch((err) => {
         if (!cancelled) {
-          toast.error(err instanceof Error ? err.message : "Couldn't start 2FA setup");
+          toast.error(err instanceof Error ? err.message : t("twofaModal.setupError"));
           onClose();
         }
       })
@@ -103,17 +106,17 @@ export function TwoFactorModal({
     try {
       if (mode === "setup") {
         await api.auth.twofaEnable({ code });
-        toast.success("Two-factor authentication enabled");
+        toast.success(t("twofaModal.enabledToast"));
       } else {
         await api.auth.twofaDisable({ code });
-        toast.success("Two-factor authentication disabled");
+        toast.success(t("twofaModal.disabledToast"));
       }
       setCode("");
       setSetup(null);
       onChanged();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Invalid code");
+      toast.error(err instanceof Error ? err.message : t("twofaModal.invalidCode"));
       setBusy(false);
     }
   };
@@ -123,12 +126,8 @@ export function TwoFactorModal({
   return (
     <Modal
       open={open}
-      title={isSetup ? "Set up two-factor authentication" : "Disable two-factor authentication"}
-      subtitle={
-        isSetup
-          ? "Scan the QR code with your authenticator app, then enter the 6-digit code it generates."
-          : "Enter the current 6-digit code from your authenticator app to turn off 2FA."
-      }
+      title={isSetup ? t("twofaModal.setupTitle") : t("twofaModal.disableTitle")}
+      subtitle={isSetup ? t("twofaModal.setupSubtitle") : t("twofaModal.disableSubtitle")}
       onClose={close}
       locked={busy}
     >
@@ -137,7 +136,7 @@ export function TwoFactorModal({
           loadingSetup || !setup ? (
             <div className="flex items-center gap-2.5 py-6 text-[13px] text-muted">
               <Spinner />
-              Preparing setup…
+              {t("twofaModal.preparing")}
             </div>
           ) : (
             <>
@@ -146,16 +145,16 @@ export function TwoFactorModal({
                   <QRCodeSVG value={setup.otpauthUri} size={168} marginSize={0} level="M" />
                 </div>
                 <p className="text-center text-[12px] text-muted">
-                  Can't scan it? Enter this key manually in your app.
+                  {t("twofaModal.manualHint")}
                 </p>
               </div>
-              <CopyRow label="Secret key" value={setup.secret} />
+              <CopyRow label={t("twofaModal.secretKey")} value={setup.secret} />
             </>
           )
         ) : null}
 
         <div>
-          <AuthLabel htmlFor="tfa-code">6-digit code</AuthLabel>
+          <AuthLabel htmlFor="tfa-code">{t("twofaModal.codeLabel")}</AuthLabel>
           <TextInput
             id="tfa-code"
             inputMode="numeric"
@@ -176,7 +175,7 @@ export function TwoFactorModal({
             disabled={busy}
             className="rounded-[11px] border border-white/10 bg-white/[0.05] px-4 py-2.5 text-[13px] font-semibold text-ink-soft transition-colors hover:bg-white/10 disabled:opacity-50"
           >
-            Cancel
+            {t("twofaModal.cancel")}
           </button>
           <button
             type="submit"
@@ -188,7 +187,7 @@ export function TwoFactorModal({
             }
           >
             {busy ? <Spinner /> : null}
-            {busy ? "Working…" : isSetup ? "Enable" : "Disable 2FA"}
+            {busy ? t("twofaModal.working") : isSetup ? t("twofaModal.enable") : t("twofaModal.disable")}
           </button>
         </div>
       </form>

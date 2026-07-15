@@ -9,12 +9,13 @@
  */
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, Sparkles } from "lucide-react";
 
-const BRAND_POINTS = [
-  "Ticket → tested PR in one pipeline",
-  "Azure DevOps, Jira & GitHub native",
-  "Evidence auto-published back to tickets",
+const BRAND_POINT_KEYS = [
+  "brand.points.pipeline",
+  "brand.points.integrations",
+  "brand.points.evidence",
 ];
 
 /** The Q-Agent logo mark (violet→indigo rounded square with a sparkle). */
@@ -36,6 +37,7 @@ function LogoMark({ size = 40, radius = 13 }: { size?: number; radius?: number }
 }
 
 export function AuthLayout({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("auth");
   return (
     <div className="fixed inset-0 overflow-y-auto bg-base text-ink">
       {/* ambient glows */}
@@ -92,29 +94,28 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             <div>
               <div className="text-[18px] font-black leading-tight tracking-tight">Q&#8209;Agent</div>
               <div className="text-[10.5px] font-semibold tracking-[0.05em] text-[#a99fce]">
-                QA OPERATING SYSTEM
+                {t("brand.tagline")}
               </div>
             </div>
           </div>
 
           <div className="relative max-w-[400px]">
             <h1 className="m-0 mb-4 text-[34px] font-black leading-[1.15] tracking-[-0.03em]">
-              Ship tested, evidenced releases — on autopilot.
+              {t("brand.heading")}
             </h1>
             <p className="m-0 mb-[26px] text-[14.5px] leading-relaxed text-[#c3c3d4]">
-              Q&#8209;Agent reads your tickets, generates Azure DevOps test cases, writes Playwright,
-              runs it in parallel, and publishes evidence back — one continuous pipeline.
+              {t("brand.description")}
             </p>
             <div className="flex flex-col gap-[13px]">
-              {BRAND_POINTS.map((point) => (
-                <div key={point} className="flex items-center gap-[11px]">
+              {BRAND_POINT_KEYS.map((key) => (
+                <div key={key} className="flex items-center gap-[11px]">
                   <span
                     className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px]"
                     style={{ background: "rgba(16,185,129,.16)" }}
                   >
                     <Check size={13} color="#6ee7b7" strokeWidth={3} />
                   </span>
-                  <span className="text-[13.5px] font-medium text-[#dcdce4]">{point}</span>
+                  <span className="text-[13.5px] font-medium text-[#dcdce4]">{t(key)}</span>
                 </div>
               ))}
             </div>
@@ -125,7 +126,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
               className="h-[7px] w-[7px] rounded-full"
               style={{ background: "#22c55e", boxShadow: "0 0 8px #22c55e" }}
             />
-            SOC 2 Type II &#183; SSO &#183; credentials encrypted at rest
+            {t("brand.compliance")}
           </div>
         </div>
 
@@ -145,7 +146,9 @@ export function AuthLayout({ children }: { children: ReactNode }) {
  * sliding progress bar. Shown while the session bootstraps / the workspace
  * loads. Ported from the design's "AUTH LOADING" overlay.
  */
-export function RedirectLoader({ label = "Loading your workspace…" }: { label?: string }) {
+export function RedirectLoader({ label }: { label?: string }) {
+  const { t } = useTranslation("auth");
+  const text = label ?? t("redirect.loading");
   return (
     <div
       className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-[34px] bg-base"
@@ -216,7 +219,7 @@ export function RedirectLoader({ label = "Loading your workspace…" }: { label?
 
       <div className="relative text-center">
         <div className="text-[22px] font-black tracking-[-0.02em]">Q&#8209;Agent</div>
-        <div className="mt-1.5 text-[12.5px] tracking-[0.03em] text-muted">{label}</div>
+        <div className="mt-1.5 text-[12.5px] tracking-[0.03em] text-muted">{text}</div>
       </div>
 
       <div

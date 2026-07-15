@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { AuthLabel, TextInput } from "@/components/auth/fields";
 import { api } from "@/lib/api";
@@ -19,6 +20,7 @@ export function DeleteAccountModal({
   onClose: () => void;
   onDeleted: () => void;
 }) {
+  const { t } = useTranslation("auth");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -36,10 +38,10 @@ export function DeleteAccountModal({
     setBusy(true);
     try {
       await api.auth.deleteMe();
-      toast.success("Your account has been deleted");
+      toast.success(t("deleteAccount.success"));
       onDeleted();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't delete account");
+      toast.error(err instanceof Error ? err.message : t("deleteAccount.error"));
       setBusy(false);
     }
   };
@@ -47,15 +49,17 @@ export function DeleteAccountModal({
   return (
     <Modal
       open={open}
-      title="Delete account"
-      subtitle="This permanently removes your account, runs, and evidence. This cannot be undone."
+      title={t("deleteAccount.title")}
+      subtitle={t("deleteAccount.subtitle")}
       onClose={close}
       locked={busy}
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div>
           <AuthLabel htmlFor="del-confirm">
-            Type <span className="font-bold text-danger-soft">{CONFIRM_WORD}</span> to confirm
+            {t("deleteAccount.confirmPrefix")}
+            <span className="font-bold text-danger-soft">{CONFIRM_WORD}</span>
+            {t("deleteAccount.confirmSuffix")}
           </AuthLabel>
           <TextInput
             id="del-confirm"
@@ -72,7 +76,7 @@ export function DeleteAccountModal({
             disabled={busy}
             className="rounded-[11px] border border-white/10 bg-white/[0.05] px-4 py-2.5 text-[13px] font-semibold text-ink-soft transition-colors hover:bg-white/10 disabled:opacity-50"
           >
-            Never mind
+            {t("deleteAccount.cancel")}
           </button>
           <button
             type="submit"
@@ -80,7 +84,7 @@ export function DeleteAccountModal({
             className="inline-flex items-center gap-2 rounded-[11px] border border-[rgba(244,63,94,.32)] bg-[rgba(244,63,94,.14)] px-[18px] py-2.5 text-[13px] font-bold text-danger-soft transition-colors hover:bg-[rgba(244,63,94,.22)] disabled:opacity-50"
           >
             {busy ? <Spinner /> : null}
-            {busy ? "Deleting…" : "Delete my account"}
+            {busy ? t("deleteAccount.submitting") : t("deleteAccount.submit")}
           </button>
         </div>
       </form>

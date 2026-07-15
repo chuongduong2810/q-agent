@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { AuthLabel, PasswordInput } from "@/components/auth/fields";
 import { api } from "@/lib/api";
@@ -6,6 +7,7 @@ import { Modal, Spinner } from "./Modal";
 
 /** Change-password modal: current / new / confirm → `api.auth.changePassword`. */
 export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation("auth");
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -34,11 +36,11 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
     setSaving(true);
     try {
       await api.auth.changePassword({ currentPassword: current, newPassword: next });
-      toast.success("Password changed");
+      toast.success(t("changePassword.success"));
       reset();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't change password");
+      toast.error(err instanceof Error ? err.message : t("changePassword.error"));
       setSaving(false);
     }
   };
@@ -46,48 +48,48 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
   return (
     <Modal
       open={open}
-      title="Change password"
-      subtitle="Enter your current password, then choose a new one (at least 8 characters)."
+      title={t("changePassword.title")}
+      subtitle={t("changePassword.subtitle")}
       onClose={close}
       locked={saving}
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div>
-          <AuthLabel htmlFor="cp-current">Current password</AuthLabel>
+          <AuthLabel htmlFor="cp-current">{t("changePassword.currentLabel")}</AuthLabel>
           <PasswordInput
             id="cp-current"
             autoComplete="current-password"
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
-            placeholder="Current password"
+            placeholder={t("changePassword.currentPlaceholder")}
           />
         </div>
         <div>
-          <AuthLabel htmlFor="cp-new">New password</AuthLabel>
+          <AuthLabel htmlFor="cp-new">{t("changePassword.newLabel")}</AuthLabel>
           <PasswordInput
             id="cp-new"
             autoComplete="new-password"
             value={next}
             onChange={(e) => setNext(e.target.value)}
-            placeholder="At least 8 characters"
+            placeholder={t("changePassword.newPlaceholder")}
           />
           {tooShort ? (
             <p className="mt-1.5 text-[11.5px] text-danger-soft">
-              Use at least 8 characters.
+              {t("changePassword.tooShort")}
             </p>
           ) : null}
         </div>
         <div>
-          <AuthLabel htmlFor="cp-confirm">Confirm new password</AuthLabel>
+          <AuthLabel htmlFor="cp-confirm">{t("changePassword.confirmLabel")}</AuthLabel>
           <PasswordInput
             id="cp-confirm"
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Re-enter new password"
+            placeholder={t("changePassword.confirmPlaceholder")}
           />
           {mismatch ? (
-            <p className="mt-1.5 text-[11.5px] text-danger-soft">Passwords don't match.</p>
+            <p className="mt-1.5 text-[11.5px] text-danger-soft">{t("changePassword.mismatch")}</p>
           ) : null}
         </div>
         <div className="mt-1 flex justify-end gap-2.5">
@@ -97,7 +99,7 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
             disabled={saving}
             className="rounded-[11px] border border-white/10 bg-white/[0.05] px-4 py-2.5 text-[13px] font-semibold text-ink-soft transition-colors hover:bg-white/10 disabled:opacity-50"
           >
-            Cancel
+            {t("changePassword.cancel")}
           </button>
           <button
             type="submit"
@@ -105,7 +107,7 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
             className="inline-flex items-center gap-2 rounded-[11px] border-none bg-[linear-gradient(135deg,#8b5cf6,#6366f1)] px-[18px] py-2.5 text-[13px] font-bold text-white transition-[filter] hover:brightness-110 disabled:opacity-50"
           >
             {saving ? <Spinner /> : null}
-            {saving ? "Saving…" : "Update password"}
+            {saving ? t("changePassword.submitting") : t("changePassword.submit")}
           </button>
         </div>
       </form>

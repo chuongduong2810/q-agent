@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { Monitor, Smartphone, Tablet } from "lucide-react";
+import i18n from "@/i18n";
 
 /** Derive a friendly "OS · Browser" label + device icon from a raw User-Agent. */
 export function describeSession(userAgent: string): {
@@ -12,7 +13,7 @@ export function describeSession(userAgent: string): {
   const isTablet = /ipad|tablet/.test(l);
   const isPhone = /iphone|android(?!.*tablet)|mobile/.test(l);
 
-  let os = "Unknown device";
+  let os = i18n.t("sessions.unknownDevice", { ns: "auth" });
   if (/windows/.test(l)) os = "Windows";
   else if (/iphone|ipad|ipod/.test(l)) os = /ipad/.test(l) ? "iPad" : "iPhone";
   else if (/mac os x|macintosh/.test(l)) os = "macOS";
@@ -37,11 +38,11 @@ export function relativeTime(iso: string): string {
   if (Number.isNaN(then)) return iso;
   const diff = Date.now() - then;
   const min = Math.round(diff / 60000);
-  if (min < 1) return "Active now";
-  if (min < 60) return `${min} minute${min === 1 ? "" : "s"} ago`;
+  if (min < 1) return i18n.t("sessions.activeNow", { ns: "auth" });
+  if (min < 60) return i18n.t("sessions.minutesAgo", { ns: "auth", count: min });
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hour${hr === 1 ? "" : "s"} ago`;
+  if (hr < 24) return i18n.t("sessions.hoursAgo", { ns: "auth", count: hr });
   const day = Math.round(hr / 24);
-  if (day < 30) return `${day} day${day === 1 ? "" : "s"} ago`;
+  if (day < 30) return i18n.t("sessions.daysAgo", { ns: "auth", count: day });
   return new Date(then).toLocaleDateString();
 }

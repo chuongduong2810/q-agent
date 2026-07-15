@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -25,6 +26,7 @@ export function Modal({
   /** When true, backdrop click + Escape won't close (e.g. mid-request). */
   locked?: boolean;
 }) {
+  const { t } = useTranslation("auth");
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -69,7 +71,7 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 disabled={locked}
-                aria-label="Close"
+                aria-label={t("modal.close")}
                 className="flex shrink-0 text-faint transition-colors hover:text-ink disabled:opacity-40"
               >
                 <X size={18} />

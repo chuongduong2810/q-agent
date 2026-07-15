@@ -6,6 +6,7 @@
  */
 
 import { useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -73,6 +74,7 @@ export function TextInput({ icon, wrapClassName, className, ...rest }: FieldInpu
 
 /** Password input with a show/hide eye toggle. Defaults to a lock leading icon. */
 export function PasswordInput({ icon, wrapClassName, className, ...rest }: FieldInputProps) {
+  const { t } = useTranslation("auth");
   const [show, setShow] = useState(false);
   return (
     <FieldWrap icon={icon === undefined ? <Lock size={15} /> : icon} className={wrapClassName}>
@@ -85,7 +87,7 @@ export function PasswordInput({ icon, wrapClassName, className, ...rest }: Field
         type="button"
         tabIndex={-1}
         onClick={() => setShow((s) => !s)}
-        aria-label={show ? "Hide password" : "Show password"}
+        aria-label={show ? t("fields.hidePassword") : t("fields.showPassword")}
         className="flex shrink-0 text-[#7a7a8c] transition-colors hover:text-ink"
       >
         {show ? <EyeOff size={16} /> : <Eye size={16} />}

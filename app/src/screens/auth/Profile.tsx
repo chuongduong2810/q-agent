@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { LogOut, Sparkles } from "lucide-react";
 import { useAuth } from "@/store/auth";
@@ -29,6 +30,7 @@ function initials(first: string, last: string): string {
  */
 export function Profile() {
   const navigate = useNavigate();
+  const { t } = useTranslation("auth");
   const user = useAuth((s) => s.user);
 
   // ── personal info form ──────────────────────────────────────────────────
@@ -81,7 +83,7 @@ export function Profile() {
 
   if (!user) return null;
 
-  const roleLabel = user.role === "admin" ? "Admin" : "Member";
+  const roleLabel = user.role === "admin" ? t("profile.roleAdmin") : t("profile.roleMember");
 
   const dirty = firstName !== user.firstName || lastName !== user.lastName;
   const canSave = dirty && firstName.trim().length > 0 && lastName.trim().length > 0 && !savingProfile;
@@ -96,9 +98,9 @@ export function Profile() {
       });
       const token = useAuth.getState().accessToken;
       if (token) useAuth.getState().setSession({ accessToken: token, user: updated });
-      toast.success("Profile updated");
+      toast.success(t("profile.saveSuccess"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't save changes");
+      toast.error(err instanceof Error ? err.message : t("profile.saveError"));
     } finally {
       setSavingProfile(false);
     }
@@ -120,10 +122,10 @@ export function Profile() {
     setRevokingId(id);
     try {
       await api.auth.revokeSession(id);
-      toast.success("Session revoked");
+      toast.success(t("profile.sessionRevoked"));
       await loadSessions();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't revoke session");
+      toast.error(err instanceof Error ? err.message : t("profile.revokeError"));
     } finally {
       setRevokingId(null);
     }
@@ -133,10 +135,10 @@ export function Profile() {
     setRevokingAll(true);
     try {
       await api.auth.revokeOthers();
-      toast.success("Signed out of all other sessions");
+      toast.success(t("profile.revokedOthers"));
       await loadSessions();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't revoke sessions");
+      toast.error(err instanceof Error ? err.message : t("profile.revokeOthersError"));
     } finally {
       setRevokingAll(false);
     }
@@ -152,8 +154,8 @@ export function Profile() {
           <Sparkles size={19} className="text-white" />
         </div>
         <div>
-          <div className="text-[13px] font-medium text-muted">Account settings</div>
-          <h1 className="m-0 text-[26px] font-black tracking-[-0.03em] text-ink">Your profile</h1>
+          <div className="text-[13px] font-medium text-muted">{t("profile.eyebrow")}</div>
+          <h1 className="m-0 text-[26px] font-black tracking-[-0.03em] text-ink">{t("profile.title")}</h1>
         </div>
       </div>
 
@@ -184,12 +186,12 @@ export function Profile() {
           {signingOut ? (
             <>
               <Spinner className="border-t-danger-soft" />
-              Signing out…
+              {t("profile.signingOut")}
             </>
           ) : (
             <>
               <LogOut size={15} />
-              Sign out
+              {t("profile.signOut")}
             </>
           )}
         </button>
@@ -197,40 +199,40 @@ export function Profile() {
 
       {/* personal information */}
       <div className={`${CARD} mb-4`}>
-        <div className="mb-4 text-[15px] font-bold text-ink">Personal information</div>
+        <div className="mb-4 text-[15px] font-bold text-ink">{t("profile.personalInfo")}</div>
         <div className="mb-3.5 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <div>
-            <AuthLabel htmlFor="pf-first">First name</AuthLabel>
+            <AuthLabel htmlFor="pf-first">{t("profile.firstName")}</AuthLabel>
             <TextInput
               id="pf-first"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              placeholder="First name"
+              placeholder={t("profile.firstName")}
             />
           </div>
           <div>
-            <AuthLabel htmlFor="pf-last">Last name</AuthLabel>
+            <AuthLabel htmlFor="pf-last">{t("profile.lastName")}</AuthLabel>
             <TextInput
               id="pf-last"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              placeholder="Last name"
+              placeholder={t("profile.lastName")}
             />
           </div>
           <div>
-            <AuthLabel>Email</AuthLabel>
+            <AuthLabel>{t("profile.email")}</AuthLabel>
             <div className={STATIC_FIELD}>
               <span className="min-w-0 flex-1 truncate text-[13px] text-ink-soft">
                 {user.email}
               </span>
-              <span className="shrink-0 text-[10px] text-faint">managed by admin</span>
+              <span className="shrink-0 text-[10px] text-faint">{t("profile.managedByAdmin")}</span>
             </div>
           </div>
           <div>
-            <AuthLabel>Role</AuthLabel>
+            <AuthLabel>{t("profile.role")}</AuthLabel>
             <div className={STATIC_FIELD}>
               <span className="min-w-0 flex-1 truncate text-[13px] text-ink-soft">{roleLabel}</span>
-              <span className="shrink-0 text-[10px] text-faint">managed by admin</span>
+              <span className="shrink-0 text-[10px] text-faint">{t("profile.managedByAdmin")}</span>
             </div>
           </div>
         </div>
@@ -242,27 +244,27 @@ export function Profile() {
             className="inline-flex items-center gap-2 rounded-[11px] border-none bg-[linear-gradient(135deg,#8b5cf6,#6366f1)] px-[18px] py-2.5 text-[13px] font-bold text-white transition-[filter] hover:brightness-110 disabled:opacity-50"
           >
             {savingProfile ? <Spinner /> : null}
-            {savingProfile ? "Saving…" : "Save changes"}
+            {savingProfile ? t("profile.saving") : t("profile.save")}
           </button>
         </div>
       </div>
 
       {/* security */}
       <div className={`${CARD} mb-4`}>
-        <div className="mb-4 text-[15px] font-bold text-ink">Security</div>
+        <div className="mb-4 text-[15px] font-bold text-ink">{t("profile.security")}</div>
 
         {/* password */}
         <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] py-3.5">
           <div>
-            <div className="text-[13.5px] font-semibold text-ink">Password</div>
-            <div className="text-[12px] text-muted">Change the password you use to sign in</div>
+            <div className="text-[13.5px] font-semibold text-ink">{t("profile.password")}</div>
+            <div className="text-[12px] text-muted">{t("profile.passwordDesc")}</div>
           </div>
           <button
             type="button"
             onClick={() => setPwOpen(true)}
             className="shrink-0 rounded-[10px] border border-white/10 bg-white/[0.05] px-3.5 py-2 text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-white/10"
           >
-            Change
+            {t("profile.change")}
           </button>
         </div>
 
@@ -271,7 +273,7 @@ export function Profile() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[13.5px] font-semibold text-ink">
-                Two-factor authentication
+                {t("profile.twofa")}
               </span>
               <span
                 className={
@@ -280,13 +282,13 @@ export function Profile() {
                     : "rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold text-muted"
                 }
               >
-                {user.totpEnabled ? "On" : "Off"}
+                {user.totpEnabled ? t("profile.on") : t("profile.off")}
               </span>
             </div>
             <div className="text-[12px] text-muted">
               {user.totpEnabled
-                ? "Authenticator app · enabled"
-                : "Protect your account with an authenticator app"}
+                ? t("profile.twofaEnabledDesc")
+                : t("profile.twofaDisabledDesc")}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -296,14 +298,14 @@ export function Profile() {
                 onClick={() => setTwofaOpen(true)}
                 className="rounded-[10px] border border-white/10 bg-white/[0.05] px-3.5 py-2 text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-white/10"
               >
-                Set up
+                {t("profile.setUp")}
               </button>
             ) : null}
             <button
               type="button"
               role="switch"
               aria-checked={user.totpEnabled}
-              aria-label="Toggle two-factor authentication"
+              aria-label={t("profile.twofaToggleAria")}
               onClick={() => setTwofaOpen(true)}
               className="relative h-6 w-[42px] shrink-0 rounded-full transition-colors"
               style={{
@@ -324,7 +326,7 @@ export function Profile() {
       {/* active sessions */}
       <div className={`${CARD} mb-4`}>
         <div className="mb-4 flex items-center gap-3">
-          <span className="flex-1 text-[15px] font-bold text-ink">Active sessions</span>
+          <span className="flex-1 text-[15px] font-bold text-ink">{t("profile.activeSessions")}</span>
           {hasOthers ? (
             <button
               type="button"
@@ -332,7 +334,7 @@ export function Profile() {
               disabled={revokingAll}
               className="text-[12.5px] font-semibold text-danger-soft transition-opacity hover:opacity-80 disabled:opacity-50"
             >
-              {revokingAll ? "Revoking…" : "Revoke all others"}
+              {revokingAll ? t("profile.revoking") : t("profile.revokeOthers")}
             </button>
           ) : null}
         </div>
@@ -340,21 +342,21 @@ export function Profile() {
         {sessions === null && !sessionsError ? (
           <div className="flex items-center gap-2.5 py-2 text-[13px] text-muted">
             <Spinner />
-            Loading sessions…
+            {t("profile.loadingSessions")}
           </div>
         ) : sessionsError ? (
           <div className="flex items-center justify-between gap-3 text-[13px] text-muted">
-            <span>Couldn't load sessions.</span>
+            <span>{t("profile.sessionsError")}</span>
             <button
               type="button"
               onClick={() => void loadSessions()}
               className="text-[12.5px] font-semibold text-violet hover:opacity-80"
             >
-              Retry
+              {t("profile.retry")}
             </button>
           </div>
         ) : sessions && sessions.length === 0 ? (
-          <div className="py-2 text-[13px] text-muted">No active sessions.</div>
+          <div className="py-2 text-[13px] text-muted">{t("profile.noSessions")}</div>
         ) : (
           <div className="flex flex-col gap-2.5">
             {sessions?.map((s) => {
@@ -375,7 +377,7 @@ export function Profile() {
                   </div>
                   {s.current ? (
                     <span className="shrink-0 rounded-full bg-[rgba(16,185,129,.14)] px-2.5 py-[3px] text-[10.5px] font-bold text-success-soft">
-                      This device
+                      {t("profile.thisDevice")}
                     </span>
                   ) : (
                     <button
@@ -384,7 +386,7 @@ export function Profile() {
                       disabled={revokingId === s.id}
                       className="shrink-0 text-[11.5px] font-semibold text-muted transition-colors hover:text-danger-soft disabled:opacity-50"
                     >
-                      {revokingId === s.id ? "Revoking…" : "Revoke"}
+                      {revokingId === s.id ? t("profile.revoking") : t("profile.revoke")}
                     </button>
                   )}
                 </div>
@@ -397,9 +399,9 @@ export function Profile() {
       {/* danger zone */}
       <div className="flex items-center gap-4 rounded-[20px] border border-[rgba(244,63,94,.2)] bg-[rgba(244,63,94,.05)] px-[22px] py-[18px]">
         <div className="flex-1">
-          <div className="text-[14px] font-bold text-danger-soft">Delete account</div>
+          <div className="text-[14px] font-bold text-danger-soft">{t("profile.deleteAccount")}</div>
           <div className="mt-0.5 text-[12px] text-[#a6a6b6]">
-            Permanently remove your account, runs, and evidence. This cannot be undone.
+            {t("profile.deleteDesc")}
           </div>
         </div>
         <button
@@ -407,7 +409,7 @@ export function Profile() {
           onClick={() => setDeleteOpen(true)}
           className="shrink-0 rounded-[11px] border border-[rgba(244,63,94,.32)] bg-[rgba(244,63,94,.14)] px-4 py-2.5 text-[12.5px] font-bold text-danger-soft transition-colors hover:bg-[rgba(244,63,94,.22)]"
         >
-          Delete
+          {t("profile.delete")}
         </button>
       </div>
 
