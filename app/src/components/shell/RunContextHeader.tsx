@@ -1,5 +1,6 @@
 import { CheckSquare, ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
 import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
@@ -19,6 +20,7 @@ import { useRun } from "@/hooks/queries";
 export function RunContextHeader({ runId }: { runId: number }) {
   const { data: run } = useRun(runId);
   const navigate = useNavigate();
+  const { t } = useTranslation("nav");
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -60,7 +62,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
             }}
           >
             <CheckSquare size={12} strokeWidth={2} />
-            {runRateLabel(runEffectiveStatus(run))} &#183; stage {stage} of 9
+            {runRateLabel(runEffectiveStatus(run))} &#183; {t("topbar.stageOfNine", { stage })}
           </span>
         </>
       )}
@@ -75,7 +77,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
           onClick={() => setSwitcherOpen((o) => !o)}
           className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.1] bg-white/[0.05] px-[11px] py-1.5 text-[11px] font-semibold text-ink-soft hover:bg-white/[0.09]"
         >
-          Switch run <ChevronDown size={12} strokeWidth={2} />
+          {t("topbar.switchRun")} <ChevronDown size={12} strokeWidth={2} />
         </button>
         {run && <RunActionsMenu run={run} onDeleted={() => navigate("/runs")} />}
       </div>

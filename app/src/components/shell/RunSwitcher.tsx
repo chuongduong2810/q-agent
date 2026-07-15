@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRuns } from "@/hooks/queries";
 import { cn } from "@/lib/cn";
@@ -32,6 +33,7 @@ export function RunSwitcher({
 }) {
   const { data: runs } = useRuns();
   const navigate = useNavigate();
+  const { t } = useTranslation("nav");
   const { pathname } = useLocation();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -86,7 +88,7 @@ export function RunSwitcher({
       style={{ top: pos.top, left: pos.left, width: PANEL_WIDTH, background: "rgba(24,24,32,.97)" }}
     >
       <div className="px-[9px] pb-[5px] pt-2 text-[9px] font-bold tracking-[0.1em] text-ink-dim">
-        SWITCH RUN &#8212; KEEPS YOU ON THIS STAGE
+        {t("run.switchHint")}
       </div>
       {runs?.map((r) => {
         const on = r.id === runId;

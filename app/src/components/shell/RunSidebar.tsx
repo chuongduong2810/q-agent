@@ -1,5 +1,6 @@
 import { ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
@@ -17,6 +18,7 @@ import { useRun } from "@/hooks/queries";
 export function RunSidebar({ runId }: { runId: number }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { t } = useTranslation("nav");
   const { data: run } = useRun(runId);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const switchBtnRef = useRef<HTMLButtonElement>(null);
@@ -35,7 +37,7 @@ export function RunSidebar({ runId }: { runId: number }) {
         className="mb-3 flex items-center gap-2.5 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-2.5 py-[7px] text-left text-[11.5px] font-semibold text-ink-dim transition-colors hover:bg-white/[0.07]"
       >
         <ArrowLeft size={14} strokeWidth={2} />
-        All of Q&#8209;Agent
+        {t("run.back")}
       </button>
 
       <div
@@ -63,17 +65,21 @@ export function RunSidebar({ runId }: { runId: number }) {
           )}
         </div>
         <div className="text-[13px] font-extrabold leading-[1.25] tracking-tight">
-          {run?.name ?? "Loading run…"}
+          {run?.name ?? t("run.loading")}
         </div>
         {run && (
           <div className="mt-[5px] text-[10px] text-[#b9a8e6]">
-            {run.ticketIds.length} tickets · {run.framework} · {run.env}
+            {t("run.meta", {
+              count: run.ticketIds.length,
+              framework: run.framework,
+              env: run.env,
+            })}
           </div>
         )}
         <button
           ref={switchBtnRef}
           onClick={() => setSwitcherOpen((o) => !o)}
-          title="Switch run"
+          title={t("topbar.switchRun")}
           className="absolute right-2.5 top-2.5 flex h-[22px] w-[22px] items-center justify-center rounded-[7px] bg-white/[0.08] text-[#c7c7d4] transition-colors hover:bg-white/[0.16]"
         >
           <ChevronsUpDown size={13} strokeWidth={2} />
@@ -87,7 +93,7 @@ export function RunSidebar({ runId }: { runId: number }) {
       </div>
 
       <div className="px-2 pb-1.5 pt-2 text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
-        PIPELINE
+        {t("sections.pipeline")}
       </div>
 
       <nav className="relative flex flex-col gap-px overflow-y-auto py-1.5">
@@ -131,7 +137,7 @@ export function RunSidebar({ runId }: { runId: number }) {
                       : "#8b8b9e",
               }}
             >
-              {step.label}
+              {t(`pipeline.${step.key}`)}
             </span>
           );
 
@@ -143,7 +149,7 @@ export function RunSidebar({ runId }: { runId: number }) {
                 borderColor: emphasized ? "rgba(139,92,246,.4)" : "rgba(255,255,255,.1)",
               }}
             >
-              screen
+              {t("run.screenTag")}
             </span>
           );
 
@@ -182,7 +188,7 @@ export function RunSidebar({ runId }: { runId: number }) {
 
       <div className="mt-auto border-t border-white/[0.06] pt-2.5">
         <div className="px-2 pb-1.5 text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
-          GLOBAL
+          {t("sections.global")}
         </div>
         <div className="flex gap-1.5 px-1">
           {GLOBAL_MINI.map((m) => {
@@ -191,7 +197,7 @@ export function RunSidebar({ runId }: { runId: number }) {
               <button
                 key={m.path}
                 onClick={() => navigate(m.path)}
-                title={m.label}
+                title={t(`items.${m.key}`)}
                 className="flex h-[30px] flex-1 items-center justify-center rounded-[9px] bg-white/[0.04] text-[#8b8b9e] transition-colors hover:bg-white/[0.08] hover:text-white"
               >
                 <Icon size={15} strokeWidth={2} />
