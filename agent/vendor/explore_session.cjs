@@ -18,7 +18,7 @@
 //
 // Protocol (one JSON object per line, each way):
 //   {"cmd":"observe"}
-//     -> {"ok":true,"url":..,"path":..,"a11y":<accessibility.snapshot()>,
+//     -> {"ok":true,"url":..,"path":..,"a11y":<ariaSnapshot() role+name tree>,
 //         "elements":[<distilled interactive DOM>]}
 //   {"cmd":"act","action":"goto|click|fill|expectVisible","args":{...}}
 //     -> {"ok":bool,"error":str|null,"changed":bool}
@@ -121,7 +121,11 @@ async function doAct(action, args) {
 }
 
 async function doObserve() {
-  const a11y = await page.accessibility.snapshot();
+  // Playwright removed page.accessibility; the supported role+name tree is
+  // locator.ariaSnapshot() (a compact YAML string, ideal for the model and
+  // maps directly to getByRole). Best-effort — never fail observe on it.
+  let a11y = '';
+  try { a11y = await page.locator('body').ariaSnapshot(); } catch { a11y = ''; }
   const elements = await page.evaluate(DISTILL);
   const url = page.url();
   let path = '';
@@ -160,6 +164,12 @@ async function handle(line) {
   if (storageState) contextOpts.storageState = storageState;
   const context = await browser.newContext(contextOpts);
   page = await context.newPage();
+
+  // Land on the app before the first observe so step 1 sees the real page,
+  // not about:blank. Best-effort — the model can still goto elsewhere.
+  if (baseURL) {
+    try { await page.goto(baseURL, { waitUntil: 'domcontentloaded' }); } catch {}
+  }
 
   // Serialize commands: one line in -> one response out, in order.
   const rl = readline.createInterface({ input: process.stdin });

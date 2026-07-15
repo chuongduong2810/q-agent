@@ -900,11 +900,34 @@ export async function processExplorationJob(cfg: AgentConfig, session: api.Explo
   if (storageState) args.push(storageState);
   const child = spawn(nodeBin(), args, { cwd: nm, env: nodePathEnv(nm) });
   activeChild = child;
+  // Capture the driver's stderr so a launch failure (missing browser, bad
+  // Playwright resolution, …) is visible instead of a silent "complete".
+  let driverStderr = "";
+  child.stderr?.on("data", (d) => {
+    driverStderr += String(d);
+  });
   const driver = makeExploreDriver(child);
 
   try {
-    // Wait for the driver's readiness signal before the first observe.
-    await driver.ready();
+    // Wait for the driver's readiness signal before the first observe. If the
+    // driver died before signalling ready, finalize with a clear driver-error
+    // (carrying its stderr) rather than letting the loop break silently.
+    const ready = await driver.ready();
+    if (!ready || ready.ok === false) {
+      const error = (ready && (ready as { error?: string }).error) || "driver failed to start";
+      const detail = driverStderr.trim();
+      await api
+        .postExploreFinalize(cfg, session.sessionId, {
+          discovered: { routes: [], selectors: [] },
+          log: [{ phase: "driver", error, stderr: detail || undefined }],
+          stopReason: "driver-error",
+          stepsTaken: 0,
+        })
+        .catch((err) => console.error("postExploreFinalize failed:", err));
+      emit("explore-complete", { sessionId: session.sessionId, stopReason: "driver-error", error });
+      console.error(`Exploration ${session.sessionId} driver-error: ${error}${detail ? ` — ${detail}` : ""}`);
+      return;
+    }
     await runExplorationLoop(cfg, session, driver, api, emit);
   } finally {
     try {
