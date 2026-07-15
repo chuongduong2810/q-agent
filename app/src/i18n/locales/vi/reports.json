@@ -1,0 +1,128 @@
+{
+  "reports": {
+    "header": {
+      "subtitle": "7 ngày qua · trên tất cả lượt chạy",
+      "title": "Báo cáo",
+      "export": "Xuất"
+    },
+    "toast": {
+      "exported": "Đã xuất báo cáo"
+    },
+    "summary": {
+      "passRate": "tỷ lệ đạt",
+      "noReportsYet": "Chưa có báo cáo",
+      "firstReportedRun": "Lượt chạy được báo cáo đầu tiên",
+      "ptsVsPrevious": "{{value}} điểm so với lượt chạy trước",
+      "avgRunDuration": "Thời lượng chạy trung bình",
+      "envLatestRun": "{{env}} · lượt chạy mới nhất",
+      "noReportsYetLower": "chưa có báo cáo",
+      "flakyRate": "Tỷ lệ không ổn định",
+      "flakyWatch_one": "theo dõi {{count}} trường hợp",
+      "flakyWatch_other": "theo dõi {{count}} trường hợp",
+      "noFlakyTests": "không có kiểm thử không ổn định"
+    },
+    "trend": {
+      "title": "Xu hướng tỷ lệ đạt",
+      "notEnough": "Chưa đủ lượt chạy để vẽ biểu đồ xu hướng."
+    },
+    "recentRuns": {
+      "title": "Lượt chạy gần đây",
+      "empty": "Chưa có lượt chạy nào.",
+      "tickets": "{{count}} công việc"
+    },
+    "status": {
+      "done": "Hoàn thành",
+      "inProgress": "Đang chạy"
+    },
+    "flaky": {
+      "title": "Kiểm thử không ổn định",
+      "needsAttention": "Cần chú ý",
+      "empty": "Không phát hiện kiểm thử không ổn định."
+    }
+  },
+  "audit": {
+    "subtitle": "Mọi sự kiện ứng dụng, hành động người dùng và thao tác AI · lưu giữ 90 ngày",
+    "title": "Nhật ký kiểm toán",
+    "exportCsv": "Xuất CSV",
+    "clearLog": "Xóa nhật ký",
+    "clearing": "Đang xóa…",
+    "confirmClear": "Xóa tất cả sự kiện kiểm toán? Thao tác này xóa sạch bảng audit_logs và không thể hoàn tác.",
+    "toast": {
+      "cleared_one": "Đã xóa {{count}} sự kiện kiểm toán",
+      "cleared_other": "Đã xóa {{count}} sự kiện kiểm toán",
+      "clearFailed": "Không thể xóa nhật ký kiểm toán"
+    },
+    "tabs": {
+      "activity": "Hoạt động",
+      "backend": "Nhật ký backend"
+    },
+    "stats": {
+      "eventsToday": "Sự kiện hôm nay",
+      "aiActions": "Hành động AI",
+      "userActions": "Hành động người dùng",
+      "failuresWarnings": "Lỗi / cảnh báo",
+      "logVolume": "Lượng nhật ký · 24h",
+      "servicesHealthy": "Dịch vụ khỏe mạnh",
+      "warnings1h": "Cảnh báo · 1h",
+      "errors1h": "Lỗi · 1h"
+    },
+    "searchActivity": "Tìm sự kiện, người thực hiện, đối tượng…",
+    "searchBackend": "Tìm thông điệp, dịch vụ, trace…",
+    "liveTail": "Theo dõi trực tiếp",
+    "liveTailOn": "Đang theo dõi trực tiếp",
+    "table": {
+      "timestamp": "DẤU THỜI GIAN",
+      "event": "SỰ KIỆN",
+      "actor": "NGƯỜI THỰC HIỆN",
+      "status": "TRẠNG THÁI"
+    },
+    "field": {
+      "eventId": "MÃ SỰ KIỆN",
+      "timestamp": "DẤU THỜI GIAN",
+      "target": "ĐỐI TƯỢNG",
+      "ipAddress": "ĐỊA CHỈ IP",
+      "details": "CHI TIẾT"
+    },
+    "empty": {
+      "eventsTitle": "Không có sự kiện nào khớp bộ lọc",
+      "eventsHint": "Thử danh mục, người thực hiện hoặc từ khóa khác.",
+      "logsTitle": "Không có dòng nhật ký nào khớp bộ lọc",
+      "logsHint": "Thử mức độ, dịch vụ hoặc từ khóa khác."
+    },
+    "showingEvents": "Hiển thị {{count}} sự kiện",
+    "lines": "{{count}} dòng",
+    "categories": {
+      "ai": "AI",
+      "sync": "Đồng bộ",
+      "review": "Đánh giá",
+      "execution": "Thực thi",
+      "auth": "Xác thực",
+      "knowledge": "Kiến thức",
+      "integration": "Tích hợp",
+      "run": "Lượt chạy",
+      "comment": "Bình luận",
+      "settings": "Cài đặt",
+      "other": "Khác"
+    },
+    "statuses": {
+      "success": "Thành công",
+      "warning": "Cảnh báo",
+      "error": "Thất bại"
+    },
+    "levels": {
+      "info": "Thông tin",
+      "warn": "Cảnh báo",
+      "error": "Lỗi",
+      "debug": "Gỡ lỗi"
+    },
+    "chips": {
+      "allEvents": "Tất cả sự kiện",
+      "everyone": "Mọi người",
+      "people": "Người dùng",
+      "qAgent": "Q-Agent",
+      "system": "Hệ thống",
+      "all": "Tất cả",
+      "allServices": "Tất cả dịch vụ"
+    }
+  }
+}

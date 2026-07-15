@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Download } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -16,6 +17,7 @@ interface FlakyRow {
 }
 
 export function Reports() {
+  const { t } = useTranslation("reports");
   const { data: reports, isLoading: reportsLoading } = useReports();
   const { data: runs, isLoading: runsLoading } = useRuns();
   const navigate = useNavigate();
@@ -62,11 +64,11 @@ export function Reports() {
     <div className="px-1 pb-10 pt-0.5">
       <div className="mb-[22px] flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="mb-[5px] text-[13px] font-medium text-muted">Last 7 days · across all runs</div>
-          <h1 className="m-0 text-[28px] font-black tracking-tight">Reports</h1>
+          <div className="mb-[5px] text-[13px] font-medium text-muted">{t("reports.header.subtitle")}</div>
+          <h1 className="m-0 text-[28px] font-black tracking-tight">{t("reports.header.title")}</h1>
         </div>
-        <Button className="w-full md:w-auto" onClick={() => toast("Report exported")}>
-          <Download size={15} /> Export
+        <Button className="w-full md:w-auto" onClick={() => toast(t("reports.toast.exported"))}>
+          <Download size={15} /> {t("reports.header.export")}
         </Button>
       </div>
 
@@ -99,25 +101,25 @@ export function Reports() {
               <div className="text-[32px] font-black leading-none tracking-tight">
                 {passRate == null ? "—" : `${passRate.toFixed(1)}%`}
               </div>
-              <div className="mt-0.5 text-[11.5px] text-muted">pass rate</div>
+              <div className="mt-0.5 text-[11.5px] text-muted">{t("reports.summary.passRate")}</div>
             </div>
           </div>
           {passRateDelta == null ? (
             <div className="text-[12px] font-semibold text-muted">
-              {passRate == null ? "No reports yet" : "First reported run"}
+              {passRate == null ? t("reports.summary.noReportsYet") : t("reports.summary.firstReportedRun")}
             </div>
           ) : (
             <div
               className="text-[12px] font-semibold"
               style={{ color: passRateDelta >= 0 ? "#6ee7b7" : "#fb7185" }}
             >
-              {passRateDelta >= 0 ? "▲" : "▼"} {Math.abs(passRateDelta).toFixed(1)} pts vs previous run
+              {passRateDelta >= 0 ? "▲" : "▼"} {t("reports.summary.ptsVsPrevious", { value: Math.abs(passRateDelta).toFixed(1) })}
             </div>
           )}
         </GlassCard>
 
         <GlassCard className="p-5">
-          <div className="mb-[18px] text-[14px] font-bold">Pass rate trend</div>
+          <div className="mb-[18px] text-[14px] font-bold">{t("reports.trend.title")}</div>
           {canTrend ? (
             <div className="relative flex h-[150px] items-end gap-3 pb-6">
               {trend.map((b) => (
@@ -135,27 +137,27 @@ export function Reports() {
             </div>
           ) : (
             <div className="flex h-[150px] items-center justify-center text-center text-[12.5px] text-ink-dim">
-              Not enough runs yet to chart a trend.
+              {t("reports.trend.notEnough")}
             </div>
           )}
         </GlassCard>
 
         <div className="flex flex-col gap-3.5">
           <GlassCard className="flex-1 p-[18px]">
-            <div className="mb-2 text-[12.5px] text-[#9494a6]">Avg run duration</div>
+            <div className="mb-2 text-[12.5px] text-[#9494a6]">{t("reports.summary.avgRunDuration")}</div>
             <div className="text-[28px] font-black tracking-tight">{avgDuration}</div>
             <div className="mt-1.5 text-[12px] font-semibold text-muted">
-              {latest ? `${latest.env} · latest run` : "no reports yet"}
+              {latest ? t("reports.summary.envLatestRun", { env: latest.env }) : t("reports.summary.noReportsYetLower")}
             </div>
           </GlassCard>
           <GlassCard className="flex-1 p-[18px]">
-            <div className="mb-2 text-[12.5px] text-[#9494a6]">Flaky rate</div>
+            <div className="mb-2 text-[12.5px] text-[#9494a6]">{t("reports.summary.flakyRate")}</div>
             <div className="text-[28px] font-black tracking-tight">{flakyRate}</div>
             <div
               className="mt-1.5 text-[12px] font-semibold"
               style={{ color: flaky.length ? "#fb7185" : "#6ee7b7" }}
             >
-              {flaky.length ? `▲ watch ${flaky.length} case${flaky.length === 1 ? "" : "s"}` : "no flaky tests"}
+              {flaky.length ? `▲ ${t("reports.summary.flakyWatch", { count: flaky.length })}` : t("reports.summary.noFlakyTests")}
             </div>
           </GlassCard>
         </div>
@@ -163,13 +165,13 @@ export function Reports() {
 
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
         <GlassCard className="p-5">
-          <div className="mb-4 text-[15px] font-bold">Recent runs</div>
+          <div className="mb-4 text-[15px] font-bold">{t("reports.recentRuns.title")}</div>
           {runsLoading ? (
             <div className="flex justify-center py-6">
               <Spinner />
             </div>
           ) : recentRuns.length === 0 ? (
-            <p className="m-0 py-6 text-center text-[12.5px] text-ink-dim">No runs yet.</p>
+            <p className="m-0 py-6 text-center text-[12.5px] text-ink-dim">{t("reports.recentRuns.empty")}</p>
           ) : (
             <div className="flex flex-col gap-[9px]">
               {recentRuns.map((r) => {
@@ -189,11 +191,11 @@ export function Reports() {
                       <div className="truncate text-[13px] font-semibold">
                         {r.code} · {r.name}
                       </div>
-                      <div className="font-mono text-[11px] text-[#7a7a8c]">{r.ticketIds.length} tickets</div>
+                      <div className="font-mono text-[11px] text-[#7a7a8c]">{t("reports.recentRuns.tickets", { count: r.ticketIds.length })}</div>
                     </div>
                     <div className="text-right">
                       <div className="text-[13px] font-extrabold" style={{ color }}>
-                        {r.status === "done" ? "Done" : "In progress"}
+                        {r.status === "done" ? t("reports.status.done") : t("reports.status.inProgress")}
                       </div>
                       <div className="text-[10.5px] text-[#7a7a8c]">{timeAgo(r.createdAt)}</div>
                     </div>
@@ -206,9 +208,9 @@ export function Reports() {
 
         <GlassCard className="p-5">
           <div className="mb-4 flex items-center gap-2.5">
-            <span className="flex-1 text-[15px] font-bold">Flaky tests</span>
+            <span className="flex-1 text-[15px] font-bold">{t("reports.flaky.title")}</span>
             <span className="rounded-full px-[9px] py-[3px] text-[11px] font-semibold text-[#fbbf24]" style={{ background: "rgba(251,191,36,.13)" }}>
-              Needs attention
+              {t("reports.flaky.needsAttention")}
             </span>
           </div>
           {reportsLoading ? (
@@ -216,7 +218,7 @@ export function Reports() {
               <Spinner />
             </div>
           ) : flaky.length === 0 ? (
-            <p className="m-0 py-6 text-center text-[12.5px] text-ink-dim">No flaky tests detected.</p>
+            <p className="m-0 py-6 text-center text-[12.5px] text-ink-dim">{t("reports.flaky.empty")}</p>
           ) : (
             <div className="flex flex-col gap-[9px]">
               {flaky.map((f) => (
