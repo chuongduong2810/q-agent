@@ -1,4 +1,4 @@
-import { useMotionValue, useSpring, type MotionStyle } from "framer-motion";
+import { useMotionValue, useSpring, type MotionStyle, type MotionValue } from "framer-motion";
 import { useCallback } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -18,6 +18,12 @@ export interface TiltBinding {
   style: MotionStyle;
   onPointerMove: (e: ReactPointerEvent<HTMLElement>) => void;
   onPointerLeave: () => void;
+  /** Cursor X within the element, 0–100 (%), springed. Drives lighting overlays. */
+  px: MotionValue<number>;
+  /** Cursor Y within the element, 0–100 (%), springed. */
+  py: MotionValue<number>;
+  /** Hover fade 0→1 for lighting overlays (0 = not hovered / reduced motion). */
+  glow: MotionValue<number>;
 }
 
 /**
@@ -34,10 +40,14 @@ export interface TiltBinding {
  * Honours `prefers-reduced-motion` (handlers become inert) and ignores touch
  * input (tilt is a fine-pointer affordance).
  *
+ * Also exposes the springed cursor position (`px`/`py`, 0–100%) and a hover
+ * `glow` (0→1) so lighting overlays — a glass-reflection glare, a metallic
+ * sheen — can track the pointer in lock-step with the tilt.
+ *
  * @param options tilt strength — see {@link TiltOptions}. Defaults are a subtle
  *   card tilt (7° / 9° / scale 1.03 / perspective 780); the sidebar logo passes
  *   stronger values.
- * @returns `{ style, onPointerMove, onPointerLeave }` — see {@link TiltBinding}.
+ * @returns tilt binding + lighting motion values — see {@link TiltBinding}.
  */
 export function useTilt(options: TiltOptions = {}): TiltBinding {
   const { maxX = 7, maxY = 9, scale = 1.03, perspective = 780 } = options;
@@ -45,12 +55,19 @@ export function useTilt(options: TiltOptions = {}): TiltBinding {
   const rotateX = useMotionValue(0);
   const rotateY = useMotionValue(0);
   const cardScale = useMotionValue(1);
+  // Cursor position (%) + hover fade for lighting overlays (glare / sheen).
+  const pointerX = useMotionValue(50);
+  const pointerY = useMotionValue(50);
+  const glowRaw = useMotionValue(0);
 
   // Spring the raw targets for a smooth follow + graceful settle back to rest.
   const spring = { stiffness: 220, damping: 22, mass: 0.6 };
   const springX = useSpring(rotateX, spring);
   const springY = useSpring(rotateY, spring);
   const springScale = useSpring(cardScale, spring);
+  const px = useSpring(pointerX, spring);
+  const py = useSpring(pointerY, spring);
+  const glow = useSpring(glowRaw, { stiffness: 180, damping: 26 });
 
   const prefersReducedMotion =
     typeof window !== "undefined" &&
@@ -61,20 +78,24 @@ export function useTilt(options: TiltOptions = {}): TiltBinding {
     (e: ReactPointerEvent<HTMLElement>) => {
       if (prefersReducedMotion || e.pointerType === "touch") return;
       const r = e.currentTarget.getBoundingClientRect();
-      const px = (e.clientX - r.left) / r.width; // 0…1 across
-      const py = (e.clientY - r.top) / r.height; // 0…1 down
-      rotateX.set((0.5 - py) * maxX); // tilt up/down
-      rotateY.set((px - 0.5) * maxY); // tilt left/right
+      const nx = (e.clientX - r.left) / r.width; // 0…1 across
+      const ny = (e.clientY - r.top) / r.height; // 0…1 down
+      rotateX.set((0.5 - ny) * maxX); // tilt up/down
+      rotateY.set((nx - 0.5) * maxY); // tilt left/right
       cardScale.set(scale);
+      pointerX.set(nx * 100);
+      pointerY.set(ny * 100);
+      glowRaw.set(1);
     },
-    [prefersReducedMotion, maxX, maxY, scale, rotateX, rotateY, cardScale],
+    [prefersReducedMotion, maxX, maxY, scale, rotateX, rotateY, cardScale, pointerX, pointerY, glowRaw],
   );
 
   const onPointerLeave = useCallback(() => {
     rotateX.set(0);
     rotateY.set(0);
     cardScale.set(1);
-  }, [rotateX, rotateY, cardScale]);
+    glowRaw.set(0);
+  }, [rotateX, rotateY, cardScale, glowRaw]);
 
   const style: MotionStyle = {
     rotateX: springX,
@@ -86,5 +107,5 @@ export function useTilt(options: TiltOptions = {}): TiltBinding {
     willChange: "transform",
   };
 
-  return { style, onPointerMove, onPointerLeave };
+  return { style, onPointerMove, onPointerLeave, px, py, glow };
 }

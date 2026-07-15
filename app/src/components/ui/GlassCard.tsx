@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useTilt } from "@/hooks/useTilt";
+import { TiltGlare } from "@/components/ui/TiltGlare";
 
 interface GlassCardProps {
   children: ReactNode;
@@ -54,6 +55,7 @@ export function GlassCard({ children, className, hover, index = 0, onClick, styl
       )}
     >
       {children}
+      <TiltGlare px={tilt.px} py={tilt.py} glow={tilt.glow} />
     </motion.div>
   );
 }

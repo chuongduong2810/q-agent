@@ -1,5 +1,5 @@
 import { LogOut, Sparkles, User, UserRound } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, useMotionTemplate, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -24,6 +24,13 @@ export function GlobalSidebar() {
 
   // Much stronger tilt for the hero brand logo than the default card tilt.
   const logoTilt = useTilt({ maxX: 20, maxY: 26, scale: 1.1, perspective: 760 });
+
+  // Metallic sheen: a diagonal light band that sweeps across the logo as the
+  // cursor moves (masked to the logo's alpha below, so it glints only on metal).
+  const sheenMid = useTransform(logoTilt.px, [0, 100], [12, 88]);
+  const sheenStart = useTransform(sheenMid, (m) => m - 18);
+  const sheenEnd = useTransform(sheenMid, (m) => m + 18);
+  const sheenBg = useMotionTemplate`linear-gradient(100deg, transparent ${sheenStart}%, rgba(255,255,255,0.55) ${sheenMid}%, transparent ${sheenEnd}%)`;
 
   // Identity comes from the authenticated principal (/auth/me) — the app subtree
   // renders only behind RequireAuth, so `user` is present in normal use. The
@@ -152,12 +159,31 @@ export function GlobalSidebar() {
           style={logoTilt.style}
           className="flex w-full cursor-pointer justify-center px-4 py-5"
         >
-          <img
-            src={emeLogo}
-            alt="EMESOFT"
-            draggable={false}
-            className="h-auto w-full max-w-[204px] select-none drop-shadow-[0_10px_16px_rgba(0,0,0,0.5)]"
-          />
+          <div className="relative w-full max-w-[204px]">
+            <img
+              src={emeLogo}
+              alt="EMESOFT"
+              draggable={false}
+              className="block h-auto w-full select-none drop-shadow-[0_10px_16px_rgba(0,0,0,0.5)]"
+            />
+            {/* Metallic specular sheen, masked to the logo art so it glints only
+                on the metal (not the transparent background). */}
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: sheenBg,
+                opacity: logoTilt.glow,
+                WebkitMaskImage: `url(${emeLogo})`,
+                maskImage: `url(${emeLogo})`,
+                WebkitMaskSize: "100% 100%",
+                maskSize: "100% 100%",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                mixBlendMode: "screen",
+              }}
+            />
+          </div>
         </motion.div>
       </div>
 
