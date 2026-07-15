@@ -40,6 +40,41 @@ def test_render_project_context_no_query_keeps_prior_blind_slice_order():
     assert "/r24" not in block
 
 
+def test_render_project_context_verified_selector_first_and_tagged():
+    """A ``verified_at_runtime`` selector renders BEFORE an unverified one for the
+    same screen, is tagged ``✓ runtime-verified``, and surfaces its strategy (#329)."""
+    selectors = [
+        {"screen": "Login", "element": "Submit", "selector": "#src-inferred"},
+        {
+            "screen": "Login",
+            "element": "Submit",
+            "selector": "[data-testid=login-btn]",
+            "strategy": "data-testid",
+            "verified_at_runtime": "2026-07-15T00:00:00Z",
+        },
+    ]
+    context = {"projectKey": "P", "selectors": selectors}
+
+    block = render_project_context(context)
+    line = next(ln for ln in block.splitlines() if "Known selectors" in ln)
+    assert line.index("[data-testid=login-btn]") < line.index("#src-inferred")
+    assert "✓ runtime-verified (strategy: data-testid)" in line
+
+
+def test_render_project_context_verified_route_first_and_tagged():
+    """A ``verified_at_runtime`` route renders before an unverified one and is tagged (#329)."""
+    routes = [
+        {"path": "/a", "description": "source-inferred"},
+        {"path": "/b", "description": "runtime", "verified_at_runtime": "2026-07-15T00:00:00Z"},
+    ]
+    context = {"projectKey": "P", "routes": routes}
+
+    block = render_project_context(context)
+    line = next(ln for ln in block.splitlines() if "Application routes" in ln)
+    assert line.index("/b") < line.index("/a")
+    assert "✓ runtime-verified" in line
+
+
 def test_render_dom_snapshot_lists_identified_elements():
     """The distilled DOM block surfaces real element identifiers and the current page."""
     snapshot = {

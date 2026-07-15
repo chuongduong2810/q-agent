@@ -118,6 +118,27 @@ def _rank_by_relevance(
     return [item for _, _, item in scored[:limit]]
 
 
+def _verified_first(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Stable-sort KB entries so runtime-verified ones come first.
+
+    Entries stamped with a truthy ``verified_at_runtime`` (selectors/routes the
+    DOM exploration agent confirmed live, per ADR 0010 §6) are preferred over
+    source-inferred ones, so downstream generation reaches for them first. The
+    sort is stable, so the upstream relevance order (see ``_rank_by_relevance``)
+    is preserved within the verified and unverified groups alike.
+
+    Args:
+        items: KB entries (route or selector dicts) already relevance-ranked.
+
+    Returns:
+        The same entries, verified-at-runtime first, order otherwise unchanged.
+    """
+    return sorted(
+        items,
+        key=lambda it: 0 if isinstance(it, dict) and it.get("verified_at_runtime") else 1,
+    )
+
+
 def render_project_context(
     context: dict[str, Any] | None, *, include_secrets: bool = False, rank_query: str = ""
 ) -> str:
@@ -159,27 +180,40 @@ def render_project_context(
 
     routes = context.get("routes") or []
     if routes:
-        ranked_routes = _rank_by_relevance(
+        ranked_routes = _verified_first(_rank_by_relevance(
             routes, lambda r: f"{r.get('path', '')} {r.get('description', '')}", query_keywords, 20
-        )
+        ))
         rendered = "; ".join(
-            f"{r.get('path', '')} ({r.get('description', '')})" for r in ranked_routes
+            f"{r.get('path', '')} ({r.get('description', '')})"
+            + (" ✓ runtime-verified" if r.get("verified_at_runtime") else "")
+            for r in ranked_routes
         )
-        lines.append(f"- Application routes: {rendered}")
+        lines.append(
+            "- Application routes (prefer ✓ runtime-verified — confirmed live "
+            f"over source-inferred): {rendered}"
+        )
 
     selectors = context.get("selectors") or []
     if selectors:
-        ranked_selectors = _rank_by_relevance(
+        ranked_selectors = _verified_first(_rank_by_relevance(
             selectors,
             lambda s: f"{s.get('screen', '')} {s.get('element', '')} {s.get('selector', '')}",
             query_keywords,
             30,
-        )
+        ))
         rendered = "; ".join(
             f"{s.get('screen', '')}:{s.get('element', '')}=`{s.get('selector', '')}`"
+            + (
+                f" ✓ runtime-verified (strategy: {s.get('strategy', 'css')})"
+                if s.get("verified_at_runtime")
+                else ""
+            )
             for s in ranked_selectors
         )
-        lines.append(f"- Known selectors: {rendered}")
+        lines.append(
+            "- Known selectors (prefer ✓ runtime-verified — confirmed live "
+            f"over source-inferred): {rendered}"
+        )
 
     auth = context.get("auth") or {}
     if auth.get("login_flow") or auth.get("login_url"):
