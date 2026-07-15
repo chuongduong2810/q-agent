@@ -347,6 +347,86 @@ def _session_spend(db, run_id: int | None) -> dict[str, float]:
         return {"usd": 0.0, "tokens": 0}
 
 
+def decide_next_action(
+    db,
+    *,
+    target: dict[str, Any],
+    observation: dict[str, Any],
+    history: list[dict[str, Any]],
+    steps_taken: int,
+    run_id: int | None,
+    owner_id: int | None,
+    max_steps: int,
+    allow_state_changing: bool = False,
+) -> dict[str, Any]:
+    """Decide the next exploration action for one observed page state (ADR 0010 §3-4).
+
+    This is the ReAct loop's **decide** step, extracted so BOTH the in-process
+    server loop (:func:`_explore`) and the agent-driven path
+    (``POST /agent/explore/{id}/decide``, run on the paired device) share one
+    implementation. Given the current observation + action history it enforces the
+    per-session **cost budget** first, then asks Claude for exactly one
+    fixed-contract action and parses it strictly.
+
+    Cost budget: sums this run/session's ``ClaudeUsage`` via
+    :func:`_session_spend` (the loop/worker runs under ``run_context.set_run`` so
+    every per-step call is stamped with ``run_id``) and short-circuits with
+    ``{"stop": True, "stopReason": "budget"}`` once spend reaches
+    ``settings.explore_cost_budget_usd`` — no Claude call is made when over budget.
+
+    Args:
+        db: Active SQLAlchemy session (used only to read spend).
+        target: What to discover — ``{"ticket", "screen", "goal"}``.
+        observation: The current normalized observation
+            ``{accessibility, elements, url, path}``.
+        history: The ordered action history so far (each ``{action, args, …}``).
+        steps_taken: Actions executed so far (drives the "steps left" hint).
+        run_id: Run the spend is attributed to (``None`` = no run attribution).
+        owner_id: Workspace owner scope (carried for parity; unused by the decide).
+        max_steps: The session's step cap (drives the "steps left" hint).
+        allow_state_changing: Whether ``fill`` / submit clicks are permitted this
+            session (surfaced in the prompt; read-mostly default is False).
+
+    Returns:
+        The parsed decision ``{action, args, reasoning}``, or a terminal
+        ``{action, args, reasoning, stop: True, stopReason}`` where ``stopReason``
+        is ``"budget"`` (spend ceiling hit) or ``"malformed"`` (unparseable
+        model output). The caller stops the loop on any ``stop`` result.
+    """
+    budget_usd = float(settings.explore_cost_budget_usd)
+    spent_usd = _session_spend(db, run_id)["usd"]
+    if spent_usd >= budget_usd:
+        return {
+            "action": "done",
+            "args": {},
+            "reasoning": "Per-session cost budget exhausted.",
+            "stop": True,
+            "stopReason": "budget",
+        }
+
+    screen = target.get("screen") or "screen"
+    prompt = _build_decide_prompt(
+        target,
+        observation,
+        history,
+        remaining_budget_usd=budget_usd - spent_usd,
+        steps_left=max(0, max_steps - steps_taken),
+        allow_state_changing=allow_state_changing,
+    )
+    raw = run_json(prompt, skill=AUTOMATION_GENERATOR, label=f"Explore: {screen}")
+    decision = _parse_decision(raw)
+    if decision is None:
+        logger.warning("Exploration: malformed decision: {!r}", raw)
+        return {
+            "action": "done",
+            "args": {},
+            "reasoning": "",
+            "stop": True,
+            "stopReason": "malformed",
+        }
+    return decision
+
+
 def explore(
     db,
     *,
@@ -477,19 +557,26 @@ def _explore(
                 break
             seen_states.add(signature)
 
-            # --- Decide (one Claude call) ---
-            prompt = _build_decide_prompt(
-                target,
-                obs,
-                log,
-                remaining_budget_usd=remaining,
-                steps_left=max_steps - steps_taken,
+            # --- Decide (one Claude call — shared with the agent-driven path) ---
+            decision = decide_next_action(
+                db,
+                target=target,
+                observation=obs,
+                history=log,
+                steps_taken=steps_taken,
+                run_id=run_id,
+                owner_id=owner_id,
+                max_steps=max_steps,
                 allow_state_changing=allow_state_changing,
             )
-            raw = run_json(prompt, skill=AUTOMATION_GENERATOR, label=f"Explore: {screen}")
-            decision = _parse_decision(raw)
-            if decision is None:
-                logger.warning("Exploration: malformed decision, stopping: {!r}", raw)
+            if decision.get("stop"):
+                # The top-of-loop budget/step checks already gate this loop, so a
+                # stop here is a "budget" the loop missed or a malformed decision;
+                # a malformed one halts with no explicit reason (resolved below).
+                if decision.get("stopReason") == "budget":
+                    stop_reason = "budget"
+                else:
+                    logger.warning("Exploration: malformed decision, stopping")
                 break
 
             action = decision["action"]
