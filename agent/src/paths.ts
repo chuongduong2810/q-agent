@@ -110,3 +110,15 @@ export function vendorCaptureScript(): string {
   if (!found) throw new Error("capture_auth.cjs not found — the agent package is missing vendor/");
   return found;
 }
+
+/** The vendored persistent DOM-exploration driver (`explore_session.cjs`). */
+export function vendorExploreScript(): string {
+  const root = packagedRoot();
+  const found = firstExisting([
+    ...(root ? [path.join(root, "vendor", "explore_session.cjs")] : []),
+    path.join(__dirname, "..", "..", "vendor", "explore_session.cjs"),
+    path.join(__dirname, "..", "vendor", "explore_session.cjs"),
+  ]);
+  if (!found) throw new Error("explore_session.cjs not found — the agent package is missing vendor/");
+  return found;
+}
