@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { FileText, Send, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -10,16 +11,17 @@ import { useParams } from "react-router-dom";
 import { useComments, useCommentMutations, useRun } from "@/hooks/queries";
 import type { PublishStatus, TicketCommentOut } from "@/types/api";
 
-const PUBLISH_STATUS: Record<PublishStatus, [string, string, string]> = {
-  draft: ["#a0a0b2", "Draft", "rgba(255,255,255,.06)"],
-  publishing: ["#fbbf24", "Publishing…", "rgba(251,191,36,.14)"],
-  published: ["#6ee7b7", "Published", "rgba(16,185,129,.14)"],
-  failed: ["#fb7185", "Failed", "rgba(244,63,94,.14)"],
+const PUBLISH_STATUS: Record<PublishStatus, [string, PublishStatus, string]> = {
+  draft: ["#a0a0b2", "draft", "rgba(255,255,255,.06)"],
+  publishing: ["#fbbf24", "publishing", "rgba(251,191,36,.14)"],
+  published: ["#6ee7b7", "published", "rgba(16,185,129,.14)"],
+  failed: ["#fb7185", "failed", "rgba(244,63,94,.14)"],
 };
 
 /** Ticket Comments / Publish — prepares AI-summarized result comments per ticket
  * and publishes them back to the provider work item. Design: Q-Agent.dc.html 489-506. */
 export function CommentPublish() {
+  const { t } = useTranslation("pipeline");
   const runId = Number(useParams().runId);
   const { data: run } = useRun(runId);
   const { data: comments, isLoading } = useComments(runId);
@@ -32,22 +34,22 @@ export function CommentPublish() {
       <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-            {run?.code} &middot; publish results to each work item
+            {run?.code} &middot; {t("publish.header.subtitle")}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Ticket Comments</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">{t("publish.header.title")}</h1>
         </div>
         <div className="flex flex-col gap-2.5 md:flex-row">
           {anyFailed && (
             <Button variant="danger" onClick={() => retry.mutate()} disabled={retry.isPending} className="w-full md:w-auto">
-              Retry failed
+              {t("publish.retryFailed")}
             </Button>
           )}
           <Button
             variant="primary"
             onClick={() =>
               publishAll.mutate([], {
-                onSuccess: () => toast.success("Publishing results to tickets"),
-                onError: (e) => toast.error(e instanceof Error ? e.message : "Publish failed"),
+                onSuccess: () => toast.success(t("publish.toast.publishingResults")),
+                onError: (e) => toast.error(e instanceof Error ? e.message : t("publish.toast.publishFailed")),
               })
             }
             disabled={publishAll.isPending || !comments?.length}
@@ -55,11 +57,11 @@ export function CommentPublish() {
           >
             {publishAll.isPending ? (
               <>
-                <Spinner size={14} className="border-white/40 border-t-white" /> Publishing…
+                <Spinner size={14} className="border-white/40 border-t-white" /> {t("publish.status.publishing")}
               </>
             ) : (
               <>
-                <Send size={15} strokeWidth={2.2} /> Publish all
+                <Send size={15} strokeWidth={2.2} /> {t("publish.publishAll")}
               </>
             )}
           </Button>
@@ -79,8 +81,8 @@ export function CommentPublish() {
       ) : !comments?.length ? (
         <EmptyState
           icon={<FileText size={30} color="#7a7a8c" strokeWidth={1.8} />}
-          title="No comments prepared"
-          body="Generate a report, then prepare AI-summarized result comments for each ticket in the run."
+          title={t("publish.empty.title")}
+          body={t("publish.empty.body")}
           action={
             <div className="flex flex-col items-center gap-2.5">
               <Button
@@ -89,23 +91,23 @@ export function CommentPublish() {
                 className="w-full md:w-auto"
                 onClick={() =>
                   prepare.mutate(undefined, {
-                    onError: (e) => toast.error(e instanceof Error ? e.message : "Prepare failed"),
+                    onError: (e) => toast.error(e instanceof Error ? e.message : t("publish.toast.prepareFailed")),
                   })
                 }
                 disabled={prepare.isPending}
               >
                 {prepare.isPending ? (
                   <>
-                    <Spinner size={14} /> Preparing…
+                    <Spinner size={14} /> {t("publish.preparing")}
                   </>
                 ) : (
                   <>
-                    <Sparkles size={16} /> Prepare comments
+                    <Sparkles size={16} /> {t("publish.prepareComments")}
                   </>
                 )}
               </Button>
               {prepare.isPending && (
-                <span className="text-[12.5px] text-ink-dim">Summarizing results with AI…</span>
+                <span className="text-[12.5px] text-ink-dim">{t("publish.summarizing")}</span>
               )}
             </div>
           }
@@ -119,7 +121,7 @@ export function CommentPublish() {
               index={i}
               onPublish={() =>
                 publishOne.mutate(c.id, {
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Publish failed"),
+                  onError: (e) => toast.error(e instanceof Error ? e.message : t("publish.toast.publishFailed")),
                 })
               }
               publishing={publishOne.isPending && (publishOne.variables as number) === c.id}
@@ -142,8 +144,9 @@ function PublishCard({
   onPublish: () => void;
   publishing: boolean;
 }) {
+  const { t } = useTranslation("pipeline");
   const [glyph, glyphBg] = providerGlyph[comment.providerKind] ?? ["?", "#6b7280"];
-  const [color, label, bg] = PUBLISH_STATUS[comment.status] ?? PUBLISH_STATUS.draft;
+  const [color, statusKey, bg] = PUBLISH_STATUS[comment.status] ?? PUBLISH_STATUS.draft;
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -163,10 +166,10 @@ function PublishCard({
           </span>
           <span className="flex-1" />
           <Pill color={color} bg={bg}>
-            {publishing ? "Publishing…" : label}
+            {publishing ? t("publish.status.publishing") : t(`publish.status.${statusKey}`)}
           </Pill>
           <Button variant="glass" size="sm" onClick={onPublish} disabled={publishing}>
-            Publish
+            {t("publish.publish")}
           </Button>
         </div>
         <div className="whitespace-pre-wrap p-3 text-[13px] leading-[1.6] text-ink-soft md:p-[14px_18px]">

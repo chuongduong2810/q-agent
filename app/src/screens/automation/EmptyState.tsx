@@ -1,4 +1,5 @@
 import { FileCode, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 
 /**
@@ -18,6 +19,7 @@ export function NoAutomationEmptyState({
   generating: boolean;
   onGenerate: () => void;
 }) {
+  const { t } = useTranslation("pipeline");
   return (
     <div className="glass flex flex-col items-center rounded-[22px] px-5 py-10 text-center md:px-8 md:py-14">
       <div
@@ -26,21 +28,21 @@ export function NoAutomationEmptyState({
       >
         <FileCode size={30} color="#a78bfa" strokeWidth={1.9} />
       </div>
-      <h2 className="m-0 mb-2 text-xl font-extrabold">No automation yet</h2>
+      <h2 className="m-0 mb-2 text-xl font-extrabold">{t("spec.empty.title")}</h2>
       {automatableCount > 0 ? (
         <>
           <p className="m-0 mb-[22px] max-w-[420px] text-[13.5px] leading-relaxed text-ink-dim">
-            {automatableCount} approved case{automatableCount === 1 ? "" : "s"} ready to automate.
-            Generate Playwright specs from them.
+            {automatableCount === 1
+              ? t("spec.empty.readyOne", { count: automatableCount })
+              : t("spec.empty.readyOther", { count: automatableCount })}
           </p>
           <Button variant="primary" size="lg" onClick={onGenerate} disabled={generating} className="w-full md:w-auto">
-            <Sparkles size={16} strokeWidth={2.2} /> Generate automation
+            <Sparkles size={16} strokeWidth={2.2} /> {t("spec.empty.generate")}
           </Button>
         </>
       ) : (
         <p className="m-0 max-w-[420px] text-[13.5px] leading-relaxed text-ink-dim">
-          No approved, automatable cases in this run. Approve non-Manual test cases in the Review
-          Center, then generate automation here.
+          {t("spec.empty.none")}
         </p>
       )}
     </div>

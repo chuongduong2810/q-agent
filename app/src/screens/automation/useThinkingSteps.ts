@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 
+/** `pipeline` namespace translation keys for the generation "thinking" ticker;
+ * the consuming component (`ThinkingBanner`) maps each to `t()` for display. */
 export const THINKING_STEPS = [
-  "Reading approved test cases",
-  "Mapping steps to Playwright locators",
-  "Writing assertions",
-  "Formatting TypeScript specs",
+  "progress.thinking.steps.reading",
+  "progress.thinking.steps.mapping",
+  "progress.thinking.steps.assertions",
+  "progress.thinking.steps.formatting",
 ];
 
 /**

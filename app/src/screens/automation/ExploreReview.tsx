@@ -1,25 +1,28 @@
 import { ChevronDown, Telescope } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { ExploreStatus } from "@/types/api";
 import { RegenerateWithNote } from "./RegenerateWithNote";
 import { describeExploreStep, EXPLORE_HUE } from "./exploreStep";
 import type { ExploreProgress } from "./useAutomationEvents";
 
-/** Friendly label for a session's stop reason (ADR 0010 §4). */
-function stopReasonLabel(reason: string | null | undefined): string {
+/** Friendly label for a session's stop reason (ADR 0010 §4). `t` is the
+ * `pipeline` namespace translator supplied by the calling component. */
+function stopReasonLabel(reason: string | null | undefined, t: TFunction): string {
   switch (reason) {
     case "done":
-      return "Goal reached";
+      return t("progress.explore.stop.done");
     case "step_cap":
-      return "Hit the step cap";
+      return t("progress.explore.stop.stepCap");
     case "budget":
-      return "Hit the cost budget";
+      return t("progress.explore.stop.budget");
     case "repeat":
-      return "Stopped — no further progress";
+      return t("progress.explore.stop.repeat");
     case "unreachable":
-      return "Target screen unreachable";
+      return t("progress.explore.stop.unreachable");
     default:
-      return reason || "Finished";
+      return reason || t("progress.explore.stop.finished");
   }
 }
 
@@ -41,6 +44,7 @@ export function ExploreReview({
   regenerating: boolean;
   onRegenerate: (comment?: string) => void;
 }) {
+  const { t } = useTranslation("pipeline");
   const [open, setOpen] = useState(true);
   const routes = status?.discoveredRoutes ?? 0;
   const selectors = status?.discoveredSelectors ?? 0;
@@ -54,7 +58,7 @@ export function ExploreReview({
         className="flex w-full items-center gap-2.5 border-b border-white/[0.06] px-4 py-3 text-left hover:bg-white/[0.03]"
       >
         <Telescope size={14} className="shrink-0" style={{ color: EXPLORE_HUE }} />
-        <span className="text-[13px] font-bold">Exploration results</span>
+        <span className="text-[13px] font-bold">{t("progress.explore.review.title")}</span>
         <span
           className="rounded-full px-2 py-0.5 text-[11px] font-bold"
           style={
@@ -63,9 +67,14 @@ export function ExploreReview({
               : { background: "rgba(148,163,184,.14)", color: "#94a3b8" }
           }
         >
-          {wroteKb ? `KB enriched · ${routes} route${routes === 1 ? "" : "s"}, ${selectors} selector${selectors === 1 ? "" : "s"}` : "Nothing discovered"}
+          {wroteKb
+            ? t("progress.explore.review.kbEnriched", {
+                routes: t("progress.explore.review.routesCount", { count: routes }),
+                selectors: t("progress.explore.review.selectorsCount", { count: selectors }),
+              })
+            : t("progress.explore.review.nothingDiscovered")}
         </span>
-        <span className="ml-auto text-[11px] text-faint">{stopReasonLabel(status?.stopReason)}</span>
+        <span className="ml-auto text-[11px] text-faint">{stopReasonLabel(status?.stopReason, t)}</span>
         <ChevronDown
           size={15}
           className="shrink-0 text-muted transition-transform"
@@ -80,10 +89,10 @@ export function ExploreReview({
                 <div key={s.step} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[11px] text-faint">{s.step}</span>
-                    <span className="text-[12.5px] font-semibold text-ink">{describeExploreStep(s)}</span>
+                    <span className="text-[12.5px] font-semibold text-ink">{describeExploreStep(s, t)}</span>
                     {s.ok === false && (
                       <span className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">
-                        no-op
+                        {t("progress.explore.review.noop")}
                       </span>
                     )}
                     {s.observedUrl && (
@@ -98,18 +107,17 @@ export function ExploreReview({
           {wroteKb ? (
             <div className="flex flex-wrap items-center gap-3">
               <RegenerateWithNote
-                label="Regenerate with the new KB"
+                label={t("progress.explore.review.regenerateWithKb")}
                 regenerating={regenerating}
                 onRegenerate={onRegenerate}
               />
               <span className="text-[11px] text-muted">
-                Runtime-verified routes/selectors were written to the Knowledge Base — regenerate to unblock.
+                {t("progress.explore.review.wroteKbHint")}
               </span>
             </div>
           ) : (
             <p className="m-0 text-[11.5px] leading-relaxed text-muted">
-              No usable page state was observed, so nothing was written to the Knowledge Base — the case stays
-              blocked. Check the app is reachable in this environment, then try again.
+              {t("progress.explore.review.noKbHint")}
             </p>
           )}
         </div>

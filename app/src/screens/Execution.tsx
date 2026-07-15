@@ -9,6 +9,7 @@ import {
   RotateCw,
   Server,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { Pill, execColors, productDefectStyle } from "@/components/ui/badges";
@@ -26,6 +27,7 @@ function shortTicket(id: string): string {
 }
 
 export function Execution() {
+  const { t } = useTranslation("pipeline");
   const runId = Number(useParams().runId);
   const navigate = useNavigate();
 
@@ -44,12 +46,12 @@ export function Execution() {
       setAuthWaiting({ url: String(evt.payload?.url ?? "") });
     } else if (evt.event === "exec.auth.captured") {
       setAuthWaiting(null);
-      toast.success("Login captured");
+      toast.success(t("execution.toast.loginCaptured"));
     } else if (evt.event === "exec.auth.error") {
       setAuthWaiting(null);
-      toast.error(String(evt.payload?.message ?? "Manual login failed"));
+      toast.error(String(evt.payload?.message ?? t("execution.toast.manualLoginFailed")));
     }
-  }, []);
+  }, [t]);
   useRunEvents(onRunEvent);
 
   const status = execution?.status ?? "idle";
@@ -76,12 +78,12 @@ export function Execution() {
       {
         onError: (err) => {
           if (err instanceof ApiError && err.status === 409) {
-            toast.error(err.message || "No local agent paired — start your local agent", {
-              action: { label: "Local Agent", onClick: () => navigate("/local-agent") },
+            toast.error(err.message || t("execution.toast.noLocalAgent"), {
+              action: { label: t("execution.toast.localAgentAction"), onClick: () => navigate("/local-agent") },
             });
             return;
           }
-          toast.error(err instanceof Error ? err.message : "Failed to start execution");
+          toast.error(err instanceof Error ? err.message : t("execution.toast.startFailed"));
         },
       },
     );
@@ -97,14 +99,15 @@ export function Execution() {
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
             {run?.code ?? `RUN-${runId}`} &middot; {run?.framework ?? "Playwright"} &middot;{" "}
-            {run?.env ?? "Staging"} &middot; {run?.workers ?? execution?.workers ?? 0} parallel workers
+            {run?.env ?? "Staging"} &middot;{" "}
+            {t("execution.parallelWorkers", { count: run?.workers ?? execution?.workers ?? 0 })}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Execution</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">{t("execution.title")}</h1>
         </div>
         <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:gap-3">
           <Link
             to="/settings#execution"
-            title="Change the default execution target in Settings"
+            title={t("execution.target.changeTooltip")}
             className="glass flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-ink-dim transition-colors hover:text-white"
           >
             {effectiveTarget === "local-agent" ? (
@@ -112,7 +115,7 @@ export function Execution() {
             ) : (
               <Server size={13} strokeWidth={2.2} />
             )}
-            {effectiveTarget === "local-agent" ? "My machine" : "Server"}
+            {effectiveTarget === "local-agent" ? t("execution.target.myMachine") : t("execution.target.server")}
           </Link>
           <Button
             variant="primary"
@@ -124,17 +127,17 @@ export function Execution() {
           {isRunning || startExecution.isPending ? (
             <>
               <Spinner size={15} />
-              Running…
+              {t("execution.button.running")}
             </>
           ) : isDone ? (
             <>
               <RotateCw size={15} strokeWidth={2.4} />
-              Re-run
+              {t("execution.button.rerun")}
             </>
           ) : (
             <>
               <Play size={15} fill="#fff" stroke="none" />
-              Run suite
+              {t("execution.button.runSuite")}
             </>
           )}
           </Button>
@@ -154,15 +157,15 @@ export function Execution() {
           </div>
           <div className="flex-1">
             <div className="mb-0.5 flex items-center gap-2 text-[14px] font-bold">
-              <Spinner size={13} /> Waiting for manual login
+              <Spinner size={13} /> {t("execution.auth.waiting")}
             </div>
             <p className="m-0 text-[12.5px] leading-relaxed text-[#c3c3d4]">
               {effectiveTarget === "local-agent"
-                ? "A browser opened on your machine. Log in"
-                : "A browser has opened on the host machine. Log in"}
+                ? t("execution.auth.localAgent")
+                : t("execution.auth.server")}
               {authWaiting.url ? (
                 <>
-                  {" "}at{" "}
+                  {" "}{t("execution.auth.at")}{" "}
                   <a
                     href={authWaiting.url}
                     target="_blank"
@@ -173,7 +176,7 @@ export function Execution() {
                   </a>
                 </>
               ) : null}
-              , then close the window to continue.
+              {t("execution.auth.thenClose")}
             </p>
           </div>
         </div>
@@ -189,21 +192,21 @@ export function Execution() {
           <div className="flex flex-1 gap-[18px]">
             <div>
               <div className="text-[22px] font-black leading-none text-[#6ee7b7]">{passed}</div>
-              <div className="mt-0.5 text-[11px] text-ink-dim">Passed</div>
+              <div className="mt-0.5 text-[11px] text-ink-dim">{t("execution.stats.passed")}</div>
             </div>
             <div>
               <div className="text-[22px] font-black leading-none text-[#fb7185]">{failed}</div>
-              <div className="mt-0.5 text-[11px] text-ink-dim">Failed</div>
+              <div className="mt-0.5 text-[11px] text-ink-dim">{t("execution.stats.failed")}</div>
             </div>
             <div>
               <div className="text-[22px] font-black leading-none text-[#c3c3d0]">{remaining}</div>
-              <div className="mt-0.5 text-[11px] text-ink-dim">Remaining</div>
+              <div className="mt-0.5 text-[11px] text-ink-dim">{t("execution.stats.remaining")}</div>
             </div>
           </div>
         </div>
 
         <div className="glass flex flex-col justify-center gap-2 rounded-[18px] p-3 md:p-[18px_22px]">
-          <div className="text-[11px] font-semibold tracking-[.06em] text-[#6c6c7e]">CURRENTLY EXECUTING</div>
+          <div className="text-[11px] font-semibold tracking-[.06em] text-[#6c6c7e]">{t("execution.currentlyExecuting")}</div>
           <div className="flex items-center gap-2.5">
             <span className="font-mono text-[12px] font-semibold text-violet">
               {current?.ticketExternalId ?? "—"}
@@ -211,11 +214,11 @@ export function Execution() {
             {isRunning && <Spinner size={13} />}
           </div>
           <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[13.5px] font-semibold text-[#dcdce4]">
-            {current?.title ?? (isIdle ? "Not started" : "—")}
+            {current?.title ?? (isIdle ? t("execution.notStarted") : "—")}
           </div>
           {isDone && (
             <Button variant="glass" size="sm" onClick={() => navigate("/runs/" + runId + "/evidence")} className="mt-1 self-start">
-              Collect evidence
+              {t("execution.collectEvidence")}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M13 6l6 6-6 6" />
               </svg>
@@ -226,7 +229,7 @@ export function Execution() {
 
       <div className="glass rounded-[18px] p-2">
         <div className="p-[9px_12px_6px] text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">
-          EXECUTION QUEUE &middot; {progress}%
+          {t("execution.queue.heading")} &middot; {progress}%
         </div>
         {isLoading ? (
           <div className="flex flex-col gap-2 p-2">
@@ -236,7 +239,7 @@ export function Execution() {
           </div>
         ) : !results.length ? (
           <div className="p-6 text-center text-[13px] text-ink-dim">
-            No cases queued yet. Run the suite to begin execution.
+            {t("execution.queue.empty")}
           </div>
         ) : (
           results.map((r) => <ExecRow key={r.id} result={r} />)
@@ -250,6 +253,7 @@ export function Execution() {
 
 /** Collapsible panel showing raw Playwright stdout/stderr for the run. Collapsed by default. */
 function ExecutionLog({ log }: { log: string }) {
+  const { t } = useTranslation("pipeline");
   const [open, setOpen] = useState(false);
   return (
     <div className="glass mt-3.5 rounded-[18px] p-2">
@@ -264,7 +268,7 @@ function ExecutionLog({ log }: { log: string }) {
         ) : (
           <ChevronRight size={14} className="text-ink-dim" />
         )}
-        <span className="text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">EXECUTION LOG</span>
+        <span className="text-[11px] font-semibold tracking-[.08em] text-[#6c6c7e]">{t("execution.log.heading")}</span>
       </button>
       {open && (
         <pre className="mx-1 mb-1 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-xl border border-white/[0.09] bg-[rgba(8,8,13,.7)] p-3.5 font-mono text-[12px] leading-relaxed text-[#c7c7d4]">

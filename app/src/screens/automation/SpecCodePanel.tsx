@@ -1,4 +1,5 @@
 import { ChevronsDownUp, ChevronsUpDown, Copy, Download, Pencil, Play, Save, Sparkles, Telescope, Wand2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { OverflowMenu } from "@/components/ui/OverflowMenu";
 import type { AutomationSpecOut } from "@/types/api";
 import { Pill } from "@/components/ui/badges";
@@ -101,6 +102,7 @@ export function SpecCodePanel({
    * changed line index repeats across edits. */
   scrollSignal?: number;
 }) {
+  const { t } = useTranslation("pipeline");
   return (
     <div
       className={`overflow-hidden rounded-2xl border ${
@@ -122,7 +124,7 @@ export function SpecCodePanel({
                 className="flex items-center gap-1.5 rounded-[9px] border border-violet/40 bg-violet/20 px-[11px] py-1.5 text-[11.5px] font-semibold text-violet hover:bg-violet/30 disabled:opacity-60"
               >
                 <Save size={13} />
-                {updateSpecPending ? "Saving…" : "Save"}
+                {updateSpecPending ? t("spec.saving") : t("spec.save")}
               </button>
               <button
                 onClick={onCancelEdit}
@@ -130,13 +132,13 @@ export function SpecCodePanel({
                 className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.09] bg-white/5 px-[11px] py-1.5 text-[11.5px] font-semibold text-ink-soft hover:bg-white/10 disabled:opacity-60"
               >
                 <X size={13} />
-                Cancel
+                {t("spec.cancel")}
               </button>
             </>
           ) : (
             <>
               <RegenerateWithNote
-                label="Regenerate"
+                label={t("spec.regenerate")}
                 regenerating={specRegenerating}
                 disabled={isProductDefect}
                 onRegenerate={onRegenerate}
@@ -152,10 +154,10 @@ export function SpecCodePanel({
                 disabled={generating || specRegenerating || healingThisCase || runningThisSpec || runSuppressed}
                 title={
                   isBlocked
-                    ? "Run anyway — this spec is blocked and will likely fail until unblocked"
+                    ? t("spec.run.titleBlocked")
                     : isProductDefect
-                      ? "Product defect — routed to report, not re-run"
-                      : "Run only this spec"
+                      ? t("spec.run.titleProductDefect")
+                      : t("spec.run.title")
                 }
                 className="flex items-center gap-1.5 rounded-[9px] border border-cyan-400/25 bg-cyan-400/10 px-[11px] py-1.5 text-[11.5px] font-semibold text-cyan-300 hover:bg-cyan-400/20 disabled:opacity-60"
               >
@@ -167,17 +169,17 @@ export function SpecCodePanel({
                 ) : (
                   <Play size={13} fill="currentColor" />
                 )}
-                {runningThisSpec ? "Running…" : "Run"}
+                {runningThisSpec ? t("spec.run.running") : t("spec.run.label")}
               </button>
               <button
                 onClick={onStartHeal}
                 disabled={generating || specRegenerating || healingThisCase || runSuppressed}
                 title={
                   isBlocked
-                    ? "Self-heal — run it and let Claude try to fix/unblock it (fixes are still gated, so a missing-Knowledge-Base block needs a KB refresh)"
+                    ? t("spec.heal.titleBlocked")
                     : isProductDefect
-                      ? "Product defect is terminal — self-heal disabled"
-                      : "Run this spec; if it fails, let Claude fix it from the error and retry"
+                      ? t("spec.heal.titleProductDefect")
+                      : t("spec.heal.title")
                 }
                 className="flex items-center gap-1.5 rounded-[9px] border border-emerald-400/25 bg-emerald-400/10 px-[11px] py-1.5 text-[11.5px] font-semibold text-emerald-300 hover:bg-emerald-400/20 disabled:opacity-60"
               >
@@ -189,13 +191,13 @@ export function SpecCodePanel({
                 ) : (
                   <Wand2 size={13} />
                 )}
-                {healingThisCase ? "Healing…" : "Self-heal"}
+                {healingThisCase ? t("spec.heal.healing") : t("spec.heal.label")}
               </button>
               {isBlocked && (
                 <button
                   onClick={onStartExplore}
                   disabled={generating || specRegenerating || healingThisCase || exploringThisCase}
-                  title="Drive a real browser to discover the missing routes/selectors and write them to the Knowledge Base, then regenerate to unblock"
+                  title={t("spec.explore.title")}
                   className="flex items-center gap-1.5 rounded-[9px] border border-sky-400/25 bg-sky-400/10 px-[11px] py-1.5 text-[11.5px] font-semibold text-sky-300 hover:bg-sky-400/20 disabled:opacity-60"
                 >
                   {exploringThisCase ? (
@@ -206,50 +208,50 @@ export function SpecCodePanel({
                   ) : (
                     <Telescope size={13} />
                   )}
-                  {exploringThisCase ? "Exploring…" : "Explore to unblock"}
+                  {exploringThisCase ? t("spec.explore.exploring") : t("spec.explore.label")}
                 </button>
               )}
               <button
                 onClick={onOpenChat}
                 disabled={generating || specRegenerating}
-                title="Edit this spec with Q-Agent (AI chat)"
+                title={t("spec.chat.title")}
                 className="flex items-center gap-1.5 rounded-[9px] border border-violet-400/25 bg-violet-400/10 px-[11px] py-1.5 text-[11.5px] font-semibold text-violet-300 hover:bg-violet-400/20 disabled:opacity-60"
               >
-                <Sparkles size={13} /> Edit with Q-Agent
+                <Sparkles size={13} /> {t("spec.chat.label")}
               </button>
               <OverflowMenu
                 items={[
                   {
                     key: "collapse",
-                    label: "Collapse all",
+                    label: t("spec.menu.collapseAll"),
                     icon: <ChevronsDownUp size={14} />,
                     onClick: collapseAll,
                     disabled: foldRanges.length === 0,
                   },
                   {
                     key: "expand",
-                    label: "Expand all",
+                    label: t("spec.menu.expandAll"),
                     icon: <ChevronsUpDown size={14} />,
                     onClick: expandAll,
                     disabled: folded.size === 0,
                   },
                   {
                     key: "edit",
-                    label: "Edit manually",
+                    label: t("spec.menu.editManually"),
                     icon: <Pencil size={14} />,
                     onClick: onStartEdit,
                     disabled: generating || specRegenerating,
                   },
                   {
                     key: "copy",
-                    label: copyLabel === "Copy" ? "Copy" : copyLabel,
+                    label: copyLabel === "Copy" ? t("spec.menu.copy") : copyLabel,
                     icon: <Copy size={14} />,
                     onClick: onCopy,
                     disabled: specRegenerating,
                   },
                   {
                     key: "download",
-                    label: "Download",
+                    label: t("spec.menu.download"),
                     icon: <Download size={14} />,
                     onClick: onDownload,
                     disabled: specRegenerating,
@@ -295,14 +297,14 @@ export function SpecCodePanel({
                   className="h-[13px] w-[13px] rounded-full border-2"
                   style={{ borderColor: "rgba(167,139,250,.35)", borderTopColor: "#a78bfa", animation: "spin .8s linear infinite" }}
                 />
-                {specRegenerating ? "Regenerating…" : "Updating…"}
+                {specRegenerating ? t("spec.overlay.regenerating") : t("spec.overlay.updating")}
               </div>
             </div>
           )}
         </div>
       ) : null}
       <div className="flex flex-col gap-2.5 border-t border-white/[0.06] px-4 py-3.5 md:flex-row md:items-center">
-        <span className="text-xs text-muted md:flex-1">Execute the approved suite in parallel across the Run</span>
+        <span className="text-xs text-muted md:flex-1">{t("spec.footer.description")}</span>
         <button
           onClick={onStartExecution}
           disabled={startExecutionPending}
@@ -310,7 +312,7 @@ export function SpecCodePanel({
           style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)", boxShadow: "0 8px 22px -8px rgba(139,92,246,.8)" }}
         >
           <Play size={14} fill="#fff" />
-          Run tests
+          {t("spec.runTests")}
         </button>
       </div>
     </div>

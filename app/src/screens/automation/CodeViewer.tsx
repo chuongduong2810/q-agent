@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 const TS_KEYWORDS = new Set([
@@ -132,6 +133,7 @@ export function CodeHighlight({
   scrollToLine?: number;
   scrollSignal?: number;
 }) {
+  const { t } = useTranslation("pipeline");
   const lines = code.split("\n");
   const endByStart = useMemo(() => new Map(foldRanges.map((r) => [r.start, r.end])), [foldRanges]);
 
@@ -191,7 +193,7 @@ export function CodeHighlight({
                     type="button"
                     onClick={() => onToggle(i)}
                     className="flex h-[14px] w-[14px] items-center justify-center text-faint hover:text-ink-soft"
-                    aria-label={isFolded ? "Expand region" : "Collapse region"}
+                    aria-label={isFolded ? t("spec.code.expandRegion") : t("spec.code.collapseRegion")}
                   >
                     {isFolded ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                   </button>
@@ -207,7 +209,7 @@ export function CodeHighlight({
                 {isFolded ? (
                   <span className="text-faint">
                     {" "}
-                    &#8943; {end - i} lines {closerCharFor(line)}
+                    &#8943; {t("spec.code.foldedLines", { count: end - i })} {closerCharFor(line)}
                   </span>
                 ) : null}
               </span>

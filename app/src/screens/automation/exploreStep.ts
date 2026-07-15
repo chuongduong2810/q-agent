@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import type { ExploreStep } from "./useAutomationEvents";
 
 /** Sky-blue accent for the DOM-exploration UI — distinct from generation
@@ -5,8 +6,9 @@ import type { ExploreStep } from "./useAutomationEvents";
 export const EXPLORE_HUE = "#38bdf8";
 
 /** Human-readable one-liner for an exploration step's action + args (ADR 0010
- * §3 action contract). Used by both the live step banner and the review trail. */
-export function describeExploreStep(step: ExploreStep): string {
+ * §3 action contract). Used by both the live step banner and the review trail.
+ * `t` is the `pipeline` namespace translator supplied by the calling component. */
+export function describeExploreStep(step: ExploreStep, t: TFunction): string {
   const a = step.args ?? {};
   const target =
     typeof a.role === "string" && typeof a.name === "string"
@@ -20,15 +22,21 @@ export function describeExploreStep(step: ExploreStep): string {
             : "";
   switch (step.action) {
     case "goto":
-      return `Navigate to ${typeof a.url === "string" ? a.url : "a route"}`;
+      return t("progress.explore.step.goto", {
+        target: typeof a.url === "string" ? a.url : t("progress.explore.aRoute"),
+      });
     case "click":
-      return `Click ${target}`.trim();
+      return t("progress.explore.step.click", { target }).trim();
     case "fill":
-      return `Fill ${target}${typeof a.value === "string" ? ` = "${a.value}"` : ""}`.trim();
+      return (
+        typeof a.value === "string"
+          ? t("progress.explore.step.fillValue", { target, value: a.value })
+          : t("progress.explore.step.fill", { target })
+      ).trim();
     case "expectVisible":
-      return `Check ${target} is visible`.trim();
+      return t("progress.explore.step.expectVisible", { target }).trim();
     case "done":
-      return "Finished — goal reached";
+      return t("progress.explore.step.done");
     default:
       return step.action;
   }

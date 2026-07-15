@@ -1,18 +1,21 @@
 import { ChevronDown, Wand2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { HealAttempt, HealReport } from "@/types/api";
 
-/** Relative "time ago" from an ISO timestamp, for the heal report header. */
-export function healTimeAgo(iso: string): string {
+/** Relative "time ago" from an ISO timestamp, for the heal report header. `t` is
+ * the `pipeline` namespace translator supplied by the calling component. */
+export function healTimeAgo(iso: string, t: TFunction): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
   const s = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (s < 60) return "just now";
+  if (s < 60) return t("progress.heal.time.justNow");
   const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return t("progress.heal.time.minutes", { count: m });
   const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+  if (h < 24) return t("progress.heal.time.hours", { count: h });
+  return t("progress.heal.time.days", { count: Math.round(h / 24) });
 }
 
 /** Renders a unified-diff string with +/-/@@ lines colored. */
@@ -42,6 +45,7 @@ export function DiffBlock({ diff }: { diff: string }) {
 /** Collapsible "Self-heal timeline" — the per-attempt failure, what Claude
  * changed (diff), and the final outcome of the last heal for a spec. */
 export function HealTimeline({ report }: { report: HealReport }) {
+  const { t } = useTranslation("pipeline");
   const [open, setOpen] = useState(true);
   const healed = report.finalStatus === "pass";
   const n = report.attempts.length;
@@ -52,7 +56,7 @@ export function HealTimeline({ report }: { report: HealReport }) {
         className="flex w-full items-center gap-2.5 border-b border-white/[0.06] px-4 py-3 text-left hover:bg-white/[0.03]"
       >
         <Wand2 size={14} className="shrink-0 text-emerald-300" />
-        <span className="text-[13px] font-bold">Self-heal timeline</span>
+        <span className="text-[13px] font-bold">{t("progress.heal.timeline.title")}</span>
         <span
           className="rounded-full px-2 py-0.5 text-[11px] font-bold"
           style={
@@ -61,9 +65,11 @@ export function HealTimeline({ report }: { report: HealReport }) {
               : { background: "rgba(244,63,94,.14)", color: "#fb7185" }
           }
         >
-          {healed ? `Healed after ${n} attempt${n === 1 ? "" : "s"}` : `Still failing after ${n} attempt${n === 1 ? "" : "s"}`}
+          {healed
+            ? t("progress.heal.timeline.healedAfter", { count: n })
+            : t("progress.heal.timeline.stillFailing", { count: n })}
         </span>
-        <span className="ml-auto text-[11px] text-faint">{healTimeAgo(report.healedAt)}</span>
+        <span className="ml-auto text-[11px] text-faint">{healTimeAgo(report.healedAt, t)}</span>
         <ChevronDown
           size={15}
           className="shrink-0 text-muted transition-transform"
@@ -75,7 +81,7 @@ export function HealTimeline({ report }: { report: HealReport }) {
           {report.attempts.map((a: HealAttempt) => (
             <div key={a.attempt} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
               <div className="flex items-center gap-2">
-                <span className="text-[12.5px] font-bold">Attempt {a.attempt}</span>
+                <span className="text-[12.5px] font-bold">{t("progress.heal.timeline.attempt", { n: a.attempt })}</span>
                 <span
                   className="rounded-md px-1.5 py-0.5 text-[10px] font-bold"
                   style={
@@ -84,7 +90,7 @@ export function HealTimeline({ report }: { report: HealReport }) {
                       : { background: "rgba(244,63,94,.14)", color: "#fb7185" }
                   }
                 >
-                  {a.status === "pass" ? "PASSED" : "FAILED"}
+                  {a.status === "pass" ? t("progress.heal.timeline.passed") : t("progress.heal.timeline.failed")}
                 </span>
                 <span className="ml-auto font-mono text-[11px] text-faint">
                   {(a.durationMs / 1000).toFixed(1)}s
@@ -100,7 +106,7 @@ export function HealTimeline({ report }: { report: HealReport }) {
               {a.fixed && (
                 <>
                   <div className="mt-2 flex items-center gap-1.5 text-[11.5px] font-semibold text-emerald-300">
-                    <Wand2 size={12} /> Claude rewrote the spec
+                    <Wand2 size={12} /> {t("progress.heal.timeline.claudeRewrote")}
                   </div>
                   {a.diff && <DiffBlock diff={a.diff} />}
                 </>
