@@ -9,6 +9,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Boxes, Lock, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -34,6 +35,7 @@ const errMsg = (e: unknown, fallback: string) =>
 const settingsPath = (key: string) => `/settings/shared-workspace/${encodeURIComponent(key)}`;
 
 export function SharedWorkspace() {
+  const { t } = useTranslation("settings");
   const me = useAuth((s) => s.user);
   const navigate = useNavigate();
   const { data: shared, isLoading, isError, error } = useSharedProjects();
@@ -47,10 +49,9 @@ export function SharedWorkspace() {
         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
           <Lock size={26} className="text-[#8b8b9e]" />
         </div>
-        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">Not authorized</h1>
+        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">{t("admin.notAuthorizedTitle")}</h1>
         <p className="m-0 max-w-[380px] text-[13.5px] leading-relaxed text-muted">
-          The shared workspace is managed by workspace administrators only. If you need access,
-          ask an admin to change your role.
+          {t("sharedWorkspace.notAuthorized")}
         </p>
       </div>
     );
@@ -60,8 +61,8 @@ export function SharedWorkspace() {
     buildRepo.mutate(
       { key, repo, body: {} },
       {
-        onSuccess: () => toast.success(`Knowledge build started for ${repo}`),
-        onError: (e) => toast.error(errMsg(e, "Failed to start knowledge build")),
+        onSuccess: () => toast.success(t("sharedWorkspace.buildStarted", { repo })),
+        onError: (e) => toast.error(errMsg(e, t("sharedWorkspace.buildFailed"))),
       },
     );
 
@@ -71,15 +72,15 @@ export function SharedWorkspace() {
         <div>
           <div className="mb-[5px] flex items-center gap-2 text-[13px] font-medium text-muted">
             <span className="rounded-full bg-[rgba(139,92,246,.16)] px-[7px] py-[2px] text-[9px] font-bold tracking-[.06em] text-[#c4b5fd]">
-              ADMIN
+              {t("admin.badge")}
             </span>
-            Surency workspace
+            {t("admin.workspace")}
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">Shared workspace</h1>
+          <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">{t("sharedWorkspace.title")}</h1>
         </div>
         <Button variant="primary" className="w-full md:w-auto" onClick={() => setCreateOpen(true)}>
           <Plus size={15} strokeWidth={2.4} />
-          New shared project
+          {t("sharedWorkspace.newProject")}
         </Button>
       </div>
 
@@ -91,21 +92,21 @@ export function SharedWorkspace() {
           <Boxes size={20} className="text-[#c4b5fd]" />
         </span>
         <p className="m-0 text-[13px] leading-[1.65] text-[#c3c3d0]">
-          Projects here live in the <b className="font-bold text-[#ececf1]">shared namespace</b> —
-          members can clone them into their own workspace instead of rebuilding knowledge from
-          scratch. Open a project to add a repository and settings, then build its knowledge; a
-          cloned project drops its provider-connection bindings, so members re-bind their own
-          connections after cloning.
+          <Trans
+            t={t}
+            i18nKey="sharedWorkspace.intro"
+            components={{ b: <b className="font-bold text-[#ececf1]" /> }}
+          />
         </p>
       </div>
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
-        SHARED PROJECTS
+        {t("sharedWorkspace.section")}
       </div>
 
       {isError ? (
         <div className="rounded-2xl border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.08)] p-6 text-[13.5px] text-[#fb7185]">
-          {errMsg(error, "Failed to load the shared catalog")}
+          {errMsg(error, t("sharedWorkspace.loadFailed"))}
         </div>
       ) : isLoading ? (
         <div className="flex flex-col gap-2.5">
@@ -118,7 +119,7 @@ export function SharedWorkspace() {
         </div>
       ) : !shared?.length ? (
         <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-10 text-center text-[13.5px] text-muted">
-          No shared projects yet. Create one to get started.
+          {t("sharedWorkspace.empty")}
         </div>
       ) : (
         <div className="flex flex-col gap-2.5">
@@ -162,6 +163,7 @@ function SharedProjectRow({
   onBuildRepo: (repo: string) => void;
   onOpen: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const kind = (project.providerKind || "ado") as ProviderKind;
   const [glyph, glyphBg] = providerGlyph[kind] ?? ["?", "#6b7280"];
   const glyphColor = kind === "github" ? "#12121a" : "#fff";
@@ -183,12 +185,12 @@ function SharedProjectRow({
           </div>
           {project.repos.length === 0 && (
             <div className="mt-1.5 text-[11px] text-[#6c6c7e]">
-              No repository configured — open settings to add one before building knowledge.
+              {t("sharedWorkspace.noRepo")}
             </div>
           )}
         </div>
         <Button variant="glass" size="sm" className="shrink-0" onClick={onOpen}>
-          <Pencil size={13} strokeWidth={2.2} /> Settings
+          <Pencil size={13} strokeWidth={2.2} /> {t("sharedWorkspace.settings")}
         </Button>
       </div>
 
@@ -215,7 +217,7 @@ function SharedProjectRow({
                     );
                   })()
                 ) : (
-                  <span className="text-[11px] text-[#6c6c7e]">Not built yet</span>
+                  <span className="text-[11px] text-[#6c6c7e]">{t("sharedWorkspace.notBuilt")}</span>
                 )}
                 <div className="flex-1" />
                 <Button
@@ -226,7 +228,7 @@ function SharedProjectRow({
                   onClick={() => onBuildRepo(repo.name)}
                 >
                   {building ? <Spinner size={13} /> : <RefreshCw size={13} strokeWidth={2.2} />}
-                  {building ? "Building…" : "Build knowledge"}
+                  {building ? t("status.building") : t("sharedWorkspace.buildKnowledge")}
                 </Button>
               </div>
             );
@@ -247,6 +249,7 @@ function CreateSharedProjectModal({
   onClose: () => void;
   onCreated: (key: string) => void;
 }) {
+  const { t } = useTranslation("settings");
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
   const [providerKind, setProviderKind] = useState<ProviderKind>("ado");
@@ -262,11 +265,11 @@ function CreateSharedProjectModal({
       { key: trimmed, body: { name: name.trim() || trimmed, providerKind } },
       {
         onSuccess: () => {
-          toast.success(`Created shared project "${trimmed}"`);
+          toast.success(t("sharedWorkspace.create.created", { key: trimmed }));
           onClose();
           onCreated(trimmed);
         },
-        onError: (err) => toast.error(errMsg(err, "Failed to create shared project")),
+        onError: (err) => toast.error(errMsg(err, t("sharedWorkspace.create.createFailed"))),
       },
     );
   };
@@ -287,15 +290,15 @@ function CreateSharedProjectModal({
             <Boxes size={19} color="#fff" strokeWidth={2.2} />
           </div>
           <div className="flex-1">
-            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">New shared project</h2>
+            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">{t("sharedWorkspace.create.title")}</h2>
             <p className="m-0 mt-0.5 text-[12.5px] text-muted">
-              Creates the shell — you&apos;ll add the repo and settings next.
+              {t("sharedWorkspace.create.subtitle")}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common:close")}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.08] hover:text-ink"
           >
             <X size={17} />
@@ -304,31 +307,31 @@ function CreateSharedProjectModal({
 
         <form onSubmit={submit}>
           <div className="mb-4">
-            <AuthLabel htmlFor="sp-key">Project key</AuthLabel>
+            <AuthLabel htmlFor="sp-key">{t("sharedWorkspace.create.keyLabel")}</AuthLabel>
             <TextInput
               id="sp-key"
-              placeholder="surency-core"
+              placeholder={t("sharedWorkspace.create.keyPlaceholder")}
               autoFocus
               value={key}
               onChange={(e) => setKey(e.target.value)}
             />
             <p className="mb-0 mt-1.5 text-[11.5px] text-faint">
-              Stays unchanged when a member clones it — pick something stable.
+              {t("sharedWorkspace.create.keyHint")}
             </p>
           </div>
 
           <div className="mb-4">
-            <AuthLabel htmlFor="sp-name">Display name</AuthLabel>
+            <AuthLabel htmlFor="sp-name">{t("sharedWorkspace.create.nameLabel")}</AuthLabel>
             <TextInput
               id="sp-name"
-              placeholder="Surency Core"
+              placeholder={t("sharedWorkspace.create.namePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
 
           <div className="mb-5">
-            <AuthLabel>Provider</AuthLabel>
+            <AuthLabel>{t("sharedWorkspace.create.providerLabel")}</AuthLabel>
             <div className="flex gap-2 rounded-xl bg-black/25 p-1">
               {(["ado", "jira", "github"] as const).map((k) => {
                 const on = providerKind === k;
@@ -351,10 +354,10 @@ function CreateSharedProjectModal({
 
           <div className="flex items-center justify-end gap-2.5">
             <Button type="button" variant="glass" onClick={onClose}>
-              Cancel
+              {t("common:cancel")}
             </Button>
             <Button type="submit" variant="primary" disabled={!canSubmit}>
-              {create.isPending ? "Creating…" : "Create shared project"}
+              {create.isPending ? t("status.creating") : t("sharedWorkspace.create.createButton")}
             </Button>
           </div>
         </form>

@@ -1,0 +1,362 @@
+{
+  "header": {
+    "workspace": "Workspace · Surency",
+    "title": "Settings"
+  },
+  "sections": {
+    "providerConnections": "PROVIDER CONNECTIONS",
+    "profile": "PROFILE",
+    "defaultExecution": "DEFAULT EXECUTION",
+    "specGate": "SPEC QUALITY GATE",
+    "aiModel": "AI MODEL",
+    "perAction": "PER-ACTION MODELS & CONCURRENCY",
+    "claudeAccount": "CLAUDE ACCOUNT",
+    "interface": "INTERFACE"
+  },
+  "status": {
+    "saving": "Saving…",
+    "uploading": "Uploading…",
+    "testing": "Testing…",
+    "removing": "Removing…",
+    "sending": "Sending…",
+    "creating": "Creating…",
+    "building": "Building…",
+    "readingToken": "Reading token…"
+  },
+  "profile": {
+    "description": "Your name, email, password, and two-factor auth live on your account profile.",
+    "manage": "Manage profile"
+  },
+  "execution": {
+    "target": {
+      "title": "Execution target",
+      "description": "Where runs execute — the server, or a paired Local Agent on your machine",
+      "placeholder": "Select target",
+      "server": "Server",
+      "localAgent": "My machine"
+    },
+    "parallel": {
+      "title": "Parallel workers",
+      "description": "Default up to {{n}} cases at once per Run"
+    },
+    "maxCases": {
+      "title": "Max test cases per ticket",
+      "description": "Cap AI generation to at most {{n}} cases per ticket"
+    },
+    "retryFlaky": {
+      "title": "Auto-retry flaky tests",
+      "description": "Retry failed cases up to 2 times"
+    },
+    "screenshotOnFail": {
+      "title": "Screenshot on failure",
+      "description": "Capture full-page evidence for every failed step"
+    },
+    "autoAnnotate": {
+      "title": "Auto-annotate failure screenshots",
+      "description": "Runs a Claude vision analysis on each failed screenshot to draw the problem area — one AI call per failure"
+    },
+    "video": {
+      "title": "Record video",
+      "description": "Save an MP4 of each run (uses more storage)"
+    },
+    "headless": {
+      "title": "Run browser headless",
+      "description": "Execute Playwright without a visible browser window (turn off to watch runs)"
+    }
+  },
+  "specGate": {
+    "title": "Gate generated specs",
+    "description": "Block specs with placeholders, invented routes/selectors or flaky patterns, and run the AI spec review. Turn off to accept every generated spec as runnable without gating."
+  },
+  "aiModel": {
+    "model": {
+      "label": "Claude model",
+      "placeholder": "Select a model",
+      "opus": "Opus 4.8 — highest quality",
+      "sonnet": "Sonnet 5 — balanced (default)",
+      "haiku": "Haiku 4.5 — fastest",
+      "hint": "Model used for all AI actions (analysis, generation, self-heal)."
+    },
+    "budget": {
+      "label": "Weekly token budget (tokens)",
+      "hint": "Shown as a usage bar in the Claude stats panel. 0 = no budget."
+    }
+  },
+  "perAction": {
+    "concurrency": {
+      "label": "Ticket concurrency",
+      "placeholder": "Auto",
+      "auto": "Auto (3 on Postgres, 1 on SQLite)",
+      "sequential": "1 - sequential",
+      "hint": "How many tickets in a run are analyzed & generated in parallel. Higher is faster but uses more of your Claude rate window; values above 1 only take effect on Postgres."
+    },
+    "overrides": {
+      "label": "Per-action model overrides",
+      "hint": "Override the Claude model for a specific AI action. Leave on \"Inherit\" to use each action's default (mechanical actions default to Haiku; the rest use the Claude model above).",
+      "placeholder": "Inherit default"
+    },
+    "skills": {
+      "test-case-generator": "Analyze + generate test cases",
+      "test-case-reviewer": "Review & expand coverage",
+      "automation-generator": "Generate Playwright spec",
+      "automation-reviewer": "Review Playwright spec",
+      "project-bootstrap": "Build project knowledge base",
+      "execution-analyzer": "Classify run failures",
+      "screenshot-annotator": "Annotate screenshots",
+      "ticket-comment-generator": "Summarize ticket comments"
+    },
+    "default": "Default: {{model}}",
+    "defaultHaiku": "Haiku 4.5",
+    "defaultInherit": "Claude model above"
+  },
+  "interface": {
+    "background": {
+      "title": "3D background",
+      "description": "Animated neural-constellation backdrop. Turn off for a flat background (lighter on the GPU)."
+    }
+  },
+  "relativeTime": {
+    "never": "never",
+    "justNow": "just now",
+    "minutesAgo": "{{n}}m ago",
+    "hoursAgo": "{{n}}h ago",
+    "daysAgo": "{{n}}d ago"
+  },
+  "providerGroup": {
+    "add": "Add connection",
+    "connectionCount_one": "{{count}} connection",
+    "connectionCount_other": "{{count}} connections",
+    "connected": "{{n}} connected",
+    "deleted": "Connection deleted",
+    "addFailed": "Failed to add connection",
+    "deleteFailed": "Failed to delete connection",
+    "deleteMessage": "Delete \"{{name}}\"? Projects and tickets bound to it fall back to another connection of the same kind."
+  },
+  "connection": {
+    "notConfigured": "Not configured",
+    "connected": "Connected",
+    "notConnected": "Not connected",
+    "deleteTitle": "Delete connection",
+    "nameLabel": "Connection name",
+    "namePlaceholder": "{{provider}} connection",
+    "test": "Test connection",
+    "save": "Save connection",
+    "encrypted": "Credentials encrypted at rest",
+    "saved": "{{name}} connection saved",
+    "saveFailed": "Failed to save connection",
+    "testFailed": "Connection test failed"
+  },
+  "providerFields": {
+    "ado": {
+      "orgUrl": "Organization URL",
+      "project": "Project",
+      "pat": "Personal Access Token"
+    },
+    "jira": {
+      "baseUrl": "Base URL",
+      "project": "Project Key",
+      "email": "Email",
+      "apiToken": "API Token"
+    },
+    "github": {
+      "org": "Organization",
+      "repo": "Repository",
+      "pat": "Personal Access Token"
+    }
+  },
+  "expiry": {
+    "expired": "Expired",
+    "inHours_one": "in {{count}} hour",
+    "inHours_other": "in {{count}} hours",
+    "inDays_one": "in {{count}} day",
+    "inDays_other": "in {{count}} days"
+  },
+  "credential": {
+    "active": "Active",
+    "expired": "Expired",
+    "test": "Test credential",
+    "testFailed": "Test failed",
+    "accessToken": "ACCESS TOKEN",
+    "tokenNotExposed": "Not exposed by the API — the server never returns credential contents.",
+    "show": "Show",
+    "hide": "Hide",
+    "sharedAccount": "Shared Claude account",
+    "maintainedByAdmin": "Maintained by your workspace admin",
+    "workspaceAdmin": "Workspace admin",
+    "personalAccount": "Your personal Claude account",
+    "fields": {
+      "subscription": "SUBSCRIPTION",
+      "tokenExpires": "TOKEN EXPIRES",
+      "scopes": "SCOPES",
+      "maintainedBy": "MAINTAINED BY",
+      "lastRefreshed": "LAST REFRESHED"
+    },
+    "switchToOwn": "The admin rotates and maintains this token. Switch to <b>Your own account</b> to use a personal plan instead.",
+    "card": {
+      "intro": "Q‑Agent authenticates the Claude CLI with the token inside a <code>.credentials.json</code> file. Use the shared account your admin maintains, or upload your own personal Claude account.",
+      "sharedTitle": "Shared account",
+      "sharedDescription": "Managed by your workspace admin. Nothing to set up — you're ready to run.",
+      "ownTitle": "Your own account",
+      "ownDescription": "Upload your personal <code>.credentials.json</code> to use your own Claude plan.",
+      "replaceFile": "Replace file",
+      "removeUseShared": "Remove & use shared",
+      "noShared": "Your admin hasn't set up a shared Claude account yet. Ask them to add one from <b>Admin › Claude credentials</b>, or upload your own below.",
+      "credentialsUpdated": "Personal Claude credentials updated",
+      "credentialsSaveFailed": "Could not save that credentials file",
+      "credentialsRemoved": "Removed your personal credentials — now using the shared account",
+      "credentialsRemoveFailed": "Failed to remove your credentials",
+      "readFailed": "Could not read that file."
+    },
+    "dropzone": {
+      "parsing": "Parsing your .credentials.json",
+      "dropTitle": "Drop your <code>.credentials.json</code>",
+      "browse": "or click to browse · found at <code>~/.claude/.credentials.json</code>"
+    }
+  },
+  "admin": {
+    "badge": "ADMIN",
+    "workspace": "Surency workspace",
+    "notAuthorizedTitle": "Not authorized"
+  },
+  "users": {
+    "notAuthorized": "User management is available to workspace administrators only. If you need access, ask an admin to change your role.",
+    "title": "User management",
+    "createUser": "Create user",
+    "inviteUser": "Invite user",
+    "stats": {
+      "total": "Total users",
+      "admins": "Admins",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "loadFailed": "Failed to load users",
+    "empty": "No users yet.",
+    "cols": {
+      "user": "USER",
+      "role": "ROLE",
+      "credential": "CLAUDE CREDENTIAL",
+      "lastActive": "LAST ACTIVE",
+      "status": "STATUS"
+    },
+    "you": "You",
+    "never": "Never",
+    "roleAdmin": "Admin",
+    "roleMember": "Member",
+    "credentialPersonal": "Personal",
+    "credentialShared": "Shared",
+    "statusActive": "Active",
+    "statusDeactivated": "Deactivated",
+    "actions": "User actions",
+    "actionsSelf": "You can't manage your own account here",
+    "changeToMember": "Change to Member",
+    "makeAdmin": "Make Admin",
+    "deactivate": "Deactivate",
+    "reactivate": "Reactivate",
+    "removeUser": "Remove user",
+    "updated": "Updated {{name}}",
+    "updateFailed": "Failed to update user",
+    "removed": "User removed",
+    "removeFailed": "Failed to remove user",
+    "removeTitle": "Remove this user?",
+    "removeMessage": "{{name}} will lose access to the workspace immediately. This cannot be undone.",
+    "invite": {
+      "title": "Invite a user",
+      "subtitle": "They'll get an email to join the Surency workspace.",
+      "emailLabel": "Work email",
+      "emailPlaceholder": "teammate@surency.com",
+      "roleLabel": "Role",
+      "roleHint": "Admins can manage users and shared Claude credentials.",
+      "send": "Send invitation",
+      "invited": "Invited {{email}}",
+      "devToken": "Dev-only set-password link",
+      "sendFailed": "Failed to send invitation"
+    },
+    "create": {
+      "title": "Create a user",
+      "subtitle": "Sets up the account directly with a password — no invite email.",
+      "firstNameLabel": "First name",
+      "firstNamePlaceholder": "Ada",
+      "lastNameLabel": "Last name",
+      "lastNamePlaceholder": "Lovelace",
+      "emailLabel": "Work email",
+      "emailPlaceholder": "teammate@surency.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "At least 8 characters",
+      "created": "Created {{email}}",
+      "createFailed": "Failed to create user"
+    }
+  },
+  "adminCredentials": {
+    "notAuthorized": "Claude credentials are managed by workspace administrators only. If you need access, ask an admin to change your role.",
+    "title": "Claude credentials",
+    "intro": "These are the <b>shared Claude accounts</b> your team runs on. Upload and maintain the <code>.credentials.json</code> here — Q‑Agent writes the token to <code>~/.claude/.credentials.json</code> and every member on the shared account uses it. Members can also bring their own from <s>Settings › Claude account</s>.",
+    "sharedAccountsSection": "SHARED CLAUDE ACCOUNTS",
+    "sharedAccount": "Shared Claude account",
+    "default": "DEFAULT",
+    "maintainedBy": "Maintained by workspace admins",
+    "configured": "Configured",
+    "expired": "Expired",
+    "actionsLabel": "Shared credential actions",
+    "fields": {
+      "account": "ACCOUNT",
+      "subscription": "SUBSCRIPTION",
+      "expires": "EXPIRES",
+      "scopes": "SCOPES",
+      "lastRefreshed": "LAST REFRESHED",
+      "assignedUsers": "ASSIGNED USERS"
+    },
+    "rotate": "Rotate / replace token",
+    "test": "Test credential",
+    "removeCredential": "Remove credential",
+    "noneConfigured": "No shared Claude account configured yet.",
+    "addTitle": "Add a shared Claude account",
+    "addDescription": "Upload a <code>.credentials.json</code> exported from an authenticated Claude CLI",
+    "removeTitle": "Remove the shared Claude account?",
+    "removeMessage": "Every member relying on the shared account (anyone who hasn't uploaded their own credentials) will lose AI access until a new one is added.",
+    "updated": "Shared Claude account updated",
+    "saveFailed": "Could not save that credentials file",
+    "readFailed": "Could not read that file.",
+    "removed": "Removed the shared Claude account",
+    "removeFailed": "Failed to remove the shared credential",
+    "testFailed": "Test failed"
+  },
+  "sharedWorkspace": {
+    "notAuthorized": "The shared workspace is managed by workspace administrators only. If you need access, ask an admin to change your role.",
+    "title": "Shared workspace",
+    "newProject": "New shared project",
+    "intro": "Projects here live in the <b>shared namespace</b> — members can clone them into their own workspace instead of rebuilding knowledge from scratch. Open a project to add a repository and settings, then build its knowledge; a cloned project drops its provider-connection bindings, so members re-bind their own connections after cloning.",
+    "section": "SHARED PROJECTS",
+    "loadFailed": "Failed to load the shared catalog",
+    "empty": "No shared projects yet. Create one to get started.",
+    "noRepo": "No repository configured — open settings to add one before building knowledge.",
+    "settings": "Settings",
+    "notBuilt": "Not built yet",
+    "buildKnowledge": "Build knowledge",
+    "buildStarted": "Knowledge build started for {{repo}}",
+    "buildFailed": "Failed to start knowledge build",
+    "create": {
+      "title": "New shared project",
+      "subtitle": "Creates the shell — you'll add the repo and settings next.",
+      "keyLabel": "Project key",
+      "keyPlaceholder": "surency-core",
+      "keyHint": "Stays unchanged when a member clones it — pick something stable.",
+      "nameLabel": "Display name",
+      "namePlaceholder": "Surency Core",
+      "providerLabel": "Provider",
+      "createButton": "Create shared project",
+      "created": "Created shared project \"{{key}}\"",
+      "createFailed": "Failed to create shared project"
+    }
+  },
+  "sharedProject": {
+    "notAuthorized": "The shared workspace is managed by workspace administrators only.",
+    "back": "Shared workspace",
+    "eyebrow": "Shared project",
+    "description": "Settings members inherit when they clone. Connections here are used only to build shared knowledge — they are dropped on clone, so members re-bind their own.",
+    "saved": "Shared project settings saved",
+    "saveFailed": "Save failed",
+    "captureFailed": "Failed to capture login",
+    "loginCleared": "Saved login cleared",
+    "clearFailed": "Failed to clear login"
+  }
+}

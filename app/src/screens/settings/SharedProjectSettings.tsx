@@ -9,6 +9,7 @@
  */
 
 import { useParams, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { ArrowLeft, Lock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +25,7 @@ import {
 import { useAuth } from "@/store/auth";
 
 export function SharedProjectSettings() {
+  const { t } = useTranslation("settings");
   const { key = "" } = useParams();
   const navigate = useNavigate();
   const me = useAuth((s) => s.user);
@@ -36,9 +38,9 @@ export function SharedProjectSettings() {
         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
           <Lock size={26} className="text-[#8b8b9e]" />
         </div>
-        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">Not authorized</h1>
+        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">{t("admin.notAuthorizedTitle")}</h1>
         <p className="m-0 max-w-[380px] text-[13.5px] leading-relaxed text-muted">
-          The shared workspace is managed by workspace administrators only.
+          {t("sharedProject.notAuthorized")}
         </p>
       </div>
     );
@@ -50,24 +52,23 @@ export function SharedProjectSettings() {
         onClick={() => navigate("/settings/shared-workspace")}
         className="mb-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-muted transition-colors hover:text-ink"
       >
-        <ArrowLeft size={14} strokeWidth={2.4} /> Shared workspace
+        <ArrowLeft size={14} strokeWidth={2.4} /> {t("sharedProject.back")}
       </button>
       <div className="mb-[22px]">
         <div className="mb-[5px] flex items-center gap-2 text-[13px] font-medium text-muted">
           <span className="rounded-full bg-[rgba(139,92,246,.16)] px-[7px] py-[2px] text-[9px] font-bold tracking-[.06em] text-[#c4b5fd]">
-            ADMIN
+            {t("admin.badge")}
           </span>
-          Shared project
+          {t("sharedProject.eyebrow")}
         </div>
         <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">{config?.name || key}</h1>
         <p className="mt-1.5 text-[13px] text-muted">
-          Settings members inherit when they clone. Connections here are used only to build shared
-          knowledge — they are dropped on clone, so members re-bind their own.
+          {t("sharedProject.description")}
         </p>
       </div>
 
       {isLoading || !config ? (
-        <div className="glass rounded-[18px] p-8 text-center text-[13px] text-ink-dim">Loading…</div>
+        <div className="glass rounded-[18px] p-8 text-center text-[13px] text-ink-dim">{t("common:loading")}</div>
       ) : (
         <ProjectSettingsForm
           config={config}
@@ -76,9 +77,9 @@ export function SharedProjectSettings() {
             save.mutate(
               { key, body: patch },
               {
-                onSuccess: () => toast.success("Shared project settings saved"),
+                onSuccess: () => toast.success(t("sharedProject.saved")),
                 onError: (err) =>
-                  toast.error(err instanceof Error ? err.message : "Save failed"),
+                  toast.error(err instanceof Error ? err.message : t("sharedProject.saveFailed")),
               },
             )
           }
@@ -100,6 +101,7 @@ function SharedManualLoginStatus({
   projectKey: string;
   hasBaseUrl: boolean;
 }) {
+  const { t } = useTranslation("settings");
   const { data: auth } = useSharedProjectAuth(projectKey);
   const { data: settings } = useSettings();
   const clear = useClearSharedProjectAuth(projectKey);
@@ -114,13 +116,13 @@ function SharedManualLoginStatus({
       onCapture={() =>
         capture.mutate(undefined, {
           onError: (err) =>
-            toast.error(err instanceof Error ? err.message : "Failed to capture login"),
+            toast.error(err instanceof Error ? err.message : t("sharedProject.captureFailed")),
         })
       }
       onClear={() =>
         clear.mutate(undefined, {
-          onSuccess: () => toast.success("Saved login cleared"),
-          onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to clear login"),
+          onSuccess: () => toast.success(t("sharedProject.loginCleared")),
+          onError: (err) => toast.error(err instanceof Error ? err.message : t("sharedProject.clearFailed")),
         })
       }
     />

@@ -1,0 +1,359 @@
+{
+  "header": {
+    "workspace": "Không gian làm việc · Surency",
+    "title": "Cài đặt"
+  },
+  "sections": {
+    "providerConnections": "KẾT NỐI NHÀ CUNG CẤP",
+    "profile": "HỒ SƠ",
+    "defaultExecution": "THỰC THI MẶC ĐỊNH",
+    "specGate": "CỔNG CHẤT LƯỢNG SPEC",
+    "aiModel": "MÔ HÌNH AI",
+    "perAction": "MÔ HÌNH THEO TỪNG TÁC VỤ & ĐỒNG THỜI",
+    "claudeAccount": "TÀI KHOẢN CLAUDE",
+    "interface": "GIAO DIỆN"
+  },
+  "status": {
+    "saving": "Đang lưu…",
+    "uploading": "Đang tải lên…",
+    "testing": "Đang kiểm thử…",
+    "removing": "Đang xóa…",
+    "sending": "Đang gửi…",
+    "creating": "Đang tạo…",
+    "building": "Đang xây dựng…",
+    "readingToken": "Đang đọc token…"
+  },
+  "profile": {
+    "description": "Tên, email, mật khẩu và xác thực hai yếu tố của bạn nằm trong hồ sơ tài khoản.",
+    "manage": "Quản lý hồ sơ"
+  },
+  "execution": {
+    "target": {
+      "title": "Đích thực thi",
+      "description": "Nơi các lần chạy được thực thi — trên máy chủ, hoặc Local Agent đã ghép nối trên máy của bạn",
+      "placeholder": "Chọn đích",
+      "server": "Máy chủ",
+      "localAgent": "Máy của tôi"
+    },
+    "parallel": {
+      "title": "Số luồng song song",
+      "description": "Mặc định tối đa {{n}} ca cùng lúc mỗi lần chạy"
+    },
+    "maxCases": {
+      "title": "Số ca kiểm thử tối đa mỗi ticket",
+      "description": "Giới hạn AI tạo tối đa {{n}} ca mỗi ticket"
+    },
+    "retryFlaky": {
+      "title": "Tự động thử lại các bài kiểm thử không ổn định",
+      "description": "Thử lại các ca thất bại tối đa 2 lần"
+    },
+    "screenshotOnFail": {
+      "title": "Chụp màn hình khi thất bại",
+      "description": "Chụp bằng chứng toàn trang cho mỗi bước thất bại"
+    },
+    "autoAnnotate": {
+      "title": "Tự động chú thích ảnh chụp màn hình thất bại",
+      "description": "Chạy phân tích thị giác của Claude trên mỗi ảnh chụp thất bại để khoanh vùng vấn đề — một lệnh gọi AI cho mỗi lần thất bại"
+    },
+    "video": {
+      "title": "Ghi video",
+      "description": "Lưu một tệp MP4 cho mỗi lần chạy (dùng nhiều dung lượng hơn)"
+    },
+    "headless": {
+      "title": "Chạy trình duyệt ẩn",
+      "description": "Thực thi Playwright mà không hiển thị cửa sổ trình duyệt (tắt để xem các lần chạy)"
+    }
+  },
+  "specGate": {
+    "title": "Kiểm soát spec được tạo",
+    "description": "Chặn các spec có placeholder, route/selector bịa đặt hoặc các mẫu không ổn định, và chạy đánh giá spec bằng AI. Tắt để chấp nhận mọi spec được tạo là có thể chạy mà không kiểm soát."
+  },
+  "aiModel": {
+    "model": {
+      "label": "Mô hình Claude",
+      "placeholder": "Chọn một mô hình",
+      "opus": "Opus 4.8 — chất lượng cao nhất",
+      "sonnet": "Sonnet 5 — cân bằng (mặc định)",
+      "haiku": "Haiku 4.5 — nhanh nhất",
+      "hint": "Mô hình dùng cho mọi tác vụ AI (phân tích, tạo, tự sửa lỗi)."
+    },
+    "budget": {
+      "label": "Ngân sách token hàng tuần (token)",
+      "hint": "Hiển thị dưới dạng thanh sử dụng trong bảng thống kê Claude. 0 = không giới hạn."
+    }
+  },
+  "perAction": {
+    "concurrency": {
+      "label": "Số ticket đồng thời",
+      "placeholder": "Tự động",
+      "auto": "Tự động (3 trên Postgres, 1 trên SQLite)",
+      "sequential": "1 - tuần tự",
+      "hint": "Số ticket trong một lần chạy được phân tích & tạo song song. Cao hơn thì nhanh hơn nhưng dùng nhiều hạn mức Claude của bạn hơn; giá trị trên 1 chỉ có hiệu lực trên Postgres."
+    },
+    "overrides": {
+      "label": "Ghi đè mô hình theo từng tác vụ",
+      "hint": "Ghi đè mô hình Claude cho một tác vụ AI cụ thể. Để ở \"Kế thừa\" để dùng mặc định của từng tác vụ (các tác vụ máy móc mặc định dùng Haiku; phần còn lại dùng mô hình Claude ở trên).",
+      "placeholder": "Kế thừa mặc định"
+    },
+    "skills": {
+      "test-case-generator": "Phân tích + tạo ca kiểm thử",
+      "test-case-reviewer": "Đánh giá & mở rộng độ bao phủ",
+      "automation-generator": "Tạo spec Playwright",
+      "automation-reviewer": "Đánh giá spec Playwright",
+      "project-bootstrap": "Xây dựng cơ sở tri thức dự án",
+      "execution-analyzer": "Phân loại các lần chạy thất bại",
+      "screenshot-annotator": "Chú thích ảnh chụp màn hình",
+      "ticket-comment-generator": "Tóm tắt bình luận ticket"
+    },
+    "default": "Mặc định: {{model}}",
+    "defaultHaiku": "Haiku 4.5",
+    "defaultInherit": "Mô hình Claude ở trên"
+  },
+  "interface": {
+    "background": {
+      "title": "Nền 3D",
+      "description": "Phông nền chòm sao thần kinh động. Tắt để có nền phẳng (nhẹ hơn cho GPU)."
+    }
+  },
+  "relativeTime": {
+    "never": "chưa bao giờ",
+    "justNow": "vừa xong",
+    "minutesAgo": "{{n}} phút trước",
+    "hoursAgo": "{{n}} giờ trước",
+    "daysAgo": "{{n}} ngày trước"
+  },
+  "providerGroup": {
+    "add": "Thêm kết nối",
+    "connectionCount_other": "{{count}} kết nối",
+    "connected": "{{n}} đã kết nối",
+    "deleted": "Đã xóa kết nối",
+    "addFailed": "Không thể thêm kết nối",
+    "deleteFailed": "Không thể xóa kết nối",
+    "deleteMessage": "Xóa \"{{name}}\"? Các dự án và ticket gắn với nó sẽ chuyển sang một kết nối khác cùng loại."
+  },
+  "connection": {
+    "notConfigured": "Chưa cấu hình",
+    "connected": "Đã kết nối",
+    "notConnected": "Chưa kết nối",
+    "deleteTitle": "Xóa kết nối",
+    "nameLabel": "Tên kết nối",
+    "namePlaceholder": "Kết nối {{provider}}",
+    "test": "Kiểm thử kết nối",
+    "save": "Lưu kết nối",
+    "encrypted": "Thông tin đăng nhập được mã hóa khi lưu trữ",
+    "saved": "Đã lưu kết nối {{name}}",
+    "saveFailed": "Không thể lưu kết nối",
+    "testFailed": "Kiểm thử kết nối thất bại"
+  },
+  "providerFields": {
+    "ado": {
+      "orgUrl": "URL tổ chức",
+      "project": "Dự án",
+      "pat": "Personal Access Token"
+    },
+    "jira": {
+      "baseUrl": "URL cơ sở",
+      "project": "Khóa dự án",
+      "email": "Email",
+      "apiToken": "API Token"
+    },
+    "github": {
+      "org": "Tổ chức",
+      "repo": "Kho lưu trữ",
+      "pat": "Personal Access Token"
+    }
+  },
+  "expiry": {
+    "expired": "Đã hết hạn",
+    "inHours_other": "trong {{count}} giờ",
+    "inDays_other": "trong {{count}} ngày"
+  },
+  "credential": {
+    "active": "Đang hoạt động",
+    "expired": "Đã hết hạn",
+    "test": "Kiểm thử thông tin đăng nhập",
+    "testFailed": "Kiểm thử thất bại",
+    "accessToken": "ACCESS TOKEN",
+    "tokenNotExposed": "Không được API tiết lộ — máy chủ không bao giờ trả về nội dung thông tin đăng nhập.",
+    "show": "Hiện",
+    "hide": "Ẩn",
+    "sharedAccount": "Tài khoản Claude dùng chung",
+    "maintainedByAdmin": "Được quản trị viên không gian làm việc của bạn duy trì",
+    "workspaceAdmin": "Quản trị viên không gian làm việc",
+    "personalAccount": "Tài khoản Claude cá nhân của bạn",
+    "fields": {
+      "subscription": "GÓI ĐĂNG KÝ",
+      "tokenExpires": "TOKEN HẾT HẠN",
+      "scopes": "PHẠM VI",
+      "maintainedBy": "DUY TRÌ BỞI",
+      "lastRefreshed": "LÀM MỚI LẦN CUỐI"
+    },
+    "switchToOwn": "Quản trị viên xoay vòng và duy trì token này. Chuyển sang <b>Tài khoản của riêng bạn</b> để dùng gói cá nhân thay thế.",
+    "card": {
+      "intro": "Q‑Agent xác thực Claude CLI bằng token bên trong tệp <code>.credentials.json</code>. Dùng tài khoản dùng chung do quản trị viên duy trì, hoặc tải lên tài khoản Claude cá nhân của riêng bạn.",
+      "sharedTitle": "Tài khoản dùng chung",
+      "sharedDescription": "Được quản trị viên không gian làm việc của bạn quản lý. Không cần thiết lập gì — bạn đã sẵn sàng chạy.",
+      "ownTitle": "Tài khoản của riêng bạn",
+      "ownDescription": "Tải lên tệp <code>.credentials.json</code> cá nhân của bạn để dùng gói Claude của riêng mình.",
+      "replaceFile": "Thay tệp",
+      "removeUseShared": "Xóa & dùng chung",
+      "noShared": "Quản trị viên của bạn chưa thiết lập tài khoản Claude dùng chung. Hãy yêu cầu họ thêm một tài khoản từ <b>Quản trị › Thông tin đăng nhập Claude</b>, hoặc tải lên tài khoản của riêng bạn bên dưới.",
+      "credentialsUpdated": "Đã cập nhật thông tin đăng nhập Claude cá nhân",
+      "credentialsSaveFailed": "Không thể lưu tệp thông tin đăng nhập đó",
+      "credentialsRemoved": "Đã xóa thông tin đăng nhập cá nhân của bạn — hiện đang dùng tài khoản dùng chung",
+      "credentialsRemoveFailed": "Không thể xóa thông tin đăng nhập của bạn",
+      "readFailed": "Không thể đọc tệp đó."
+    },
+    "dropzone": {
+      "parsing": "Đang phân tích .credentials.json của bạn",
+      "dropTitle": "Thả tệp <code>.credentials.json</code> của bạn",
+      "browse": "hoặc nhấp để duyệt · tìm thấy tại <code>~/.claude/.credentials.json</code>"
+    }
+  },
+  "admin": {
+    "badge": "QUẢN TRỊ",
+    "workspace": "Không gian làm việc Surency",
+    "notAuthorizedTitle": "Không có quyền"
+  },
+  "users": {
+    "notAuthorized": "Quản lý người dùng chỉ dành cho quản trị viên không gian làm việc. Nếu bạn cần quyền truy cập, hãy yêu cầu quản trị viên thay đổi vai trò của bạn.",
+    "title": "Quản lý người dùng",
+    "createUser": "Tạo người dùng",
+    "inviteUser": "Mời người dùng",
+    "stats": {
+      "total": "Tổng số người dùng",
+      "admins": "Quản trị viên",
+      "active": "Đang hoạt động",
+      "inactive": "Không hoạt động"
+    },
+    "loadFailed": "Không thể tải người dùng",
+    "empty": "Chưa có người dùng nào.",
+    "cols": {
+      "user": "NGƯỜI DÙNG",
+      "role": "VAI TRÒ",
+      "credential": "THÔNG TIN ĐĂNG NHẬP CLAUDE",
+      "lastActive": "HOẠT ĐỘNG GẦN NHẤT",
+      "status": "TRẠNG THÁI"
+    },
+    "you": "Bạn",
+    "never": "Chưa bao giờ",
+    "roleAdmin": "Quản trị",
+    "roleMember": "Thành viên",
+    "credentialPersonal": "Cá nhân",
+    "credentialShared": "Dùng chung",
+    "statusActive": "Đang hoạt động",
+    "statusDeactivated": "Đã vô hiệu hóa",
+    "actions": "Thao tác người dùng",
+    "actionsSelf": "Bạn không thể quản lý tài khoản của chính mình ở đây",
+    "changeToMember": "Chuyển thành Thành viên",
+    "makeAdmin": "Đặt làm Quản trị",
+    "deactivate": "Vô hiệu hóa",
+    "reactivate": "Kích hoạt lại",
+    "removeUser": "Xóa người dùng",
+    "updated": "Đã cập nhật {{name}}",
+    "updateFailed": "Không thể cập nhật người dùng",
+    "removed": "Đã xóa người dùng",
+    "removeFailed": "Không thể xóa người dùng",
+    "removeTitle": "Xóa người dùng này?",
+    "removeMessage": "{{name}} sẽ mất quyền truy cập vào không gian làm việc ngay lập tức. Không thể hoàn tác việc này.",
+    "invite": {
+      "title": "Mời một người dùng",
+      "subtitle": "Họ sẽ nhận được email để tham gia không gian làm việc Surency.",
+      "emailLabel": "Email công việc",
+      "emailPlaceholder": "teammate@surency.com",
+      "roleLabel": "Vai trò",
+      "roleHint": "Quản trị viên có thể quản lý người dùng và thông tin đăng nhập Claude dùng chung.",
+      "send": "Gửi lời mời",
+      "invited": "Đã mời {{email}}",
+      "devToken": "Liên kết đặt mật khẩu (chỉ dành cho dev)",
+      "sendFailed": "Không thể gửi lời mời"
+    },
+    "create": {
+      "title": "Tạo một người dùng",
+      "subtitle": "Thiết lập tài khoản trực tiếp bằng mật khẩu — không có email mời.",
+      "firstNameLabel": "Tên",
+      "firstNamePlaceholder": "Ada",
+      "lastNameLabel": "Họ",
+      "lastNamePlaceholder": "Lovelace",
+      "emailLabel": "Email công việc",
+      "emailPlaceholder": "teammate@surency.com",
+      "passwordLabel": "Mật khẩu",
+      "passwordPlaceholder": "Ít nhất 8 ký tự",
+      "created": "Đã tạo {{email}}",
+      "createFailed": "Không thể tạo người dùng"
+    }
+  },
+  "adminCredentials": {
+    "notAuthorized": "Thông tin đăng nhập Claude chỉ được quản trị viên không gian làm việc quản lý. Nếu bạn cần quyền truy cập, hãy yêu cầu quản trị viên thay đổi vai trò của bạn.",
+    "title": "Thông tin đăng nhập Claude",
+    "intro": "Đây là các <b>tài khoản Claude dùng chung</b> mà nhóm của bạn sử dụng. Tải lên và duy trì <code>.credentials.json</code> tại đây — Q‑Agent ghi token vào <code>~/.claude/.credentials.json</code> và mọi thành viên trên tài khoản dùng chung đều dùng nó. Thành viên cũng có thể mang tài khoản của riêng mình từ <s>Cài đặt › Tài khoản Claude</s>.",
+    "sharedAccountsSection": "TÀI KHOẢN CLAUDE DÙNG CHUNG",
+    "sharedAccount": "Tài khoản Claude dùng chung",
+    "default": "MẶC ĐỊNH",
+    "maintainedBy": "Được các quản trị viên không gian làm việc duy trì",
+    "configured": "Đã cấu hình",
+    "expired": "Đã hết hạn",
+    "actionsLabel": "Thao tác thông tin đăng nhập dùng chung",
+    "fields": {
+      "account": "TÀI KHOẢN",
+      "subscription": "GÓI ĐĂNG KÝ",
+      "expires": "HẾT HẠN",
+      "scopes": "PHẠM VI",
+      "lastRefreshed": "LÀM MỚI LẦN CUỐI",
+      "assignedUsers": "NGƯỜI DÙNG ĐƯỢC GÁN"
+    },
+    "rotate": "Xoay vòng / thay token",
+    "test": "Kiểm thử thông tin đăng nhập",
+    "removeCredential": "Xóa thông tin đăng nhập",
+    "noneConfigured": "Chưa có tài khoản Claude dùng chung nào được cấu hình.",
+    "addTitle": "Thêm tài khoản Claude dùng chung",
+    "addDescription": "Tải lên <code>.credentials.json</code> được xuất từ Claude CLI đã xác thực",
+    "removeTitle": "Xóa tài khoản Claude dùng chung?",
+    "removeMessage": "Mọi thành viên đang dựa vào tài khoản dùng chung (bất kỳ ai chưa tải lên thông tin đăng nhập của riêng mình) sẽ mất quyền truy cập AI cho đến khi thêm tài khoản mới.",
+    "updated": "Đã cập nhật tài khoản Claude dùng chung",
+    "saveFailed": "Không thể lưu tệp thông tin đăng nhập đó",
+    "readFailed": "Không thể đọc tệp đó.",
+    "removed": "Đã xóa tài khoản Claude dùng chung",
+    "removeFailed": "Không thể xóa thông tin đăng nhập dùng chung",
+    "testFailed": "Kiểm thử thất bại"
+  },
+  "sharedWorkspace": {
+    "notAuthorized": "Không gian làm việc dùng chung chỉ được quản trị viên không gian làm việc quản lý. Nếu bạn cần quyền truy cập, hãy yêu cầu quản trị viên thay đổi vai trò của bạn.",
+    "title": "Không gian làm việc dùng chung",
+    "newProject": "Dự án dùng chung mới",
+    "intro": "Các dự án ở đây nằm trong <b>không gian dùng chung</b> — thành viên có thể sao chép chúng vào không gian làm việc của riêng mình thay vì xây dựng lại tri thức từ đầu. Mở một dự án để thêm kho lưu trữ và cài đặt, sau đó xây dựng tri thức của nó; một dự án đã sao chép sẽ bỏ các ràng buộc kết nối nhà cung cấp, nên thành viên tự gắn lại kết nối của mình sau khi sao chép.",
+    "section": "DỰ ÁN DÙNG CHUNG",
+    "loadFailed": "Không thể tải danh mục dùng chung",
+    "empty": "Chưa có dự án dùng chung nào. Tạo một dự án để bắt đầu.",
+    "noRepo": "Chưa cấu hình kho lưu trữ — mở cài đặt để thêm một kho trước khi xây dựng tri thức.",
+    "settings": "Cài đặt",
+    "notBuilt": "Chưa xây dựng",
+    "buildKnowledge": "Xây dựng tri thức",
+    "buildStarted": "Đã bắt đầu xây dựng tri thức cho {{repo}}",
+    "buildFailed": "Không thể bắt đầu xây dựng tri thức",
+    "create": {
+      "title": "Dự án dùng chung mới",
+      "subtitle": "Tạo khung — bạn sẽ thêm kho lưu trữ và cài đặt tiếp theo.",
+      "keyLabel": "Khóa dự án",
+      "keyPlaceholder": "surency-core",
+      "keyHint": "Không thay đổi khi thành viên sao chép — chọn thứ gì đó ổn định.",
+      "nameLabel": "Tên hiển thị",
+      "namePlaceholder": "Surency Core",
+      "providerLabel": "Nhà cung cấp",
+      "createButton": "Tạo dự án dùng chung",
+      "created": "Đã tạo dự án dùng chung \"{{key}}\"",
+      "createFailed": "Không thể tạo dự án dùng chung"
+    }
+  },
+  "sharedProject": {
+    "notAuthorized": "Không gian làm việc dùng chung chỉ được quản trị viên không gian làm việc quản lý.",
+    "back": "Không gian làm việc dùng chung",
+    "eyebrow": "Dự án dùng chung",
+    "description": "Cài đặt mà thành viên kế thừa khi họ sao chép. Kết nối ở đây chỉ được dùng để xây dựng tri thức dùng chung — chúng bị bỏ khi sao chép, nên thành viên tự gắn lại kết nối của riêng mình.",
+    "saved": "Đã lưu cài đặt dự án dùng chung",
+    "saveFailed": "Lưu thất bại",
+    "captureFailed": "Không thể ghi lại đăng nhập",
+    "loginCleared": "Đã xóa đăng nhập đã lưu",
+    "clearFailed": "Không thể xóa đăng nhập"
+  }
+}

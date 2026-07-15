@@ -20,6 +20,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Lock, MoreVertical, ShieldCheck, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Pill } from "@/components/ui/badges";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -45,6 +46,7 @@ import { useAuth } from "@/store/auth";
 const MENU_WIDTH = 196;
 
 export function ClaudeCredentials() {
+  const { t } = useTranslation("settings");
   const me = useAuth((s) => s.user);
   const { data: status } = useClaudeCredentialsStatus();
   const uploadShared = useUploadSharedClaudeCredentials();
@@ -54,7 +56,7 @@ export function ClaudeCredentials() {
   const runTest = () =>
     test.mutate("shared", {
       onSuccess: (r) => (r.ok ? toast.success(r.message) : toast.error(r.message)),
-      onError: (e) => toast.error((e as Error).message || "Test failed"),
+      onError: (e) => toast.error((e as Error).message || t("adminCredentials.testFailed")),
     });
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -104,12 +106,12 @@ export function ClaudeCredentials() {
       uploadShared.mutate(
         { credentials: contents },
         {
-          onSuccess: () => toast.success("Shared Claude account updated"),
-          onError: () => toast.error("Could not save that credentials file"),
+          onSuccess: () => toast.success(t("adminCredentials.updated")),
+          onError: () => toast.error(t("adminCredentials.saveFailed")),
         },
       );
     } catch {
-      setFileError("Could not read that file.");
+      setFileError(t("adminCredentials.readFailed"));
     }
   };
 
@@ -120,10 +122,9 @@ export function ClaudeCredentials() {
         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
           <Lock size={26} className="text-[#8b8b9e]" />
         </div>
-        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">Not authorized</h1>
+        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">{t("admin.notAuthorizedTitle")}</h1>
         <p className="m-0 max-w-[380px] text-[13.5px] leading-relaxed text-muted">
-          Claude credentials are managed by workspace administrators only. If you need access, ask
-          an admin to change your role.
+          {t("adminCredentials.notAuthorized")}
         </p>
       </div>
     );
@@ -134,11 +135,11 @@ export function ClaudeCredentials() {
       <div className="mb-[22px]">
         <div className="mb-[5px] flex items-center gap-2 text-[13px] font-medium text-muted">
           <span className="rounded-full bg-[rgba(139,92,246,.16)] px-[7px] py-[2px] text-[9px] font-bold tracking-[.06em] text-[#c4b5fd]">
-            ADMIN
+            {t("admin.badge")}
           </span>
-          Surency workspace
+          {t("admin.workspace")}
         </div>
-        <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">Claude credentials</h1>
+        <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">{t("adminCredentials.title")}</h1>
       </div>
 
       <div
@@ -149,18 +150,20 @@ export function ClaudeCredentials() {
           <ClaudeLogo size={20} />
         </span>
         <p className="m-0 text-[13px] leading-[1.65] text-[#c3c3d0]">
-          These are the <b className="font-bold text-[#ececf1]">shared Claude accounts</b> your
-          team runs on. Upload and maintain the{" "}
-          <span className="font-mono text-[12px] text-[#e0a58c]">.credentials.json</span> here —
-          Q&#8209;Agent writes the token to{" "}
-          <span className="font-mono text-[12px] text-[#e0a58c]">~/.claude/.credentials.json</span>{" "}
-          and every member on the shared account uses it. Members can also bring their own from{" "}
-          <b className="font-semibold text-[#ececf1]">Settings &#8250; Claude account</b>.
+          <Trans
+            t={t}
+            i18nKey="adminCredentials.intro"
+            components={{
+              b: <b className="font-bold text-[#ececf1]" />,
+              s: <b className="font-semibold text-[#ececf1]" />,
+              code: <span className="font-mono text-[12px] text-[#e0a58c]" />,
+            }}
+          />
         </p>
       </div>
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
-        SHARED CLAUDE ACCOUNTS
+        {t("adminCredentials.sharedAccountsSection")}
       </div>
 
       {status?.hasShared ? (
@@ -172,23 +175,23 @@ export function ClaudeCredentials() {
             <div className="min-w-0 flex-1 basis-[140px]">
               <div className="flex items-center gap-2">
                 <span className="text-[15.5px] font-extrabold tracking-[-0.01em]">
-                  Shared Claude account
+                  {t("adminCredentials.sharedAccount")}
                 </span>
                 <span className="shrink-0 rounded-full bg-[rgba(139,92,246,.18)] px-2 py-[2px] text-[9.5px] font-bold tracking-[.03em] text-[#c4b5fd]">
-                  DEFAULT
+                  {t("adminCredentials.default")}
                 </span>
               </div>
               <div className="mt-0.5 font-mono text-[12px] text-[#8b8b9e]">
-                Maintained by workspace admins
+                {t("adminCredentials.maintainedBy")}
               </div>
             </div>
             {isCredentialExpired(status?.shared) ? (
               <Pill color="#fbbf24" bg="rgba(251,191,36,.14)" dot>
-                Expired
+                {t("adminCredentials.expired")}
               </Pill>
             ) : (
               <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)" dot>
-                Configured
+                {t("adminCredentials.configured")}
               </Pill>
             )}
             <div className="relative shrink-0">
@@ -196,7 +199,7 @@ export function ClaudeCredentials() {
                 ref={btnRef}
                 type="button"
                 onClick={() => setMenuOpen((o) => !o)}
-                aria-label="Shared credential actions"
+                aria-label={t("adminCredentials.actionsLabel")}
                 className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] border border-white/[0.09] bg-white/[0.04] text-[#8b8b9e] transition-colors hover:bg-white/[0.09] hover:text-[#dcdce4]"
               >
                 <MoreVertical size={16} />
@@ -228,7 +231,7 @@ export function ClaudeCredentials() {
                         className="flex w-full items-center gap-[9px] rounded-[9px] px-2.5 py-2 text-left text-[12.5px] font-semibold text-[#fb7185] hover:bg-[rgba(244,63,94,.12)]"
                       >
                         <Trash2 size={14} />
-                        Remove credential
+                        {t("adminCredentials.removeCredential")}
                       </button>
                     </motion.div>
                   )}
@@ -239,16 +242,16 @@ export function ClaudeCredentials() {
           </div>
 
           <div className="mt-[18px] grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Field label="ACCOUNT" value={status?.shared?.accountEmail ?? "—"} />
-            <Field label="SUBSCRIPTION" value={status?.shared?.subscriptionType ?? "—"} />
-            <Field label="EXPIRES" value={formatExpiry(status?.shared?.expiresAt)} />
-            <Field label="SCOPES" value={<ScopeChips scopes={status?.shared?.scopes} />} />
+            <Field label={t("adminCredentials.fields.account")} value={status?.shared?.accountEmail ?? "—"} />
+            <Field label={t("adminCredentials.fields.subscription")} value={status?.shared?.subscriptionType ?? "—"} />
+            <Field label={t("adminCredentials.fields.expires")} value={formatExpiry(status?.shared?.expiresAt)} />
+            <Field label={t("adminCredentials.fields.scopes")} value={<ScopeChips scopes={status?.shared?.scopes} />} />
             <Field
-              label="LAST REFRESHED"
+              label={t("adminCredentials.fields.lastRefreshed")}
               value={status?.shared?.lastRefreshed ? relativeTime(status.shared.lastRefreshed) : "—"}
             />
             <Field
-              label="ASSIGNED USERS"
+              label={t("adminCredentials.fields.assignedUsers")}
               value={status?.shared?.assignedUsers != null ? String(status.shared.assignedUsers) : "—"}
             />
           </div>
@@ -262,7 +265,7 @@ export function ClaudeCredentials() {
               dragClassName="border-[rgba(139,92,246,.7)] bg-[rgba(139,92,246,.28)]"
             >
               <UploadCloud size={14} strokeWidth={2} />
-              {uploadShared.isPending ? "Uploading…" : "Rotate / replace token"}
+              {uploadShared.isPending ? t("status.uploading") : t("adminCredentials.rotate")}
             </FileDropLabel>
             <button
               type="button"
@@ -271,13 +274,13 @@ export function ClaudeCredentials() {
               className="flex w-full items-center justify-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50 sm:w-auto"
             >
               {test.isPending ? <Spinner size={14} /> : <ShieldCheck size={14} strokeWidth={2} />}
-              {test.isPending ? "Testing…" : "Test credential"}
+              {test.isPending ? t("status.testing") : t("adminCredentials.test")}
             </button>
           </div>
         </div>
       ) : (
         <div className="mb-4 rounded-[16px] border border-white/[0.07] bg-white/[0.03] p-5 text-center text-[13px] text-muted">
-          No shared Claude account configured yet.
+          {t("adminCredentials.noneConfigured")}
         </div>
       )}
 
@@ -290,17 +293,20 @@ export function ClaudeCredentials() {
           {uploadShared.isPending ? (
             <>
               <Spinner size={30} />
-              <div className="text-[13.5px] font-bold">Reading token…</div>
+              <div className="text-[13.5px] font-bold">{t("status.readingToken")}</div>
             </>
           ) : (
             <>
               <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[13px] bg-[rgba(139,92,246,.14)] text-[#c4b5fd]">
                 <UploadCloud size={20} strokeWidth={2} />
               </span>
-              <div className="text-[13.5px] font-bold">Add a shared Claude account</div>
+              <div className="text-[13.5px] font-bold">{t("adminCredentials.addTitle")}</div>
               <div className="text-[12px] text-[#8b8b9e]">
-                Upload a <span className="font-mono text-[11px]">.credentials.json</span> exported
-                from an authenticated Claude CLI
+                <Trans
+                  t={t}
+                  i18nKey="adminCredentials.addDescription"
+                  components={{ code: <span className="font-mono text-[11px]" /> }}
+                />
               </div>
             </>
           )}
@@ -310,18 +316,18 @@ export function ClaudeCredentials() {
 
       <ConfirmDialog
         open={confirmingRemove}
-        title="Remove the shared Claude account?"
-        message="Every member relying on the shared account (anyone who hasn't uploaded their own credentials) will lose AI access until a new one is added."
-        confirmLabel="Remove credential"
+        title={t("adminCredentials.removeTitle")}
+        message={t("adminCredentials.removeMessage")}
+        confirmLabel={t("adminCredentials.removeCredential")}
         danger
         loading={deleteShared.isPending}
         onConfirm={() =>
           deleteShared.mutate(undefined, {
             onSuccess: () => {
-              toast.success("Removed the shared Claude account");
+              toast.success(t("adminCredentials.removed"));
               setConfirmingRemove(false);
             },
-            onError: () => toast.error("Failed to remove the shared credential"),
+            onError: () => toast.error(t("adminCredentials.removeFailed")),
           })
         }
         onClose={() => setConfirmingRemove(false)}

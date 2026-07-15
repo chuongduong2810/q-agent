@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Ban,
@@ -52,6 +53,7 @@ const initials = (u: User) =>
   "?";
 
 export function UserManagement() {
+  const { t } = useTranslation("settings");
   const me = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -79,10 +81,10 @@ export function UserManagement() {
     }) => api.auth.updateUser(id, body),
     onMutate: (v) => setBusyId(v.id),
     onSuccess: (u) => {
-      toast.success(`Updated ${u.firstName} ${u.lastName}`.trim());
+      toast.success(t("users.updated", { name: `${u.firstName} ${u.lastName}`.trim() }));
       refresh();
     },
-    onError: (e) => toast.error(errMsg(e, "Failed to update user")),
+    onError: (e) => toast.error(errMsg(e, t("users.updateFailed"))),
     onSettled: () => setBusyId(null),
   });
 
@@ -90,10 +92,10 @@ export function UserManagement() {
     mutationFn: (id: number) => api.auth.deleteUser(id),
     onMutate: (id) => setBusyId(id),
     onSuccess: () => {
-      toast.success("User removed");
+      toast.success(t("users.removed"));
       refresh();
     },
-    onError: (e) => toast.error(errMsg(e, "Failed to remove user")),
+    onError: (e) => toast.error(errMsg(e, t("users.removeFailed"))),
     onSettled: () => setBusyId(null),
   });
 
@@ -104,10 +106,9 @@ export function UserManagement() {
         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
           <Lock size={26} className="text-[#8b8b9e]" />
         </div>
-        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">Not authorized</h1>
+        <h1 className="m-0 mb-2 text-[22px] font-black tracking-[-0.02em]">{t("admin.notAuthorizedTitle")}</h1>
         <p className="m-0 max-w-[380px] text-[13.5px] leading-relaxed text-muted">
-          User management is available to workspace administrators only. If you need access, ask an
-          admin to change your role.
+          {t("users.notAuthorized")}
         </p>
       </div>
     );
@@ -115,10 +116,10 @@ export function UserManagement() {
 
   const users = usersQuery.data ?? [];
   const stats = [
-    { label: "Total users", value: users.length },
-    { label: "Admins", value: users.filter((u) => u.role === "admin").length },
-    { label: "Active", value: users.filter((u) => u.isActive).length },
-    { label: "Inactive", value: users.filter((u) => !u.isActive).length },
+    { label: t("users.stats.total"), value: users.length },
+    { label: t("users.stats.admins"), value: users.filter((u) => u.role === "admin").length },
+    { label: t("users.stats.active"), value: users.filter((u) => u.isActive).length },
+    { label: t("users.stats.inactive"), value: users.filter((u) => !u.isActive).length },
   ];
 
   return (
@@ -128,20 +129,20 @@ export function UserManagement() {
         <div>
           <div className="mb-[5px] flex items-center gap-2 text-[13px] font-medium text-muted">
             <span className="rounded-full bg-[rgba(139,92,246,.16)] px-[7px] py-[2px] text-[9px] font-bold tracking-[.06em] text-[#c4b5fd]">
-              ADMIN
+              {t("admin.badge")}
             </span>
-            Surency workspace
+            {t("admin.workspace")}
           </div>
-          <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">User management</h1>
+          <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">{t("users.title")}</h1>
         </div>
         <div className="flex items-center gap-2.5">
           <Button variant="glass" className="flex-1 md:flex-none" onClick={() => setCreateOpen(true)}>
             <UserIcon size={15} strokeWidth={2.4} />
-            Create user
+            {t("users.createUser")}
           </Button>
           <Button variant="primary" className="flex-1 md:flex-none" onClick={() => setInviteOpen(true)}>
             <UserPlus size={15} strokeWidth={2.4} />
-            Invite user
+            {t("users.inviteUser")}
           </Button>
         </div>
       </div>
@@ -164,7 +165,7 @@ export function UserManagement() {
       {/* States */}
       {usersQuery.isError ? (
         <div className="rounded-2xl border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.08)] p-6 text-[13.5px] text-[#fb7185]">
-          {errMsg(usersQuery.error, "Failed to load users")}
+          {errMsg(usersQuery.error, t("users.loadFailed"))}
         </div>
       ) : usersQuery.isLoading ? (
         <div className="flex flex-col gap-2.5">
@@ -177,17 +178,17 @@ export function UserManagement() {
         </div>
       ) : users.length === 0 ? (
         <div className="rounded-2xl border border-white/[0.07] bg-panel/60 p-10 text-center text-[13.5px] text-muted">
-          No users yet.
+          {t("users.empty")}
         </div>
       ) : (
         <>
           {/* Table header */}
           <div className="hidden items-center gap-3.5 px-4 pb-[10px] text-[10px] font-bold tracking-[.06em] text-[#6c6c7e] sm:flex">
-            <span className="flex-1">USER</span>
-            <span className="w-[104px] shrink-0">ROLE</span>
-            <span className="hidden w-[168px] shrink-0 md:block">CLAUDE CREDENTIAL</span>
-            <span className="hidden w-[120px] shrink-0 md:block">LAST ACTIVE</span>
-            <span className="w-[100px] shrink-0">STATUS</span>
+            <span className="flex-1">{t("users.cols.user")}</span>
+            <span className="w-[104px] shrink-0">{t("users.cols.role")}</span>
+            <span className="hidden w-[168px] shrink-0 md:block">{t("users.cols.credential")}</span>
+            <span className="hidden w-[120px] shrink-0 md:block">{t("users.cols.lastActive")}</span>
+            <span className="w-[100px] shrink-0">{t("users.cols.status")}</span>
             <span className="w-[30px] shrink-0" />
           </div>
 
@@ -220,7 +221,7 @@ export function UserManagement() {
                         </span>
                         {isMe && (
                           <span className="shrink-0 rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-semibold text-muted">
-                            You
+                            {t("users.you")}
                           </span>
                         )}
                       </div>
@@ -241,7 +242,7 @@ export function UserManagement() {
 
                   {/* Last active (#95) */}
                   <div className="hidden w-[120px] shrink-0 text-[12px] text-[#9a9aae] md:block">
-                    {u.lastActive ? relativeTime(u.lastActive) : "Never"}
+                    {u.lastActive ? relativeTime(u.lastActive) : t("users.never")}
                   </div>
 
                   {/* Status — always visible (wraps alongside Role on very narrow phones
@@ -292,6 +293,7 @@ export function UserManagement() {
 }
 
 function RoleBadge({ role }: { role: UserRole }) {
+  const { t } = useTranslation("settings");
   const admin = role === "admin";
   return (
     <span
@@ -301,7 +303,7 @@ function RoleBadge({ role }: { role: UserRole }) {
       )}
     >
       {admin && <Shield size={11} />}
-      {admin ? "Admin" : "Member"}
+      {admin ? t("users.roleAdmin") : t("users.roleMember")}
     </span>
   );
 }
@@ -309,11 +311,12 @@ function RoleBadge({ role }: { role: UserRole }) {
 /** "Claude credential" cell (#95): cyan token icon for a personal upload,
  * an orange dot + label for the shared fallback, "—" for none. */
 function CredentialSourceCell({ source }: { source: AdminUser["credentialSource"] }) {
+  const { t } = useTranslation("settings");
   if (source === "personal") {
     return (
       <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#67e8f9]">
         <KeyRound size={13} strokeWidth={2} />
-        Personal
+        {t("users.credentialPersonal")}
       </span>
     );
   }
@@ -321,7 +324,7 @@ function CredentialSourceCell({ source }: { source: AdminUser["credentialSource"
     return (
       <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#e0a58c]">
         <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-[#d97757]" />
-        Shared
+        {t("users.credentialShared")}
       </span>
     );
   }
@@ -329,6 +332,7 @@ function CredentialSourceCell({ source }: { source: AdminUser["credentialSource"
 }
 
 function StatusBadge({ active }: { active: boolean }) {
+  const { t } = useTranslation("settings");
   return (
     <span
       className={cn(
@@ -336,7 +340,7 @@ function StatusBadge({ active }: { active: boolean }) {
         active ? "bg-[rgba(16,185,129,.14)] text-[#6ee7b7]" : "bg-[rgba(148,163,184,.13)] text-[#8b93a7]",
       )}
     >
-      {active ? "Active" : "Deactivated"}
+      {active ? t("users.statusActive") : t("users.statusDeactivated")}
     </span>
   );
 }
@@ -366,6 +370,7 @@ function UserActionsMenu({
   onSetActive: (active: boolean) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -413,8 +418,8 @@ function UserActionsMenu({
       <button
         ref={btnRef}
         type="button"
-        title={disabled ? "You can't manage your own account here" : "User actions"}
-        aria-label="User actions"
+        title={disabled ? t("users.actionsSelf") : t("users.actions")}
+        aria-label={t("users.actions")}
         disabled={disabled || busy}
         onClick={() => setOpen((o) => !o)}
         className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] border border-white/[0.09] bg-white/[0.04] text-[#8b8b9e] transition-colors hover:bg-white/[0.09] hover:text-[#dcdce4] disabled:cursor-not-allowed disabled:opacity-30"
@@ -445,7 +450,7 @@ function UserActionsMenu({
                   className={menuItemClass}
                 >
                   <UserIcon size={14} />
-                  Change to Member
+                  {t("users.changeToMember")}
                 </button>
               ) : (
                 <button
@@ -457,7 +462,7 @@ function UserActionsMenu({
                   className={menuItemClass}
                 >
                   <Shield size={14} />
-                  Make Admin
+                  {t("users.makeAdmin")}
                 </button>
               )}
               {user.isActive ? (
@@ -470,7 +475,7 @@ function UserActionsMenu({
                   className={menuItemClass}
                 >
                   <Ban size={14} />
-                  Deactivate
+                  {t("users.deactivate")}
                 </button>
               ) : (
                 <button
@@ -482,7 +487,7 @@ function UserActionsMenu({
                   className={menuItemClass}
                 >
                   <Check size={14} />
-                  Reactivate
+                  {t("users.reactivate")}
                 </button>
               )}
               <div className="my-1 h-px bg-white/[0.08]" />
@@ -495,7 +500,7 @@ function UserActionsMenu({
                 className={cn(menuItemClass, "text-[#fb7185] hover:bg-[rgba(244,63,94,.12)]")}
               >
                 <Trash2 size={14} />
-                Remove user
+                {t("users.removeUser")}
               </button>
             </motion.div>
           )}
@@ -505,9 +510,9 @@ function UserActionsMenu({
 
       <ConfirmDialog
         open={confirmingRemove}
-        title="Remove this user?"
-        message={`${`${user.firstName} ${user.lastName}`.trim() || user.email} will lose access to the workspace immediately. This cannot be undone.`}
-        confirmLabel="Remove user"
+        title={t("users.removeTitle")}
+        message={t("users.removeMessage", { name: `${user.firstName} ${user.lastName}`.trim() || user.email })}
+        confirmLabel={t("users.removeUser")}
         danger
         loading={busy}
         onConfirm={onRemove}
@@ -530,21 +535,22 @@ function InviteUserModal({
   onClose: () => void;
   onInvited: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("member");
 
   const inviteMut = useMutation({
     mutationFn: () => api.auth.inviteUser({ email: email.trim(), role }),
     onSuccess: ({ user: u, resetToken }) => {
-      toast.success(`Invited ${u.email}`);
+      toast.success(t("users.invite.invited", { email: u.email }));
       if (resetToken) {
-        toast.message("Dev-only set-password link", {
+        toast.message(t("users.invite.devToken"), {
           description: `/forgot?token=${resetToken}`,
         });
       }
       onInvited();
     },
-    onError: (e) => toast.error(errMsg(e, "Failed to send invitation")),
+    onError: (e) => toast.error(errMsg(e, t("users.invite.sendFailed"))),
   });
 
   const canSubmit = /.+@.+\..+/.test(email.trim()) && !inviteMut.isPending;
@@ -571,15 +577,15 @@ function InviteUserModal({
             <UserPlus size={19} color="#fff" strokeWidth={2.2} />
           </div>
           <div className="flex-1">
-            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">Invite a user</h2>
+            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">{t("users.invite.title")}</h2>
             <p className="m-0 mt-0.5 text-[12.5px] text-muted">
-              They&rsquo;ll get an email to join the Surency workspace.
+              {t("users.invite.subtitle")}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common:close")}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.08] hover:text-ink"
           >
             <X size={17} />
@@ -588,12 +594,12 @@ function InviteUserModal({
 
         <form onSubmit={submit}>
           <div className="mb-4">
-            <AuthLabel htmlFor="iu-email">Work email</AuthLabel>
+            <AuthLabel htmlFor="iu-email">{t("users.invite.emailLabel")}</AuthLabel>
             <TextInput
               id="iu-email"
               type="email"
               icon={<Mail size={15} />}
-              placeholder="teammate@surency.com"
+              placeholder={t("users.invite.emailPlaceholder")}
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -601,7 +607,7 @@ function InviteUserModal({
           </div>
 
           <div className="mb-5">
-            <AuthLabel>Role</AuthLabel>
+            <AuthLabel>{t("users.invite.roleLabel")}</AuthLabel>
             <div className="flex gap-2 rounded-xl bg-black/25 p-1">
               {(["member", "admin"] as const).map((r) => {
                 const on = role === r;
@@ -615,22 +621,22 @@ function InviteUserModal({
                       on ? "accent-gradient text-white" : "bg-white/[0.05] text-[#9a9aae]",
                     )}
                   >
-                    {r === "admin" ? "Admin" : "Member"}
+                    {r === "admin" ? t("users.roleAdmin") : t("users.roleMember")}
                   </button>
                 );
               })}
             </div>
             <p className="mb-0 mt-2 text-[11.5px] text-faint">
-              Admins can manage users and shared Claude credentials.
+              {t("users.invite.roleHint")}
             </p>
           </div>
 
           <div className="flex items-center justify-end gap-2.5">
             <Button type="button" variant="glass" onClick={onClose}>
-              Cancel
+              {t("common:cancel")}
             </Button>
             <Button type="submit" variant="primary" disabled={!canSubmit}>
-              {inviteMut.isPending ? "Sending…" : "Send invitation"}
+              {inviteMut.isPending ? t("status.sending") : t("users.invite.send")}
             </Button>
           </div>
         </form>
@@ -653,6 +659,7 @@ function CreateUserModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { t } = useTranslation("settings");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -669,10 +676,10 @@ function CreateUserModal({
         password,
       }),
     onSuccess: (u) => {
-      toast.success(`Created ${u.email}`);
+      toast.success(t("users.create.created", { email: u.email }));
       onCreated();
     },
-    onError: (e) => toast.error(errMsg(e, "Failed to create user")),
+    onError: (e) => toast.error(errMsg(e, t("users.create.createFailed"))),
   });
 
   const canSubmit =
@@ -700,15 +707,15 @@ function CreateUserModal({
             <UserIcon size={19} color="#fff" strokeWidth={2.2} />
           </div>
           <div className="flex-1">
-            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">Create a user</h2>
+            <h2 className="m-0 text-[18px] font-black tracking-[-0.02em]">{t("users.create.title")}</h2>
             <p className="m-0 mt-0.5 text-[12.5px] text-muted">
-              Sets up the account directly with a password — no invite email.
+              {t("users.create.subtitle")}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common:close")}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-dim transition-colors hover:bg-white/[0.08] hover:text-ink"
           >
             <X size={17} />
@@ -718,20 +725,20 @@ function CreateUserModal({
         <form onSubmit={submit}>
           <div className="mb-4 flex gap-3">
             <div className="flex-1">
-              <AuthLabel htmlFor="cu-first">First name</AuthLabel>
+              <AuthLabel htmlFor="cu-first">{t("users.create.firstNameLabel")}</AuthLabel>
               <TextInput
                 id="cu-first"
-                placeholder="Ada"
+                placeholder={t("users.create.firstNamePlaceholder")}
                 autoFocus
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
               />
             </div>
             <div className="flex-1">
-              <AuthLabel htmlFor="cu-last">Last name</AuthLabel>
+              <AuthLabel htmlFor="cu-last">{t("users.create.lastNameLabel")}</AuthLabel>
               <TextInput
                 id="cu-last"
-                placeholder="Lovelace"
+                placeholder={t("users.create.lastNamePlaceholder")}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
               />
@@ -739,29 +746,29 @@ function CreateUserModal({
           </div>
 
           <div className="mb-4">
-            <AuthLabel htmlFor="cu-email">Work email</AuthLabel>
+            <AuthLabel htmlFor="cu-email">{t("users.create.emailLabel")}</AuthLabel>
             <TextInput
               id="cu-email"
               type="email"
               icon={<Mail size={15} />}
-              placeholder="teammate@surency.com"
+              placeholder={t("users.create.emailPlaceholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
           <div className="mb-4">
-            <AuthLabel htmlFor="cu-password">Password</AuthLabel>
+            <AuthLabel htmlFor="cu-password">{t("users.create.passwordLabel")}</AuthLabel>
             <PasswordInput
               id="cu-password"
-              placeholder="At least 8 characters"
+              placeholder={t("users.create.passwordPlaceholder")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
           <div className="mb-5">
-            <AuthLabel>Role</AuthLabel>
+            <AuthLabel>{t("users.invite.roleLabel")}</AuthLabel>
             <div className="flex gap-2 rounded-xl bg-black/25 p-1">
               {(["member", "admin"] as const).map((r) => {
                 const on = role === r;
@@ -775,22 +782,22 @@ function CreateUserModal({
                       on ? "accent-gradient text-white" : "bg-white/[0.05] text-[#9a9aae]",
                     )}
                   >
-                    {r === "admin" ? "Admin" : "Member"}
+                    {r === "admin" ? t("users.roleAdmin") : t("users.roleMember")}
                   </button>
                 );
               })}
             </div>
             <p className="mb-0 mt-2 text-[11.5px] text-faint">
-              Admins can manage users and shared Claude credentials.
+              {t("users.invite.roleHint")}
             </p>
           </div>
 
           <div className="flex items-center justify-end gap-2.5">
             <Button type="button" variant="glass" onClick={onClose}>
-              Cancel
+              {t("common:cancel")}
             </Button>
             <Button type="submit" variant="primary" disabled={!canSubmit}>
-              {createMut.isPending ? "Creating…" : "Create user"}
+              {createMut.isPending ? t("status.creating") : t("users.createUser")}
             </Button>
           </div>
         </form>

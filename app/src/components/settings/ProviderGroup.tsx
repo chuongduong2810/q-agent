@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ConnectionRow } from "@/components/settings/ConnectionRow";
@@ -14,6 +15,7 @@ import type { ConnectionOut, ProviderGroupOut } from "@/types/api";
  * opens it expanded; deleting confirms via ConfirmDialog first.
  */
 export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
+  const { t } = useTranslation("settings");
   const meta = PROVIDER_META[group.kind];
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ConnectionOut | null>(null);
@@ -26,7 +28,7 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
       { kind: group.kind, name: `New ${meta.name} connection` },
       {
         onSuccess: (conn) => setExpandedId(conn.id),
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to add connection"),
+        onError: (err) => toast.error(err instanceof Error ? err.message : t("providerGroup.addFailed")),
       },
     );
   };
@@ -36,11 +38,11 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
     const id = deleteTarget.id;
     del.mutate(id, {
       onSuccess: () => {
-        toast.success("Connection deleted");
+        toast.success(t("providerGroup.deleted"));
         if (expandedId === id) setExpandedId(null);
         setDeleteTarget(null);
       },
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete connection"),
+      onError: (err) => toast.error(err instanceof Error ? err.message : t("providerGroup.deleteFailed")),
     });
   };
 
@@ -56,8 +58,8 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
         <div className="min-w-0 flex-1">
           <div className="text-[15px] font-bold">{meta.name}</div>
           <div className="text-[11.5px] text-muted">
-            {group.connectionCount} connection{group.connectionCount === 1 ? "" : "s"} ·{" "}
-            {group.connectedCount} connected
+            {t("providerGroup.connectionCount", { count: group.connectionCount })} ·{" "}
+            {t("providerGroup.connected", { n: group.connectedCount })}
           </div>
         </div>
         <button
@@ -65,7 +67,7 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
           disabled={create.isPending}
           className="flex w-full shrink-0 items-center justify-center gap-1.5 rounded-[11px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.16)] px-3 py-2 text-[12.5px] font-semibold text-[#c4b5fd] transition-colors hover:bg-[rgba(139,92,246,.26)] disabled:opacity-60 md:w-auto"
         >
-          <Plus size={14} strokeWidth={2.4} /> Add connection
+          <Plus size={14} strokeWidth={2.4} /> {t("providerGroup.add")}
         </button>
       </div>
 
@@ -85,9 +87,9 @@ export function ProviderGroup({ group }: { group: ProviderGroupOut }) {
 
       <ConfirmDialog
         open={deleteTarget !== null}
-        title="Delete connection"
-        message={`Delete "${deleteTarget?.name ?? ""}"? Projects and tickets bound to it fall back to another connection of the same kind.`}
-        confirmLabel="Delete"
+        title={t("connection.deleteTitle")}
+        message={t("providerGroup.deleteMessage", { name: deleteTarget?.name ?? "" })}
+        confirmLabel={t("common:delete")}
         danger
         loading={del.isPending}
         onConfirm={handleDelete}
