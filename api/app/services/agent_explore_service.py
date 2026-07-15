@@ -86,6 +86,10 @@ def request_exploration(
                 "run_id": run_id,
                 "case_id": case_id,
                 "status": "queued",
+                # Run spend (USD) captured at the first decide, so the cost
+                # budget measures only THIS session's decide calls — not the
+                # run's lifetime AI spend (analysis/generation). None until set.
+                "baseline_usd": None,
             }
         )
 
@@ -114,6 +118,32 @@ def get_session(session_id: str, owner_id: int | None = None) -> dict | None:
             ):
                 return dict(s)
     return None
+
+
+def ensure_baseline(session_id: str, spend_usd: float) -> float:
+    """Record the run's pre-exploration spend once (at the first decide) and return it.
+
+    The per-session cost budget must measure only this exploration's own decide
+    calls, not the run's lifetime AI spend. The first decide captures the run's
+    current spend as the baseline; every decide then charges ``current - baseline``
+    against the budget. Idempotent: later calls return the stored baseline and
+    ignore ``spend_usd``.
+
+    Args:
+        session_id: The exploration session.
+        spend_usd: The run's current cumulative Claude spend (USD), read by the
+            caller at first-decide time.
+
+    Returns:
+        The effective baseline USD for the session (the stored one once set).
+    """
+    with _lock:
+        for s in _pending:
+            if s["session_id"] == session_id:
+                if s.get("baseline_usd") is None:
+                    s["baseline_usd"] = float(spend_usd)
+                return float(s["baseline_usd"])
+    return float(spend_usd)
 
 
 def set_result(session_id: str, result: dict) -> None:
