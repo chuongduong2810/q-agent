@@ -130,6 +130,157 @@ def test_merge_discovered_dom_noop_when_nothing_discovered(db_session):
     ) == 0
 
 
+# --- Exploration->KB verified discovery (#325, ADR 0010 §5) -------------------
+
+
+def test_merge_verified_discovery_writes_routes_and_selectors(db_session):
+    """Discovered routes/selectors land on the row stamped verified_at_runtime,
+    with the locator strategy recorded on each selector."""
+    _seed_kb_row(db_session)
+
+    merged = knowledge_service.merge_verified_discovery(
+        "Surency Platform",
+        "",
+        {
+            "routes": [{"path": "/divisions", "description": "Divisions list"}],
+            "selectors": [
+                {"screen": "divisions", "element": "add", "selector": "[data-testid='add']",
+                 "strategy": "data-testid"},
+            ],
+        },
+        owner_id=None,
+    )
+    assert merged == 2
+
+    kn = _reload_kb(db_session).knowledge
+    route = next(r for r in kn["routes"] if r["path"] == "/divisions")
+    assert route["verified_at_runtime"]
+    assert route["source"] == "exploration"
+    assert route["description"] == "Divisions list"
+
+    sel = next(s for s in kn["selectors"] if s["selector"] == "[data-testid='add']")
+    assert sel["verified_at_runtime"]
+    assert sel["source"] == "exploration"
+    assert sel["strategy"] == "data-testid"
+
+
+def test_merge_verified_discovery_defaults_strategy_to_css(db_session):
+    """A selector without an explicit strategy defaults to css."""
+    _seed_kb_row(db_session)
+
+    merged = knowledge_service.merge_verified_discovery(
+        "Surency Platform", "",
+        {"selectors": [{"screen": "home", "element": "hero", "selector": "#hero"}]},
+        owner_id=None,
+    )
+    assert merged == 1
+    sel = next(s for s in _reload_kb(db_session).knowledge["selectors"] if s["selector"] == "#hero")
+    assert sel["strategy"] == "css"
+
+
+def test_merge_verified_discovery_never_overwrites_verified_entry(db_session):
+    """An existing entry already stamped verified_at_runtime is left intact."""
+    _seed_kb_row(
+        db_session,
+        routes=[{"path": "/login", "verified_at_runtime": "2020-01-01T00:00:00+00:00",
+                 "source": "exploration"}],
+        selectors=[{"screen": "login", "element": "submit", "selector": "#login-submit",
+                    "strategy": "role", "verified_at_runtime": "2020-01-01T00:00:00+00:00",
+                    "source": "exploration"}],
+    )
+
+    merged = knowledge_service.merge_verified_discovery(
+        "Surency Platform", "",
+        {
+            "routes": [{"path": "/login", "description": "SHOULD NOT WIN"}],
+            "selectors": [{"screen": "login", "element": "submit", "selector": "#login-submit",
+                           "strategy": "css"}],
+        },
+        owner_id=None,
+    )
+    assert merged == 0
+
+    kn = _reload_kb(db_session).knowledge
+    route = next(r for r in kn["routes"] if r["path"] == "/login")
+    assert route["verified_at_runtime"] == "2020-01-01T00:00:00+00:00"
+    assert route.get("description") != "SHOULD NOT WIN"
+    sel = next(s for s in kn["selectors"] if s["selector"] == "#login-submit")
+    assert sel["verified_at_runtime"] == "2020-01-01T00:00:00+00:00"
+    assert sel["strategy"] == "role"  # not downgraded to the discovered "css"
+
+
+def test_merge_verified_discovery_upgrades_unverified_entry(db_session):
+    """A source-inferred (un-verified) entry is upgraded in place to verified,
+    preserving its other keys."""
+    _seed_kb_row(
+        db_session,
+        routes=[{"path": "/reports", "description": "Reports", "auth_required": True}],
+        selectors=[{"screen": "reports", "element": "export", "selector": "#export"}],
+    )
+
+    merged = knowledge_service.merge_verified_discovery(
+        "Surency Platform", "",
+        {
+            "routes": [{"path": "/reports"}],
+            "selectors": [{"selector": "#export", "strategy": "css"}],
+        },
+        owner_id=None,
+    )
+    assert merged == 2
+
+    kn = _reload_kb(db_session).knowledge
+    route = next(r for r in kn["routes"] if r["path"] == "/reports")
+    assert route["verified_at_runtime"]
+    assert route["source"] == "exploration"
+    assert route["description"] == "Reports"  # preserved
+    assert route["auth_required"] is True  # preserved
+    # No duplicate route entry created.
+    assert [r["path"] for r in kn["routes"]].count("/reports") == 1
+
+    sel = next(s for s in kn["selectors"] if s["selector"] == "#export")
+    assert sel["verified_at_runtime"]
+    assert sel["screen"] == "reports"  # preserved
+    assert sel["element"] == "export"  # preserved
+    assert sel["strategy"] == "css"
+
+
+def test_merge_verified_discovery_appends_non_colliding(db_session):
+    """Non-colliding discoveries are appended; dedup preserved for existing values."""
+    _seed_kb_row(
+        db_session,
+        routes=[{"path": "/home"}],
+        selectors=[{"screen": "home", "element": "logo", "selector": "#logo"}],
+    )
+
+    merged = knowledge_service.merge_verified_discovery(
+        "Surency Platform", "",
+        {
+            "routes": [{"path": "/home"}, {"path": "/about"}],
+            "selectors": [{"selector": "#logo"}, {"selector": "#nav"}],
+        },
+        owner_id=None,
+    )
+    # /home upgraded + /about appended + #logo upgraded + #nav appended = 4.
+    assert merged == 4
+
+    kn = _reload_kb(db_session).knowledge
+    assert sorted(r["path"] for r in kn["routes"]) == ["/about", "/home"]
+    assert sorted(s["selector"] for s in kn["selectors"]) == ["#logo", "#nav"]
+
+
+def test_merge_verified_discovery_noop_without_row(db_session):
+    assert knowledge_service.merge_verified_discovery(
+        "Ghost", "", {"routes": [{"path": "/x"}]}, owner_id=None
+    ) == 0
+
+
+def test_merge_verified_discovery_noop_when_nothing_discovered(db_session):
+    _seed_kb_row(db_session)
+    assert knowledge_service.merge_verified_discovery(
+        "Surency Platform", "", {"routes": [], "selectors": []}, owner_id=None
+    ) == 0
+
+
 def test_build_surfaces_claude_error(client, monkeypatch):
     from app.services.claude_cli import ClaudeError
 
