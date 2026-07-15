@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import DOMPurify from "dompurify";
 import { ArrowLeft, CheckSquare, ExternalLink, FileText, GitBranch, RefreshCw } from "lucide-react";
 import { Pill, StatusBadge, priorityColor, providerGlyph } from "@/components/ui/badges";
@@ -37,6 +38,7 @@ function AcceptanceCriteriaHtml({ html }: { html: string }) {
 
 /** Test cases created in the provider and linked back to this work item. */
 function LinkedTestCases({ externalId }: { externalId: string }) {
+  const { t } = useTranslation("tickets");
   const { data: cases, isFetching, refetch } = useLinkedCases(externalId);
   const linked = cases ?? [];
   const has = linked.length > 0;
@@ -44,10 +46,10 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
   return (
     <div className="glass mb-[14px] rounded-[22px] p-5">
       <div className="mb-[14px] flex items-center gap-2.5">
-        <span className="flex-1 text-[14px] font-bold">Linked test cases</span>
+        <span className="flex-1 text-[14px] font-bold">{t("linkedCases.title")}</span>
         {has && (
           <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)">
-            {linked.length} linked
+            {t("linkedCases.count", { count: linked.length })}
           </Pill>
         )}
         <button
@@ -55,7 +57,7 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
           className="flex items-center gap-1.5 rounded-[10px] border border-white/[0.1] bg-white/[0.05] px-3 py-[7px] text-[12px] font-semibold text-ink-soft hover:bg-white/[0.1]"
         >
           <RefreshCw size={13} strokeWidth={2.2} className={isFetching ? "animate-[spin_.7s_linear_infinite]" : ""} />
-          Refresh
+          {t("linkedCases.refresh")}
         </button>
       </div>
 
@@ -64,10 +66,10 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
           {/* Desktop — 4-column table. */}
           <div className="hidden overflow-hidden rounded-[13px] border border-white/[0.07] md:block">
             <div className="grid grid-cols-[78px_1fr_92px_92px] gap-2.5 bg-white/[0.04] px-3.5 py-[9px] text-[10px] font-bold tracking-[.05em] text-[#7a7a8c]">
-              <span>ID</span>
-              <span>TITLE</span>
-              <span>STATUS</span>
-              <span>LINK</span>
+              <span>{t("linkedCases.colId")}</span>
+              <span>{t("linkedCases.colTitle")}</span>
+              <span>{t("linkedCases.colStatus")}</span>
+              <span>{t("linkedCases.colLink")}</span>
             </div>
             {linked.map((lc) => (
               <LinkedRow key={lc.id} lc={lc} />
@@ -84,9 +86,9 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
       ) : (
         <div className="flex flex-col items-center rounded-[14px] border border-dashed border-white/[0.1] bg-white/[0.02] px-5 py-7 text-center">
           <CheckSquare size={26} color="#6c6c7e" strokeWidth={1.8} className="mb-2.5" />
-          <div className="mb-1 text-[13.5px] font-semibold">No test cases linked yet</div>
+          <div className="mb-1 text-[13.5px] font-semibold">{t("linkedCases.empty")}</div>
           <div className="max-w-[320px] text-[12.5px] leading-relaxed text-[#8b8b9e]">
-            Approve and create test cases in the Review Center to link them to this work item.
+            {t("linkedCases.emptyBody")}
           </div>
         </div>
       )}
@@ -96,6 +98,7 @@ function LinkedTestCases({ externalId }: { externalId: string }) {
 
 /** Mobile stand-in for `LinkedRow` — one card per linked test case instead of a table row. */
 function LinkedCard({ lc }: { lc: LinkedTestCaseOut }) {
+  const { t } = useTranslation("tickets");
   const [color, bg] = CASE_STATUS_COLOR[lc.status] ?? ["#a78bfa", "rgba(139,92,246,.14)"];
   const prov = providerLabel[lc.providerKind as ProviderKind] ?? lc.providerKind;
   return (
@@ -116,12 +119,12 @@ function LinkedCard({ lc }: { lc: LinkedTestCaseOut }) {
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-violet hover:underline"
-          title={`Open in ${prov}`}
+          title={t("linkedCases.openIn", { provider: prov })}
         >
-          Open <ExternalLink size={12} strokeWidth={2.2} />
+          {t("linkedCases.open")} <ExternalLink size={12} strokeWidth={2.2} />
         </a>
       ) : lc.linked ? (
-        <span className="text-[11px] text-[#6ee7b7]">linked</span>
+        <span className="text-[11px] text-[#6ee7b7]">{t("linkedCases.linked")}</span>
       ) : (
         <span className="text-[11px] text-[#7a7a8c]">—</span>
       )}
@@ -130,6 +133,7 @@ function LinkedCard({ lc }: { lc: LinkedTestCaseOut }) {
 }
 
 function LinkedRow({ lc }: { lc: LinkedTestCaseOut }) {
+  const { t } = useTranslation("tickets");
   const [color, bg] = CASE_STATUS_COLOR[lc.status] ?? ["#a78bfa", "rgba(139,92,246,.14)"];
   const prov = providerLabel[lc.providerKind as ProviderKind] ?? lc.providerKind;
   return (
@@ -148,12 +152,12 @@ function LinkedRow({ lc }: { lc: LinkedTestCaseOut }) {
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-violet hover:underline"
-            title={`Open in ${prov}`}
+            title={t("linkedCases.openIn", { provider: prov })}
           >
-            Open <ExternalLink size={12} strokeWidth={2.2} />
+            {t("linkedCases.open")} <ExternalLink size={12} strokeWidth={2.2} />
           </a>
         ) : lc.linked ? (
-          <span className="text-[11px] text-[#6ee7b7]">linked</span>
+          <span className="text-[11px] text-[#6ee7b7]">{t("linkedCases.linked")}</span>
         ) : (
           <span className="text-[11px] text-[#7a7a8c]">—</span>
         )}
@@ -163,6 +167,7 @@ function LinkedRow({ lc }: { lc: LinkedTestCaseOut }) {
 }
 
 export function TicketDetail() {
+  const { t } = useTranslation("tickets");
   const { externalId } = useParams();
   const navigate = useNavigate();
   const { data: detail, isLoading } = useTicket(externalId ?? null);
@@ -181,8 +186,8 @@ export function TicketDetail() {
         ) : (
           <EmptyState
             icon={<FileText size={28} color="#8b8b9e" strokeWidth={1.6} />}
-            title="Ticket not found"
-            body="This ticket may have been removed or hasn't been synced yet."
+            title={t("detail.notFound")}
+            body={t("detail.notFoundBody")}
           />
         )}
       </div>
@@ -210,16 +215,16 @@ export function TicketDetail() {
             </div>
             <h1 className="m-0 mb-4 text-xl leading-[1.25] font-black tracking-tight md:text-2xl">{detail.title}</h1>
 
-            <div className="mb-[7px] text-[11px] font-semibold tracking-[0.08em] text-faint">DESCRIPTION</div>
+            <div className="mb-[7px] text-[11px] font-semibold tracking-[0.08em] text-faint">{t("detail.description")}</div>
             <p className="m-0 mb-4 text-[14px] leading-[1.6] text-ink-soft">{detail.description}</p>
 
             <div className="mb-[18px] rounded-[13px] border border-white/[0.06] bg-white/[0.03] p-[14px]">
-              <div className="mb-[6px] text-[11px] font-semibold tracking-[0.08em] text-faint">NOTE</div>
+              <div className="mb-[6px] text-[11px] font-semibold tracking-[0.08em] text-faint">{t("detail.note")}</div>
               <p className="m-0 text-[13px] leading-[1.6] text-ink-dim">{detail.note}</p>
             </div>
 
             <div className="mb-[10px] text-[11px] font-semibold tracking-[0.08em] text-faint">
-              ACCEPTANCE CRITERIA
+              {t("detail.acceptanceCriteria")}
               {detail.acceptanceCriteria.length >= 2 && <> &middot; {detail.acceptanceCriteria.length}</>}
             </div>
             {detail.acceptanceCriteria.length >= 2 ? (
@@ -238,17 +243,17 @@ export function TicketDetail() {
             ) : detail.acceptanceCriteria.length === 1 ? (
               <p className="m-0 text-[13px] leading-[1.6] text-[#b4b4c2]">{detail.acceptanceCriteria[0]}</p>
             ) : (
-              <p className="m-0 text-[13px] text-ink-dim">No acceptance criteria.</p>
+              <p className="m-0 text-[13px] text-ink-dim">{t("detail.noAcceptanceCriteria")}</p>
             )}
           </div>
 
           <LinkedTestCases externalId={detail.externalId} />
 
           <div className="glass rounded-[22px] p-5">
-            <div className="mb-[14px] text-[14px] font-bold">Comments</div>
+            <div className="mb-[14px] text-[14px] font-bold">{t("detail.comments")}</div>
             <div className="flex flex-col gap-[14px]">
               {detail.comments.length === 0 ? (
-                <p className="m-0 text-[13px] text-ink-dim">No comments yet.</p>
+                <p className="m-0 text-[13px] text-ink-dim">{t("detail.noComments")}</p>
               ) : (
                 detail.comments.map((c, i) => (
                   <div key={i} className="flex gap-[11px]">
@@ -277,23 +282,23 @@ export function TicketDetail() {
         <div className="flex flex-col gap-[14px] md:sticky md:top-0">
           <div className="glass rounded-[20px] p-[18px]">
             <div className="flex flex-col gap-[13px]">
-              <Row label="Priority">
+              <Row label={t("detail.priority")}>
                 <span className="font-bold" style={{ color: priorityColor(detail.priority) }}>
                   {detail.priority}
                 </span>
               </Row>
-              <Row label="Status">
+              <Row label={t("detail.status")}>
                 <span className="font-semibold">{detail.status}</span>
               </Row>
-              <Row label="Assignee">
+              <Row label={t("detail.assignee")}>
                 <span className="font-semibold">{detail.assignee}</span>
               </Row>
-              <Row label="Sprint">
+              <Row label={t("detail.sprint")}>
                 <span className="font-semibold">{detail.sprint}</span>
               </Row>
               {detail.labels.length > 0 && (
                 <div>
-                  <div className="mb-2 text-[13px] text-ink-dim">Labels</div>
+                  <div className="mb-2 text-[13px] text-ink-dim">{t("detail.labels")}</div>
                   <div className="flex flex-wrap gap-[6px]">
                     {detail.labels.map((l) => (
                       <Pill key={l} color="#c3c3d0" bg="rgba(255,255,255,.06)">
@@ -307,10 +312,10 @@ export function TicketDetail() {
           </div>
 
           <div className="glass rounded-[20px] p-[18px]">
-            <div className="mb-3 text-[13px] font-bold">Linked pull requests</div>
+            <div className="mb-3 text-[13px] font-bold">{t("detail.linkedPrs")}</div>
             <div className="flex flex-col gap-[9px]">
               {detail.linkedPrs.length === 0 ? (
-                <p className="m-0 text-[12px] text-ink-dim">No linked pull requests.</p>
+                <p className="m-0 text-[12px] text-ink-dim">{t("detail.noLinkedPrs")}</p>
               ) : (
                 detail.linkedPrs.map((pr, i) => (
                   <div key={i} className="flex items-center gap-[10px] rounded-[11px] bg-white/[0.03] p-[9px]">
@@ -322,7 +327,7 @@ export function TicketDetail() {
                           target="_blank"
                           rel="noreferrer"
                           className="flex items-center gap-1 overflow-hidden text-[12px] font-semibold text-violet hover:underline"
-                          title="Open pull request"
+                          title={t("detail.openPr")}
                         >
                           <span className="truncate">{pr.title}</span>
                           <ExternalLink size={12} strokeWidth={2.2} className="shrink-0" />
@@ -344,10 +349,10 @@ export function TicketDetail() {
               )}
             </div>
 
-            <div className="mt-4 mb-3 text-[13px] font-bold">Attachments</div>
+            <div className="mt-4 mb-3 text-[13px] font-bold">{t("detail.attachments")}</div>
             <div className="flex flex-col gap-2">
               {detail.attachments.length === 0 ? (
-                <p className="m-0 text-[12px] text-ink-dim">No attachments.</p>
+                <p className="m-0 text-[12px] text-ink-dim">{t("detail.noAttachments")}</p>
               ) : (
                 detail.attachments.map((at, i) => (
                   <div
@@ -369,13 +374,14 @@ export function TicketDetail() {
 }
 
 function BackButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation("tickets");
   return (
     <button
       onClick={onClick}
       className="mb-4 flex cursor-pointer items-center gap-[7px] border-none bg-transparent p-0 text-[12.5px] font-semibold text-ink-dim hover:text-[#c7c7d4]"
     >
       <ArrowLeft size={14} strokeWidth={2.2} />
-      All tickets
+      {t("detail.allTickets")}
     </button>
   );
 }

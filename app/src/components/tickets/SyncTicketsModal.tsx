@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect, Select } from "@/components/ui/Dropdown";
@@ -44,6 +45,7 @@ export function SyncTicketsModal({
   sourceLabel: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation("tickets");
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<"basic" | "advanced">("basic");
   const [project, setProject] = useState<string | null>(configuredProject ?? null);
@@ -95,10 +97,10 @@ export function SyncTicketsModal({
     };
     sync.mutate(req, {
       onSuccess: (res) => {
-        toast.success(`Synced ${res.synced} ticket${res.synced === 1 ? "" : "s"}`);
+        toast.success(t("syncDialog.syncedCount", { count: res.synced }));
         onClose();
       },
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Sync failed"),
+      onError: (err) => toast.error(err instanceof Error ? err.message : t("syncDialog.syncFailed")),
     });
   };
 
@@ -137,18 +139,18 @@ export function SyncTicketsModal({
             {meta?.glyph ?? "?"}
           </div>
           <div className="flex-1">
-            <div className="text-[17px] font-extrabold">Sync tickets</div>
-            <div className="text-[12px] text-ink-dim">Pull from {sourceLabel}</div>
+            <div className="text-[17px] font-extrabold">{t("syncDialog.title")}</div>
+            <div className="text-[12px] text-ink-dim">{t("syncDialog.pullFrom", { source: sourceLabel })}</div>
           </div>
         </div>
 
         <div className="shrink-0 p-[16px_24px_4px]">
           <div className="flex gap-1.5 rounded-[11px] border border-white/[0.07] bg-white/[0.04] p-1">
             <button className={segStyle(tab === "basic")} onClick={() => setTab("basic")}>
-              Basic
+              {t("syncDialog.basic")}
             </button>
             <button className={segStyle(tab === "advanced")} onClick={() => setTab("advanced")}>
-              Advanced
+              {t("syncDialog.advanced")}
             </button>
           </div>
         </div>
@@ -161,68 +163,67 @@ export function SyncTicketsModal({
           {tab === "basic" ? (
             <>
               <div className="mb-2.5 text-[11px] font-bold tracking-[0.06em] text-[#6c6c7e]">
-                WHAT TO PULL
+                {t("syncDialog.whatToPull")}
               </div>
               <div className="grid grid-cols-1 gap-x-2.5 gap-y-3 md:grid-cols-2">
-                <Field label="Project">
+                <Field label={t("syncDialog.project")}>
                   <Select
                     value={project}
                     options={projectOptions}
-                    placeholder={configuredProject ?? "Select project"}
+                    placeholder={configuredProject ?? t("syncDialog.selectProject")}
                     onChange={setProject}
-                    emptyLabel="No projects found"
+                    emptyLabel={t("syncDialog.noProjectsFound")}
                     fullWidth
                   />
                 </Field>
-                <Field label={isAdo ? "Iteration" : "Sprint"}>
+                <Field label={isAdo ? t("syncDialog.iteration") : t("syncDialog.sprint")}>
                   <Select
                     value={sprintPath}
                     options={sprintOptions}
-                    placeholder="All open items"
+                    placeholder={t("syncDialog.allOpenItems")}
                     onChange={setSprintPath}
-                    emptyLabel="No sprints found"
+                    emptyLabel={t("syncDialog.noSprintsFound")}
                     fullWidth
                   />
                 </Field>
               </div>
               <div className="mt-3 text-[12px] text-ink-dim">
                 {sprintPath
-                  ? "Pulls the chosen iteration's tickets."
-                  : "No iteration chosen — pulls the project's open items."}
+                  ? t("syncDialog.pullsChosenIteration")
+                  : t("syncDialog.noIterationChosen")}
               </div>
             </>
           ) : (
             <>
               <div className="mb-2.5 text-[11px] font-bold tracking-[0.06em] text-[#6c6c7e]">
-                FILTER BY FIELD
+                {t("syncDialog.filterByField")}
               </div>
               {hasAdvancedFields ? (
                 <div className="grid grid-cols-1 gap-x-2.5 gap-y-3 md:grid-cols-2">
                   {sprintOptions.length > 0 && (
-                    <Field label="Sprint">
-                      <Select value={sprintPath} options={sprintOptions} placeholder="Any" onChange={setSprintPath} fullWidth />
+                    <Field label={t("syncDialog.sprint")}>
+                      <Select value={sprintPath} options={sprintOptions} placeholder={t("syncDialog.any")} onChange={setSprintPath} fullWidth />
                     </Field>
                   )}
                   {isAdo && areaOptions.length > 0 && (
-                    <Field label="Area path">
-                      <Select value={areaPath} options={areaOptions} placeholder="Any" onChange={setAreaPath} fullWidth />
+                    <Field label={t("syncDialog.areaPath")}>
+                      <Select value={areaPath} options={areaOptions} placeholder={t("syncDialog.any")} onChange={setAreaPath} fullWidth />
                     </Field>
                   )}
                   {stateOptions.length > 0 && (
-                    <Field label={isAdo ? "States" : "Status"}>
-                      <MultiSelect values={states} options={stateOptions} placeholder="Any" onChange={setStates} fullWidth />
+                    <Field label={isAdo ? t("syncDialog.states") : t("syncDialog.status")}>
+                      <MultiSelect values={states} options={stateOptions} placeholder={t("syncDialog.any")} onChange={setStates} fullWidth />
                     </Field>
                   )}
                   {typeOptions.length > 0 && (
-                    <Field label={isAdo ? "Work item types" : "Issue type"}>
-                      <MultiSelect values={workItemTypes} options={typeOptions} placeholder="Any" onChange={setWorkItemTypes} fullWidth />
+                    <Field label={isAdo ? t("syncDialog.workItemTypes") : t("syncDialog.issueType")}>
+                      <MultiSelect values={workItemTypes} options={typeOptions} placeholder={t("syncDialog.any")} onChange={setWorkItemTypes} fullWidth />
                     </Field>
                   )}
                 </div>
               ) : (
                 <div className="rounded-[12px] border border-dashed border-white/[0.14] p-4 text-center text-[12.5px] text-ink-dim">
-                  No filterable fields for this provider — use Basic scope, or connect a work-item
-                  provider that exposes fields.
+                  {t("syncDialog.noFilterableFields")}
                 </div>
               )}
             </>
@@ -233,13 +234,13 @@ export function SyncTicketsModal({
           className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.07] p-[16px_24px]"
           style={isMobile ? { paddingBottom: "calc(16px + env(safe-area-inset-bottom))" } : undefined}
         >
-          <span className="flex-1 text-[11.5px] text-[#7a7a8c]">Credentials stay encrypted</span>
+          <span className="flex-1 text-[11.5px] text-[#7a7a8c]">{t("syncDialog.credentialsEncrypted")}</span>
           <Button variant="glass" onClick={onClose} disabled={sync.isPending}>
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button onClick={runSync} disabled={sync.isPending || connectionId == null}>
             <RefreshCw size={14} className={sync.isPending ? "animate-[spin_.7s_linear_infinite]" : ""} />
-            {sync.isPending ? "Syncing…" : "Sync now"}
+            {sync.isPending ? t("syncDialog.syncing") : t("syncDialog.syncNow")}
           </Button>
         </div>
       </motion.div>
