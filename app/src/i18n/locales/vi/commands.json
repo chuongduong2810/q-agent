@@ -1,0 +1,52 @@
+{
+  "label": "Bảng lệnh",
+  "placeholder": "Tìm màn hình, lượt chạy, hoặc hỏi Q‑Agent…",
+  "empty": "Không có lệnh phù hợp.",
+  "sections": {
+    "Actions": "Thao tác",
+    "Navigate": "Điều hướng"
+  },
+  "items": {
+    "create-run": { "label": "Tạo lượt chạy", "description": "Tạo một phiên QA mới" },
+    "start-tour": { "label": "Bắt đầu hướng dẫn sản phẩm", "description": "Tham quan có hướng dẫn về Q‑Agent" },
+    "run-execution": { "label": "Chạy thực thi", "description": "Khởi chạy quy trình chạy" },
+    "dashboard": { "label": "Đến Bảng điều khiển", "description": "Trung tâm điều hành" },
+    "tickets": { "label": "Đến Tickets", "description": "Đồng bộ từ nhà cung cấp" },
+    "runs": { "label": "Đến Lượt chạy", "description": "Tất cả các lượt chạy theo lô" },
+    "review": { "label": "Đến Trung tâm đánh giá", "description": "Phê duyệt & chỉnh sửa case" },
+    "automation": { "label": "Đến Tự động hóa", "description": "Playwright & kịch bản" },
+    "console": { "label": "Đến Thực thi", "description": "Bảng điều khiển chạy trực tiếp" },
+    "evidence": { "label": "Đến Bằng chứng", "description": "Ảnh chụp & tạo phẩm" },
+    "reports": { "label": "Đến Báo cáo", "description": "Tỷ lệ đạt & chi phí" },
+    "settings": { "label": "Đến Cài đặt", "description": "Nhà cung cấp & cấu hình AI" }
+  },
+  "footer": {
+    "open": "mở",
+    "navigate": "điều hướng",
+    "poweredBy": "Được cung cấp bởi Claude"
+  },
+  "dropdown": {
+    "noOptions": "Không có tùy chọn"
+  },
+  "overflow": {
+    "moreActions": "Thêm thao tác"
+  },
+  "confirmDialog": {
+    "neverMind": "Bỏ qua",
+    "working": "Đang xử lý…"
+  },
+  "toast": {
+    "dismiss": "Đóng"
+  },
+  "pipeline": {
+    "sync": "Đồng bộ",
+    "select": "Chọn",
+    "analyze": "Phân tích",
+    "review": "Đánh giá",
+    "link": "Liên kết",
+    "automate": "Tự động hóa",
+    "execute": "Thực thi",
+    "evidence": "Bằng chứng",
+    "publish": "Xuất bản"
+  }
+}

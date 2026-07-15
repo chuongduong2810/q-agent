@@ -11,6 +11,7 @@
  * `index.css` (`qtoastIn` / `qtoastBar` / `qtoastCircle` / `qtoastCheck`).
  */
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { toast as sonner, type ExternalToast } from "sonner";
 
 type QType = "success" | "error" | "message";
@@ -89,6 +90,7 @@ function QToast({
   duration: number;
 }) {
   const a = ACCENTS[type];
+  const { t } = useTranslation("commands");
   return (
     <div
       style={{
@@ -138,7 +140,7 @@ function QToast({
 
       <button
         type="button"
-        aria-label="Dismiss"
+        aria-label={t("toast.dismiss")}
         onClick={() => sonner.dismiss(id)}
         style={{
           flexShrink: 0,

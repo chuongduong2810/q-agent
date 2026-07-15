@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 
 interface ConfirmDialogProps {
@@ -26,12 +27,13 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel,
-  cancelLabel = "Never mind",
+  cancelLabel,
   danger = false,
   loading = false,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation("commands");
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -57,7 +59,7 @@ export function ConfirmDialog({
             <div className="mb-5 text-[13px] leading-[1.5] text-ink-dim">{message}</div>
             <div className="flex justify-end gap-2.5">
               <Button variant="glass" size="sm" onClick={onClose} disabled={loading}>
-                {cancelLabel}
+                {cancelLabel ?? t("confirmDialog.neverMind")}
               </Button>
               <Button
                 variant={danger ? "danger" : "primary"}
@@ -65,7 +67,7 @@ export function ConfirmDialog({
                 onClick={onConfirm}
                 disabled={loading}
               >
-                {loading ? "Working…" : confirmLabel}
+                {loading ? t("confirmDialog.working") : confirmLabel}
               </Button>
             </div>
           </motion.div>

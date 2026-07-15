@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { MoreHorizontal } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 
 const MENU_WIDTH = 190;
 
@@ -21,7 +22,8 @@ export interface OverflowItem {
  * outside-click / Escape / selection. Mirrors `RunActionsMenu`'s pattern,
  * generalized to a caller-supplied item list.
  */
-export function OverflowMenu({ items, title = "More actions" }: { items: OverflowItem[]; title?: string }) {
+export function OverflowMenu({ items, title }: { items: OverflowItem[]; title?: string }) {
+  const { t } = useTranslation("commands");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -69,7 +71,7 @@ export function OverflowMenu({ items, title = "More actions" }: { items: Overflo
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        title={title}
+        title={title ?? t("overflow.moreActions")}
         className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border border-white/[0.09] bg-white/5 text-ink-soft transition-colors hover:bg-white/10"
         style={open ? { background: "rgba(255,255,255,.12)" } : undefined}
       >
