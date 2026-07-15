@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ProjectMeta } from "./types";
 
 /** Project detail header: back link, provider glyph, name/provider line, and the
@@ -24,13 +25,14 @@ export function ProjectHeader({
   statusLabel: string;
   onBack: () => void;
 }) {
+  const { t } = useTranslation("projects");
   return (
     <>
       <button
         onClick={onBack}
         className="mb-3.5 flex cursor-pointer items-center gap-[7px] border-none bg-transparent p-0 text-[12.5px] font-semibold text-ink-dim hover:text-[#c7c7d4]"
       >
-        <ArrowLeft size={14} strokeWidth={2.2} /> All projects
+        <ArrowLeft size={14} strokeWidth={2.2} /> {t("header.back")}
       </button>
 
       <div className="mb-4 flex flex-col gap-3.5 md:flex-row md:items-center">
@@ -55,7 +57,7 @@ export function ProjectHeader({
         >
           <span className="h-2 w-2 rounded-full" style={{ background: statusDot }} />
           <span className="text-[12.5px] font-bold" style={{ color: statusColor }}>
-            Knowledge: {statusLabel}
+            {t("header.knowledge", { status: statusLabel })}
           </span>
         </div>
       </div>

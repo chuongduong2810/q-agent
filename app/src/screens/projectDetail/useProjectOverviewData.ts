@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   ALL_TICKETS_PAGE_SIZE,
   useProjectRepos,
@@ -20,6 +21,7 @@ import type { ProjectMeta } from "./types";
  * @param key The decoded project name (route param).
  */
 export function useProjectOverviewData(key: string) {
+  const { t } = useTranslation("projects");
   const { data: projects } = useProjects();
   const { data: repos } = useProjectRepos(key);
   const { data: ticketsPage } = useTickets({ pageSize: ALL_TICKETS_PAGE_SIZE });
@@ -32,7 +34,7 @@ export function useProjectOverviewData(key: string) {
   const indexedRepos = repoList.filter((r) => r.status === "indexed");
   const meta: ProjectMeta = {
     name: key,
-    repo: repoList.length ? `${repoList.length} repos` : "",
+    repo: repoList.length ? t("header.repoCount", { count: repoList.length }) : "",
     framework: "Playwright",
     provider: providerLabel[providerKind],
     providerKind,
@@ -48,8 +50,8 @@ export function useProjectOverviewData(key: string) {
     : 0;
   const [, statusColor, statusBg, statusDot] = knowledgeStatusStyle(status);
   const statusLabel = repoList.length
-    ? `${indexedRepos.length}/${repoList.length} repos indexed`
-    : "no repos";
+    ? t("header.reposIndexed", { indexed: indexedRepos.length, total: repoList.length })
+    : t("header.noRepos");
   const [glyph, glyphBg] = providerGlyph[meta.providerKind] ?? ["?", "#6b7280"];
   const glyphColor = meta.providerKind === "github" ? "#12121a" : "#fff";
 

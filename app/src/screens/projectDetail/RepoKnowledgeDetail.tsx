@@ -1,5 +1,6 @@
 import { ChevronRight, GitBranch, RotateCw, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { confidenceColor } from "@/data/projects";
@@ -18,6 +19,7 @@ export function RepoKnowledgeDetail({
   building: boolean;
   onBuild: () => void;
 }) {
+  const { t } = useTranslation("projects");
   const { data: knowledge } = useRepoKnowledge(
     projectKey,
     repoMeta.status === "indexed" ? repoMeta.name : null,
@@ -37,11 +39,10 @@ export function RepoKnowledgeDetail({
           }}
         />
         <h2 className="m-0 mb-2 text-[19px] font-extrabold">
-          Building knowledge for <span className="font-mono">{repoMeta.name}</span>…
+          {t("repoKnowledge.buildingTitle", { repo: repoMeta.name })}
         </h2>
         <p className="m-0 max-w-[420px] text-[13.5px] leading-relaxed text-ink-dim">
-          Cloning the repo and analysing the source — this can take a few minutes. You can leave this
-          page; it keeps running.
+          {t("repoKnowledge.buildingBody")}
         </p>
       </div>
     );
@@ -57,13 +58,14 @@ export function RepoKnowledgeDetail({
           <Sparkles size={30} color="#fb7185" strokeWidth={1.9} />
         </div>
         <h2 className="m-0 mb-2 text-[19px] font-extrabold">
-          Couldn&apos;t build <span className="font-mono">{repoMeta.name}</span>
+          {t("repoKnowledge.errorTitle", { repo: repoMeta.name })}
         </h2>
         <p className="m-0 mb-[22px] max-w-[420px] text-[13.5px] leading-relaxed text-[#fb7185]">
-          {repoMeta.lastError || "Knowledge build failed."}
+          {repoMeta.lastError || t("repoKnowledge.buildFailed")}
         </p>
         <Button variant="primary" size="lg" onClick={onBuild} disabled={building}>
-          <RotateCw size={16} strokeWidth={2.3} /> {building ? "Building…" : "Retry build"}
+          <RotateCw size={16} strokeWidth={2.3} />{" "}
+          {building ? t("repoKnowledge.building") : t("repoKnowledge.retryBuild")}
         </Button>
       </div>
     );
@@ -79,14 +81,14 @@ export function RepoKnowledgeDetail({
           <Sparkles size={30} color="#a78bfa" strokeWidth={1.9} />
         </div>
         <h2 className="m-0 mb-2 text-[19px] font-extrabold">
-          <span className="font-mono">{repoMeta.name}</span> isn&apos;t indexed yet
+          {t("repoKnowledge.notIndexedTitle", { repo: repoMeta.name })}
         </h2>
         <p className="m-0 mb-[22px] max-w-[420px] text-[13.5px] leading-relaxed text-ink-dim">
-          Build this repository&apos;s knowledge base so Q&#8209;Agent learns its routes, selectors,
-          auth flow and conventions before generating tests.
+          {t("repoKnowledge.notIndexedBody")}
         </p>
         <Button variant="primary" size="lg" onClick={onBuild} disabled={building}>
-          <Sparkles size={16} strokeWidth={2.3} /> {building ? "Building…" : "Build knowledge"}
+          <Sparkles size={16} strokeWidth={2.3} />{" "}
+          {building ? t("repoKnowledge.building") : t("repoKnowledge.buildKnowledge")}
         </Button>
       </div>
     );
@@ -95,9 +97,9 @@ export function RepoKnowledgeDetail({
   const kn = (knowledge?.knowledge ?? {}) as Partial<KnowledgeBody>;
   const confidence = knowledge?.confidence ?? repoMeta.confidence;
   const sections = [
-    { key: "arch", label: "Application architecture", body: kn.architecture || "—" },
-    { key: "domain", label: "Business domain", body: kn.domain || "—" },
-    { key: "locator", label: "Locator strategy", body: kn.locator || "—" },
+    { key: "arch", label: t("repoKnowledge.sectionArch"), body: kn.architecture || "—" },
+    { key: "domain", label: t("repoKnowledge.sectionDomain"), body: kn.domain || "—" },
+    { key: "locator", label: t("repoKnowledge.sectionLocator"), body: kn.locator || "—" },
   ];
 
   return (
@@ -118,9 +120,10 @@ export function RepoKnowledgeDetail({
               </span>
             </div>
             <div className="text-[12px] text-[#8b8b9e]">
-              Last indexed{" "}
-              {repoMeta.lastIndexed ? new Date(repoMeta.lastIndexed).toLocaleString() : "—"} &middot;{" "}
-              {confidence}% confidence
+              {t("repoKnowledge.lastIndexed", {
+                date: repoMeta.lastIndexed ? new Date(repoMeta.lastIndexed).toLocaleString() : "—",
+                confidence,
+              })}
             </div>
             {repoMeta.docPath && (
               <div className="mt-0.5 truncate font-mono text-[11px] text-[#6c6c7e]" title={repoMeta.docPath}>
@@ -130,7 +133,8 @@ export function RepoKnowledgeDetail({
           </div>
         </div>
         <Button variant="glass" onClick={onBuild} disabled={building}>
-          <RotateCw size={14} strokeWidth={2.2} /> {building ? "Re-indexing…" : "Re-index"}
+          <RotateCw size={14} strokeWidth={2.2} />{" "}
+          {building ? t("repoKnowledge.reindexing") : t("repoKnowledge.reindex")}
         </Button>
       </div>
 
@@ -140,34 +144,42 @@ export function RepoKnowledgeDetail({
           style={{ background: "rgba(251,191,36,.1)", border: "1px solid rgba(251,191,36,.28)" }}
         >
           <span className="text-[13px] flex-1 text-[#fbdf9e]">
-            This repository changed since the last index. Rebuilding its knowledge base is recommended.
+            {t("repoKnowledge.needsRefresh")}
           </span>
           <button
             onClick={onBuild}
             className="cursor-pointer rounded-[10px] border-none bg-[#fbbf24] px-3.5 py-2 text-[12.5px] font-bold text-[#3a2e05]"
           >
-            Rebuild now
+            {t("repoKnowledge.rebuildNow")}
           </button>
         </div>
       )}
 
       <div className="mb-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-3">
         <GlassCard className="p-[18px]">
-          <div className="mb-3 text-[12.5px] font-semibold text-[#9494a6]">Base URL</div>
+          <div className="mb-3 text-[12.5px] font-semibold text-[#9494a6]">
+            {t("repoKnowledge.baseUrl")}
+          </div>
           <div className="break-all font-mono text-[13px] font-bold">{kn.base_url || "—"}</div>
           <div className="mt-1.5 text-[12px] text-[#8b8b9e]">
-            Branch: <b className="text-ink-soft">{kn.branch || repoMeta.defaultBranch || "main"}</b>
+            {t("repoKnowledge.branch", { branch: kn.branch || repoMeta.defaultBranch || "main" })}
           </div>
         </GlassCard>
         <GlassCard className="p-[18px]">
-          <div className="mb-3 text-[12.5px] font-semibold text-[#9494a6]">Routes · selectors</div>
+          <div className="mb-3 text-[12.5px] font-semibold text-[#9494a6]">
+            {t("repoKnowledge.routesSelectors")}
+          </div>
           <div className="text-[16px] font-extrabold">
             {(kn.routes?.length ?? 0)} · {(kn.selectors?.length ?? 0)}
           </div>
-          <div className="mt-1.5 text-[12px] text-[#8b8b9e]">discovered from source</div>
+          <div className="mt-1.5 text-[12px] text-[#8b8b9e]">
+            {t("repoKnowledge.discoveredFromSource")}
+          </div>
         </GlassCard>
         <GlassCard className="p-[18px]">
-          <div className="mb-3 text-[12.5px] font-semibold text-[#9494a6]">Knowledge confidence</div>
+          <div className="mb-3 text-[12.5px] font-semibold text-[#9494a6]">
+            {t("repoKnowledge.knowledgeConfidence")}
+          </div>
           <div className="mb-2 text-[22px] font-black" style={{ color: confidenceColor(confidence) }}>
             {confidence}%
           </div>
@@ -182,19 +194,19 @@ export function RepoKnowledgeDetail({
 
       <div className="mb-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-[1.3fr_1fr]">
         <GlassCard className="p-5">
-          <div className="mb-3 text-[13px] font-bold">Technology stack</div>
+          <div className="mb-3 text-[13px] font-bold">{t("repoKnowledge.technologyStack")}</div>
           <div className="mb-[18px] flex flex-wrap gap-2">
-            {(kn.stack ?? []).map((t) => (
+            {(kn.stack ?? []).map((tech) => (
               <span
-                key={t}
+                key={tech}
                 className="rounded-[10px] px-3 py-1.5 text-[12px] font-semibold text-violet"
                 style={{ background: "rgba(139,92,246,.14)" }}
               >
-                {t}
+                {tech}
               </span>
             ))}
           </div>
-          <div className="mb-3 text-[13px] font-bold">Reusable test utilities</div>
+          <div className="mb-3 text-[13px] font-bold">{t("repoKnowledge.reusableUtilities")}</div>
           <div className="flex flex-wrap gap-2">
             {(kn.utilities ?? []).map((u) => (
               <span
@@ -207,12 +219,12 @@ export function RepoKnowledgeDetail({
           </div>
         </GlassCard>
         <GlassCard className="p-5">
-          <div className="mb-3.5 text-[13px] font-bold">Existing Playwright assets</div>
+          <div className="mb-3.5 text-[13px] font-bold">{t("repoKnowledge.existingAssets")}</div>
           <div className="flex flex-col gap-3">
             {[
-              ["Spec files", kn.assets ?? 0, "#67e8f9"],
-              ["Page objects", kn.pageObjects ?? 0, "#a78bfa"],
-              ["Shared fixtures", kn.fixtures ?? 0, "#6ee7b7"],
+              [t("repoKnowledge.specFiles"), kn.assets ?? 0, "#67e8f9"],
+              [t("repoKnowledge.pageObjects"), kn.pageObjects ?? 0, "#a78bfa"],
+              [t("repoKnowledge.sharedFixtures"), kn.fixtures ?? 0, "#6ee7b7"],
             ].map(([label, val, color]) => (
               <div key={label as string} className="flex items-center gap-3">
                 <div className="flex-1 text-[13px] font-semibold">{label}</div>

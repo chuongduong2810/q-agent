@@ -1,4 +1,5 @@
 import { ArrowRight, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { confidenceColor } from "@/data/projects";
@@ -13,11 +14,12 @@ export function Overview({
   confidence: number;
   onView: () => void;
 }) {
+  const { t } = useTranslation("projects");
   const stats = [
-    { label: "Tickets", value: String(meta.tickets), color: "#ececf1" },
-    { label: "Active runs", value: String(meta.runs), color: "#a78bfa" },
-    { label: "Pass rate", value: meta.rate, color: "#6ee7b7" },
-    { label: "Knowledge confidence", value: `${confidence}%`, color: confidenceColor(confidence) },
+    { label: t("overview.tickets"), value: String(meta.tickets), color: "#ececf1" },
+    { label: t("overview.activeRuns"), value: String(meta.runs), color: "#a78bfa" },
+    { label: t("overview.passRate"), value: meta.rate, color: "#6ee7b7" },
+    { label: t("overview.knowledgeConfidence"), value: `${confidence}%`, color: confidenceColor(confidence) },
   ];
   return (
     <>
@@ -51,18 +53,14 @@ export function Overview({
               <Sparkles size={26} color="#fff" strokeWidth={2.2} />
             </div>
             <div className="flex-1">
-              <div className="mb-1 text-[17px] font-extrabold">
-                Project Knowledge powers every AI workflow
-              </div>
+              <div className="mb-1 text-[17px] font-extrabold">{t("overview.calloutTitle")}</div>
               <p className="m-0 max-w-[520px] text-[13px] leading-relaxed text-[#c3c3d4]">
-                Before analysing requirements, generating test cases, or writing Playwright, Q&#8209;Agent
-                reuses what it learned about this repository — architecture, page objects, fixtures and
-                conventions.
+                {t("overview.calloutBody")}
               </p>
             </div>
           </div>
           <Button variant="white" onClick={onView} className="w-full shrink-0 md:w-auto">
-            View Project Knowledge <ArrowRight size={14} strokeWidth={2.3} />
+            {t("overview.viewKnowledge")} <ArrowRight size={14} strokeWidth={2.3} />
           </Button>
         </div>
       </div>

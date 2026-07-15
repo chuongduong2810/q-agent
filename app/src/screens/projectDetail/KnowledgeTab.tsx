@@ -1,5 +1,6 @@
 import { GitBranch, Plus, Star } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { providerLabel } from "@/data/projects";
@@ -35,6 +36,7 @@ export function KnowledgeTab({
   repos: RepoKnowledgeOut[];
   onManageRepos: () => void;
 }) {
+  const { t } = useTranslation("projects");
   const buildRepo = useBuildRepoKnowledge(projectKey);
   const defaultRepoName = repos.find((r) => r.default)?.name ?? repos[0]?.name ?? null;
   const [selected, setSelected] = useState<string | null>(defaultRepoName);
@@ -48,8 +50,8 @@ export function KnowledgeTab({
     buildRepo.mutate(
       { repo, body: { provider: providerLabel[providerKind] } },
       {
-        onSuccess: () => toast.success(`Knowledge built for ${repo}`),
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Knowledge build failed"),
+        onSuccess: () => toast.success(t("knowledgeTab.buildSuccess", { repo })),
+        onError: (e) => toast.error(e instanceof Error ? e.message : t("knowledgeTab.buildError")),
       },
     );
 
@@ -62,13 +64,12 @@ export function KnowledgeTab({
         >
           <GitBranch size={32} color="#a78bfa" strokeWidth={1.9} />
         </div>
-        <h2 className="m-0 mb-2 text-[21px] font-extrabold">No repositories yet</h2>
+        <h2 className="m-0 mb-2 text-[21px] font-extrabold">{t("knowledgeTab.emptyTitle")}</h2>
         <p className="m-0 mb-[22px] max-w-[440px] text-[13.5px] leading-relaxed text-ink-dim">
-          A project can hold many repositories, each with its own knowledge base. Add the repos this
-          project owns, then build knowledge per repo.
+          {t("knowledgeTab.emptyBody")}
         </p>
         <Button variant="primary" size="lg" onClick={onManageRepos}>
-          <Plus size={16} strokeWidth={2.3} /> Manage repositories
+          <Plus size={16} strokeWidth={2.3} /> {t("knowledgeTab.manageRepositories")}
         </Button>
       </div>
     );
@@ -84,12 +85,14 @@ export function KnowledgeTab({
     <div className="grid grid-cols-1 items-start gap-3.5 md:grid-cols-[260px_1fr]">
       <GlassCard className="p-2">
         <div className="flex items-center justify-between px-2.5 pb-1.5 pt-2">
-          <span className="text-[10.5px] font-semibold tracking-wider text-faint">REPOSITORIES</span>
+          <span className="text-[10.5px] font-semibold tracking-wider text-faint">
+            {t("knowledgeTab.repositories")}
+          </span>
           <button
             onClick={onManageRepos}
             className="text-[11px] font-semibold text-violet hover:text-[#c4b5fd]"
           >
-            Manage
+            {t("knowledgeTab.manage")}
           </button>
         </div>
         <div className="flex flex-col gap-0.5">
