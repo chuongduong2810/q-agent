@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Lock, Mail } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { AuthLayout } from "@/components/auth/AuthLayout";
@@ -57,13 +58,14 @@ function GradientButton({
 /** Secondary "Back to sign in" button. */
 function BackToSignInButton() {
   const navigate = useNavigate();
+  const { t } = useTranslation("auth");
   return (
     <button
       type="button"
       onClick={() => navigate("/login")}
       className="h-11 w-full rounded-xl border border-white/[0.12] bg-white/[0.06] text-[13.5px] font-semibold text-white transition hover:bg-white/[0.12]"
     >
-      Back to sign in
+      {t("forgot.back")}
     </button>
   );
 }
@@ -72,6 +74,7 @@ function BackToSignInButton() {
 
 function RequestForm() {
   const navigate = useNavigate();
+  const { t } = useTranslation("auth");
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -90,7 +93,7 @@ function RequestForm() {
       setDevToken(res && res.token ? res.token : null);
       setSent(true);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Couldn't send reset link. Try again.");
+      toast.error(err instanceof ApiError ? err.message : t("forgot.sendError"));
     } finally {
       setSending(false);
     }
@@ -111,21 +114,21 @@ function RequestForm() {
           >
             <Mail size={28} color="#6ee7b7" strokeWidth={2.4} />
           </div>
-          <h2 className="m-0 mb-2 text-[22px] font-extrabold">Check your inbox</h2>
+          <h2 className="m-0 mb-2 text-[22px] font-extrabold">{t("forgot.sent.title")}</h2>
           <p className="m-0 mb-[22px] text-[13.5px] leading-relaxed text-muted">
-            We sent a reset link to{" "}
-            <span className="font-semibold text-[#c7c7d4]">{email.trim()}</span>. It expires in 30
-            minutes.
+            {t("forgot.sent.bodyPrefix")}
+            <span className="font-semibold text-[#c7c7d4]">{email.trim()}</span>
+            {t("forgot.sent.bodySuffix")}
           </p>
           <BackToSignInButton />
           {devToken ? (
             <p className="mt-4 text-[11.5px] text-faint">
-              dev only ·{" "}
+              {t("forgot.sent.devHint")}
               <a
                 href={`/forgot?token=${encodeURIComponent(devToken)}`}
                 className="text-accent underline underline-offset-2"
               >
-                open reset link
+                {t("forgot.sent.devOpenLink")}
               </a>
             </p>
           ) : null}
@@ -142,17 +145,17 @@ function RequestForm() {
         className="mb-5 flex items-center gap-1.5 text-[13px] font-semibold text-muted transition-colors hover:text-ink"
       >
         <ArrowLeft size={15} />
-        Back to sign in
+        {t("forgot.back")}
       </button>
       <div className="mb-6">
-        <h2 className="m-0 mb-1.5 text-[26px] font-black tracking-[-0.02em]">Reset password</h2>
+        <h2 className="m-0 mb-1.5 text-[26px] font-black tracking-[-0.02em]">{t("forgot.title")}</h2>
         <p className="m-0 text-[13.5px] leading-relaxed text-muted">
-          Enter your work email and we&#8217;ll send you a secure reset link.
+          {t("forgot.subtitle")}
         </p>
       </div>
       <form onSubmit={onSubmit} noValidate>
         <div>
-          <AuthLabel htmlFor="reset-email">Work email</AuthLabel>
+          <AuthLabel htmlFor="reset-email">{t("fields.workEmail")}</AuthLabel>
           <TextInput
             id="reset-email"
             type="email"
@@ -160,13 +163,13 @@ function RequestForm() {
             autoFocus
             required
             icon={<Mail size={15} />}
-            placeholder="you@company.com"
+            placeholder={t("fields.emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        <GradientButton busy={sending} busyLabel="Sending…">
-          Send reset link
+        <GradientButton busy={sending} busyLabel={t("forgot.submitting")}>
+          {t("forgot.submit")}
         </GradientButton>
       </form>
     </AuthLayout>
@@ -177,6 +180,7 @@ function RequestForm() {
 
 function ResetForm({ token }: { token: string }) {
   const navigate = useNavigate();
+  const { t } = useTranslation("auth");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -185,24 +189,20 @@ function ResetForm({ token }: { token: string }) {
     e.preventDefault();
     if (saving) return;
     if (password.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+      toast.error(t("reset.tooShort"));
       return;
     }
     if (password !== confirm) {
-      toast.error("Passwords don't match.");
+      toast.error(t("reset.mismatch"));
       return;
     }
     setSaving(true);
     try {
       await api.auth.reset({ token, password });
-      toast.success("Password updated. Sign in with your new password.");
+      toast.success(t("reset.success"));
       navigate("/login");
     } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? err.message
-          : "Couldn't reset password. The link may have expired.",
-      );
+      toast.error(err instanceof ApiError ? err.message : t("reset.error"));
     } finally {
       setSaving(false);
     }
@@ -211,39 +211,39 @@ function ResetForm({ token }: { token: string }) {
   return (
     <AuthLayout>
       <div className="mb-6">
-        <h2 className="m-0 mb-1.5 text-[26px] font-black tracking-[-0.02em]">Set a new password</h2>
+        <h2 className="m-0 mb-1.5 text-[26px] font-black tracking-[-0.02em]">{t("reset.title")}</h2>
         <p className="m-0 text-[13.5px] leading-relaxed text-muted">
-          Choose a strong password for your Q&#8209;Agent account.
+          {t("reset.subtitle")}
         </p>
       </div>
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
         <div>
-          <AuthLabel htmlFor="new-password">New password</AuthLabel>
+          <AuthLabel htmlFor="new-password">{t("reset.newPasswordLabel")}</AuthLabel>
           <PasswordInput
             id="new-password"
             autoComplete="new-password"
             autoFocus
             required
             icon={<Lock size={15} />}
-            placeholder="At least 8 characters"
+            placeholder={t("reset.newPasswordPlaceholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
         <div>
-          <AuthLabel htmlFor="confirm-password">Confirm password</AuthLabel>
+          <AuthLabel htmlFor="confirm-password">{t("reset.confirmLabel")}</AuthLabel>
           <PasswordInput
             id="confirm-password"
             autoComplete="new-password"
             required
             icon={<Lock size={15} />}
-            placeholder="Re-enter password"
+            placeholder={t("reset.confirmPlaceholder")}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
         </div>
-        <GradientButton busy={saving} busyLabel="Updating…">
-          Update password
+        <GradientButton busy={saving} busyLabel={t("reset.submitting")}>
+          {t("reset.submit")}
         </GradientButton>
       </form>
     </AuthLayout>

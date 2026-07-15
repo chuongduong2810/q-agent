@@ -14,6 +14,7 @@
 
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Mail } from "lucide-react";
 import { AuthLayout, RedirectLoader } from "@/components/auth/AuthLayout";
 import { AuthLabel, FieldWrap, PasswordInput, TextInput } from "@/components/auth/fields";
@@ -35,13 +36,14 @@ function Spinner() {
   );
 }
 
-function errMessage(err: unknown): string {
+function errMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) return err.message;
-  return "Something went wrong. Please try again.";
+  return fallback;
 }
 
 export function Login() {
   const navigate = useNavigate();
+  const { t } = useTranslation("auth");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,7 +81,7 @@ export function Login() {
         finishSession(res as AuthTokens);
       }
     } catch (err) {
-      setError(errMessage(err));
+      setError(errMessage(err, t("errors.generic")));
     } finally {
       setPending(false);
     }
@@ -94,13 +96,13 @@ export function Login() {
       const tokens = await api.auth.loginMfa({ mfaToken, code });
       finishSession(tokens);
     } catch (err) {
-      setError(errMessage(err));
+      setError(errMessage(err, t("errors.generic")));
     } finally {
       setPending(false);
     }
   }
 
-  if (redirecting) return <RedirectLoader label="Loading your workspace…" />;
+  if (redirecting) return <RedirectLoader />;
 
   return (
     <AuthLayout>
@@ -120,13 +122,13 @@ export function Login() {
       ) : (
         <>
           <div className="mb-[26px]">
-            <h2 className="m-0 mb-1.5 text-[26px] font-black tracking-[-0.02em]">Welcome back</h2>
-            <p className="m-0 text-[13.5px] text-muted">Sign in to your Q&#8209;Agent workspace.</p>
+            <h2 className="m-0 mb-1.5 text-[26px] font-black tracking-[-0.02em]">{t("login.title")}</h2>
+            <p className="m-0 text-[13.5px] text-muted">{t("login.subtitle")}</p>
           </div>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-3.5">
             <div>
-              <AuthLabel htmlFor="login-email">Work email</AuthLabel>
+              <AuthLabel htmlFor="login-email">{t("fields.workEmail")}</AuthLabel>
               <TextInput
                 id="login-email"
                 type="email"
@@ -135,19 +137,19 @@ export function Login() {
                 icon={<Mail size={15} />}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
+                placeholder={t("fields.emailPlaceholder")}
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between">
-                <AuthLabel htmlFor="login-password">Password</AuthLabel>
+                <AuthLabel htmlFor="login-password">{t("fields.password")}</AuthLabel>
                 <button
                   type="button"
                   onClick={() => navigate("/forgot")}
                   className="mb-2 border-none bg-transparent p-0 text-xs font-semibold text-violet"
                 >
-                  Forgot?
+                  {t("login.forgot")}
                 </button>
               </div>
               <PasswordInput
@@ -188,7 +190,7 @@ export function Login() {
                   </svg>
                 ) : null}
               </button>
-              Keep me signed in for 30 days
+              {t("login.rememberMe")}
             </label>
 
             {error ? (
@@ -206,16 +208,16 @@ export function Login() {
               {pending ? (
                 <>
                   <Spinner />
-                  Signing in&#8230;
+                  {t("login.submitting")}
                 </>
               ) : (
-                "Sign in"
+                t("login.submit")
               )}
             </button>
           </form>
 
           <p className="m-0 mt-[22px] text-center text-[12.5px] text-faint">
-            Access is provisioned by your workspace admin.
+            {t("login.provisionedNote")}
           </p>
         </>
       )}
@@ -238,6 +240,7 @@ function MfaStep({
   onSubmit: (e: FormEvent) => void;
   onBack: () => void;
 }) {
+  const { t } = useTranslation("auth");
   return (
     <>
       <button
@@ -257,21 +260,21 @@ function MfaStep({
         >
           <path d="M19 12H5M11 18l-6-6 6-6" />
         </svg>
-        Back to sign in
+        {t("mfa.back")}
       </button>
 
       <div className="mb-[26px]">
         <h2 className="m-0 mb-1.5 text-[26px] font-black tracking-[-0.02em]">
-          Two&#8209;factor authentication
+          {t("mfa.title")}
         </h2>
         <p className="m-0 text-[13.5px] leading-relaxed text-muted">
-          Enter the 6&#8209;digit code from your authenticator app.
+          {t("mfa.subtitle")}
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-3.5">
         <div>
-          <AuthLabel htmlFor="mfa-code">Authentication code</AuthLabel>
+          <AuthLabel htmlFor="mfa-code">{t("mfa.codeLabel")}</AuthLabel>
           <FieldWrap>
             <input
               id="mfa-code"
@@ -304,10 +307,10 @@ function MfaStep({
           {pending ? (
             <>
               <Spinner />
-              Verifying&#8230;
+              {t("mfa.submitting")}
             </>
           ) : (
-            "Verify code"
+            t("mfa.submit")
           )}
         </button>
       </form>
