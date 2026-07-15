@@ -305,8 +305,11 @@ export function Automation() {
   );
   const [editorShown, setEditorShown] = useState("");
   // Line-level change highlight + scroll target for the last chat edit typed into
-  // the editor (the chat "re-type" path, mirroring regenResult). `seq` bumps per
-  // edit so the viewer re-scrolls even when the first changed line is unchanged.
+  // the editor (the chat "re-type" path, mirroring regenResult). Set inside the
+  // re-type effect below — NOT in the WS handler — so `seq` bumps in the same
+  // batched update that sets the compressed editorShown; otherwise the viewer's
+  // scroll effect would fire against the stale previous code and find no target.
+  // `seq` bumps per edit so the viewer re-scrolls even when firstLine repeats.
   const [editResult, setEditResult] = useState<{
     caseId: number;
     changed: Set<number>;
@@ -317,19 +320,12 @@ export function Automation() {
     if (evt.event === "automation.chat.reply") {
       const p = evt.payload as unknown as ChatReplyPayload;
       setEditorType({ caseId: p.caseId, prev: p.prevCode, full: p.spec.code });
-      const diff = diffLines(p.prevCode, p.spec.code);
-      setEditResult((prev) => ({
-        caseId: p.caseId,
-        changed: diff.changed,
-        firstLine: diff.changed.size ? Math.min(...diff.changed) : null,
-        seq: (prev?.seq ?? 0) + 1,
-      }));
     }
   });
   useEffect(() => {
     if (!editorType) return;
-    const { prev, full } = editorType;
-    if (reducedMotion || prev === full) {
+    const { caseId, prev, full } = editorType;
+    if (prev === full) {
       setEditorShown(full);
       return;
     }
@@ -342,6 +338,21 @@ export function Automation() {
     const maxTail = maxHead - head;
     while (tail < maxTail && prev[prev.length - 1 - tail] === full[full.length - 1 - tail]) tail++;
     const changedEnd = full.length - tail; // exclusive end of the changed middle
+    // Scroll target = the line where the common prefix ends (where the edit
+    // begins). This index is stable for the whole animation (the prefix never
+    // changes) and is rendered from the first frame — unlike min(diffLines),
+    // whose index only lines up with the DOM once the compressed middle settles.
+    const firstLine = full.slice(0, head).split("\n").length - 1;
+    setEditResult((prevR) => ({
+      caseId,
+      changed: diffLines(prev, full).changed,
+      firstLine,
+      seq: (prevR?.seq ?? 0) + 1,
+    }));
+    if (reducedMotion) {
+      setEditorShown(full);
+      return;
+    }
     let i = head;
     // Prefix + (empty middle) + suffix; the middle grows in below.
     setEditorShown(full.slice(0, head) + full.slice(changedEnd));
