@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
 /**
@@ -30,6 +31,7 @@ export const runStatusToStage: Record<string, number> = {
 };
 
 export function PipelineRail({ stage }: { stage: number }) {
+  const { t } = useTranslation("commands");
   return (
     <div className="glass flex items-center gap-1 overflow-x-auto rounded-[18px] px-4 py-4">
       {STAGES.map((label, i) => {
@@ -61,7 +63,7 @@ export function PipelineRail({ stage }: { stage: number }) {
                 className="whitespace-nowrap text-[12px] font-semibold"
                 style={{ color: active ? "#ececf1" : done ? "#9ca3af" : "#6c6c7e" }}
               >
-                {label}
+                {t(`pipeline.${label.toLowerCase()}`)}
               </span>
             </div>
             {i < STAGES.length - 1 && (

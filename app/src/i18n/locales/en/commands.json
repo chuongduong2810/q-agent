@@ -1,0 +1,52 @@
+{
+  "label": "Command palette",
+  "placeholder": "Search screens, runs, or ask Q‑Agent…",
+  "empty": "No matching commands.",
+  "sections": {
+    "Actions": "Actions",
+    "Navigate": "Navigate"
+  },
+  "items": {
+    "create-run": { "label": "Create a Run", "description": "Batch a new QA session" },
+    "start-tour": { "label": "Start product tour", "description": "Guided walkthrough of Q‑Agent" },
+    "run-execution": { "label": "Run execution", "description": "Launch the run pipeline" },
+    "dashboard": { "label": "Go to Dashboard", "description": "Mission control" },
+    "tickets": { "label": "Go to Tickets", "description": "Synced from providers" },
+    "runs": { "label": "Go to Runs", "description": "All batch executions" },
+    "review": { "label": "Go to Review Center", "description": "Approve & edit cases" },
+    "automation": { "label": "Go to Automation", "description": "Playwright & scripts" },
+    "console": { "label": "Go to Execution", "description": "Live run console" },
+    "evidence": { "label": "Go to Evidence", "description": "Screens & artifacts" },
+    "reports": { "label": "Go to Reports", "description": "Pass rate & spend" },
+    "settings": { "label": "Go to Settings", "description": "Providers & AI config" }
+  },
+  "footer": {
+    "open": "open",
+    "navigate": "navigate",
+    "poweredBy": "Powered by Claude"
+  },
+  "dropdown": {
+    "noOptions": "No options"
+  },
+  "overflow": {
+    "moreActions": "More actions"
+  },
+  "confirmDialog": {
+    "neverMind": "Never mind",
+    "working": "Working…"
+  },
+  "toast": {
+    "dismiss": "Dismiss"
+  },
+  "pipeline": {
+    "sync": "Sync",
+    "select": "Select",
+    "analyze": "Analyze",
+    "review": "Review",
+    "link": "Link",
+    "automate": "Automate",
+    "execute": "Execute",
+    "evidence": "Evidence",
+    "publish": "Publish"
+  }
+}

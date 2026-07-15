@@ -1,6 +1,7 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
 export interface Option {
@@ -129,6 +130,7 @@ export function Select({
   emptyLabel?: string;
   fullWidth?: boolean;
 }) {
+  const { t } = useTranslation("commands");
   const selected = options.find((o) => o.value === value) ?? null;
   return (
     <DropdownShell
@@ -141,7 +143,7 @@ export function Select({
         <>
           {options.length === 0 && (
             <div className="px-3 py-4 text-center text-[12px] text-ink-dim">
-              {emptyLabel ?? "No options"}
+              {emptyLabel ?? t("dropdown.noOptions")}
             </div>
           )}
           {options.map((o) => {
@@ -185,6 +187,7 @@ export function MultiSelect({
   onChange: (values: string[]) => void;
   fullWidth?: boolean;
 }) {
+  const { t } = useTranslation("commands");
   const set = new Set(values);
   const label =
     values.length === 0
@@ -207,7 +210,7 @@ export function MultiSelect({
       {() => (
         <>
           {options.length === 0 && (
-            <div className="px-3 py-4 text-center text-[12px] text-ink-dim">No options</div>
+            <div className="px-3 py-4 text-center text-[12px] text-ink-dim">{t("dropdown.noOptions")}</div>
           )}
           {options.map((o) => {
             const on = set.has(o.value);

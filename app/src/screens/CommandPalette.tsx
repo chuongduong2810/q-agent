@@ -17,6 +17,7 @@ import {
   Ticket,
 } from "lucide-react";
 import { type ComponentType, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useRunRouteId } from "@/hooks/useRunRouteId";
 import { useTour } from "@/store/tour";
@@ -46,6 +47,7 @@ export function CommandPalette() {
   const setQuery = useUI((s) => s.setPaletteQuery);
   const closePalette = useUI((s) => s.closePalette);
   const openCreateRun = useUI((s) => s.openCreateRun);
+  const { t } = useTranslation("commands");
   const navigate = useNavigate();
   const runId = useRunRouteId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,8 +69,8 @@ export function CommandPalette() {
   const commands: PaletteCommand[] = [
     {
       id: "create-run",
-      label: "Create a Run",
-      description: "Batch a new QA session",
+      label: t("items.create-run.label"),
+      description: t("items.create-run.description"),
       section: "Actions",
       icon: Plus,
       run: () => {
@@ -78,8 +80,8 @@ export function CommandPalette() {
     },
     {
       id: "start-tour",
-      label: "Start product tour",
-      description: "Guided walkthrough of Q‑Agent",
+      label: t("items.start-tour.label"),
+      description: t("items.start-tour.description"),
       section: "Actions",
       icon: Compass,
       run: () => {
@@ -87,16 +89,16 @@ export function CommandPalette() {
         useTour.getState().start();
       },
     },
-    { id: "run-execution", label: "Run execution", description: "Launch the run pipeline", section: "Actions", icon: Terminal, run: go(runPath("execution")), runScoped: true },
-    { id: "dashboard", label: "Go to Dashboard", description: "Mission control", section: "Navigate", icon: LayoutDashboard, run: go("/") },
-    { id: "tickets", label: "Go to Tickets", description: "Synced from providers", section: "Navigate", icon: Ticket, run: go("/tickets") },
-    { id: "runs", label: "Go to Runs", description: "All batch executions", section: "Navigate", icon: SquareStack, run: go("/runs") },
-    { id: "review", label: "Go to Review Center", description: "Approve & edit cases", section: "Navigate", icon: CheckSquare, run: go(runPath("review")), runScoped: true },
-    { id: "automation", label: "Go to Automation", description: "Playwright & scripts", section: "Navigate", icon: Terminal, run: go(runPath("automation")), runScoped: true },
-    { id: "console", label: "Go to Execution", description: "Live run console", section: "Navigate", icon: ListChecks, run: go(runPath("execution")), runScoped: true },
-    { id: "evidence", label: "Go to Evidence", description: "Screens & artifacts", section: "Navigate", icon: Image, run: go(runPath("evidence")), runScoped: true },
-    { id: "reports", label: "Go to Reports", description: "Pass rate & spend", section: "Navigate", icon: BarChart3, run: go("/reports") },
-    { id: "settings", label: "Go to Settings", description: "Providers & AI config", section: "Navigate", icon: SettingsIcon, run: go("/settings") },
+    { id: "run-execution", label: t("items.run-execution.label"), description: t("items.run-execution.description"), section: "Actions", icon: Terminal, run: go(runPath("execution")), runScoped: true },
+    { id: "dashboard", label: t("items.dashboard.label"), description: t("items.dashboard.description"), section: "Navigate", icon: LayoutDashboard, run: go("/") },
+    { id: "tickets", label: t("items.tickets.label"), description: t("items.tickets.description"), section: "Navigate", icon: Ticket, run: go("/tickets") },
+    { id: "runs", label: t("items.runs.label"), description: t("items.runs.description"), section: "Navigate", icon: SquareStack, run: go("/runs") },
+    { id: "review", label: t("items.review.label"), description: t("items.review.description"), section: "Navigate", icon: CheckSquare, run: go(runPath("review")), runScoped: true },
+    { id: "automation", label: t("items.automation.label"), description: t("items.automation.description"), section: "Navigate", icon: Terminal, run: go(runPath("automation")), runScoped: true },
+    { id: "console", label: t("items.console.label"), description: t("items.console.description"), section: "Navigate", icon: ListChecks, run: go(runPath("execution")), runScoped: true },
+    { id: "evidence", label: t("items.evidence.label"), description: t("items.evidence.description"), section: "Navigate", icon: Image, run: go(runPath("evidence")), runScoped: true },
+    { id: "reports", label: t("items.reports.label"), description: t("items.reports.description"), section: "Navigate", icon: BarChart3, run: go("/reports") },
+    { id: "settings", label: t("items.settings.label"), description: t("items.settings.description"), section: "Navigate", icon: SettingsIcon, run: go("/settings") },
   ];
 
   // Run-scoped screens (Review/Automation/Execution/Evidence) are reachable only
@@ -121,7 +123,7 @@ export function CommandPalette() {
             `Command`'s `value`/`onValueChange` is the *selected item*, not the
             query — binding it to `query` fed the highlighted item's label back
             into the search box, collapsing the list to a single result. */}
-        <Command shouldFilter label="Command palette">
+        <Command shouldFilter label={t("label")}>
           <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z" />
@@ -130,15 +132,15 @@ export function CommandPalette() {
               ref={inputRef}
               value={query}
               onValueChange={setQuery}
-              placeholder="Search screens, runs, or ask Q‑Agent…"
+              placeholder={t("placeholder")}
               className="flex-1 border-none bg-transparent text-[16px] text-ink outline-none placeholder:text-[#7a7a8c]"
             />
             <span className="rounded-md bg-white/[0.06] px-2 py-[3px] font-mono text-[11px] text-[#8b8b9e]">ESC</span>
           </div>
           <Command.List className="max-h-[340px] overflow-y-auto p-2 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-[#6a6a7c]">
-            <Command.Empty className="px-3 py-6 text-center text-[13px] text-ink-dim">No matching commands.</Command.Empty>
+            <Command.Empty className="px-3 py-6 text-center text-[13px] text-ink-dim">{t("empty")}</Command.Empty>
             {SECTIONS.map((section) => (
-              <Command.Group key={section} heading={section}>
+              <Command.Group key={section} heading={t(`sections.${section}`)}>
                 {visibleCommands
                   .filter((cmd) => cmd.section === section)
                   .map((cmd) => {
@@ -174,18 +176,18 @@ export function CommandPalette() {
                 <kbd className="flex h-5 min-w-5 items-center justify-center rounded-md bg-white/[0.06] px-1">
                   <CornerDownLeft size={11} strokeWidth={2} />
                 </kbd>
-                open
+                {t("footer.open")}
               </span>
               <span className="flex items-center gap-1.5">
                 <kbd className="flex h-5 min-w-5 items-center justify-center rounded-md bg-white/[0.06] px-1 font-mono">
                   ↑↓
                 </kbd>
-                navigate
+                {t("footer.navigate")}
               </span>
             </div>
             <span className="flex items-center gap-1.5 font-medium">
               <Star size={11} strokeWidth={2} style={{ color: "#fbbf24" }} fill="#fbbf24" />
-              Powered by Claude
+              {t("footer.poweredBy")}
             </span>
           </div>
         </Command>
