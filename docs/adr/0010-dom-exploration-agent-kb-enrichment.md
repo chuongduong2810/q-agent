@@ -1,0 +1,146 @@
+# ADR 0010 — DOM Exploration Agent for Knowledge Base enrichment
+
+- **Status:** Accepted
+- **Date:** 2026-07-15
+- **Deciders:** Client (via `CLIENT-BRIEF-exploration-agent.md`), Q-Agent build
+- **Extends:** [ADR 0001](0001-scope-architecture-and-live-integrations.md) (real engines, no mock),
+  [ADR 0002](0002-project-knowledge-config-and-multi-repo.md) (per-repo Knowledge Base)
+
+## Context
+
+Q-Agent generates Playwright specs from a per-repository **Knowledge Base** (KB)
+built by `project-bootstrap` reading source code. When the KB lacks a real
+selector or route for a screen, `placeholder_gate` correctly marks the case
+`blocked` — the generator must never invent selectors (ADR 0002). But some gaps
+are *recoverable*: the screen exists in the running app; the static source-parse
+simply didn't capture a usable selector (dynamic rendering, missing test-ids in
+source, runtime-only routes).
+
+We add an optional **exploration agent** that drives a real browser to observe
+the live app, discover the real routes/selectors for a target screen, and write
+them back into the KB as **runtime-verified** entries. It does **not** generate
+tests — the deterministic `automation-generator` still does, now with a richer
+KB. Exploration is **user-triggered** from a blocked case, not automatic.
+
+Several forks had to be settled before slicing the work.
+
+## Decision
+
+### 1. Browser driving — persistent Node Playwright driver
+
+The observe→decide→act (ReAct) loop is inherently interactive: the agent must
+observe page state *after each action* to decide the next one. The existing
+automation/self-heal pipeline drives Playwright as **one-shot `npx playwright
+test` subprocesses** with generated spec files — there is no persistent page.
+
+We introduce a **long-lived Node driver** (`pw_scripts/explore_session.cjs`) that
+holds **one** browser + page open for the whole session. The Python service
+(`exploration_agent.py`) drives it step-by-step over a **line-delimited JSON
+protocol** on stdin/stdout: `{"cmd":"observe"}` → `{a11y, dom}`;
+`{"cmd":"act", action, args}` → `{ok, error, changed}`.
+
+Rationale: reuses the **same installed Node Playwright** the rest of the app uses
+(no second engine), reuses the ADR-0002 `storageState` auth capture and the
+self-heal distilled-DOM extraction logic, keeps state-changing actions correct
+(no replay), and keeps per-step latency low.
+
+*Alternatives rejected:* **replay-via-spec-runner** (regenerate+run a full spec
+replaying all prior actions each step) — maximal reuse but O(n²) latency and one
+stale action fails the whole session; **playwright-python** — standard but adds a
+*second* Playwright engine (two installs, version-skew risk, heavier operator
+setup) alongside the Node one.
+
+### 2. Observation representation
+
+Each observe returns a text representation the model can read:
+
+- **primary:** the accessibility tree (`page.accessibility.snapshot()`) — role +
+  name, maps directly to `getByRole` locators (**net-new**);
+- **plus:** a trimmed DOM extract of interactive elements keeping real
+  attributes (`data-testid`, `id`, `name`, `aria-*`, visible text) — reuses the
+  self-heal distilled-DOM query;
+- **optional:** a screenshot only when the text representation is insufficient
+  (canvas / non-semantic UI).
+
+### 3. Action contract (fixed, backend-executed)
+
+The agent may emit only: `goto(url)`, `click(role,name)` / `click(selector)`,
+`fill(role,name,value)` / `fill(selector,value)`, `expectVisible(role,name)`
+(probe, not assertion), `done(summary)`. Per step Claude returns exactly:
+`{ "reasoning": "...", "action": "click", "args": { "role": "tab", "name": "Divisions" } }`.
+Locator discipline mirrors `automation-generator`: prefer `data-testid` → role →
+label, and **record which strategy actually worked** for each element.
+
+### 4. Stop conditions (mandatory — no unbounded loop)
+
+Halt on the first of: **goal complete** (`done`); **step cap** (configurable,
+default 15, hard max 20); **repeat detection** (same URL + equivalent
+accessibility snapshot ⇒ stuck); **cost budget** (each step is a Claude call;
+enforce a per-session cost/token ceiling and surface remaining budget). There is
+no existing AI-credit gate — the budget is enforced by summing `ClaudeUsage` for
+the session and stopping when the ceiling is hit; `ai_usage_service` records
+spend automatically.
+
+### 5. KB output — runtime-verified, no clobber
+
+On completion the agent writes to the target repo's `knowledge.json` (via the
+DB `ProjectKnowledge.knowledge` row → `write_knowledge_files`): discovered
+`routes`, discovered `selectors` (each with the `strategy` that worked), each
+stamped `verified_at_runtime` (ISO timestamp) and `source: "exploration"`, plus a
+short ordered **exploration log** so discovery is reproducible. This extends the
+existing `merge_discovered_dom` merge semantics (dedup by `path`/`selector`);
+existing **verified** entries are never overwritten.
+
+### 6. Runtime-verified selectors take priority
+
+In later generation, `verified_at_runtime` entries are preferred over
+source-inferred ones (surfaced first in `render_project_context`, and honored by
+`placeholder_gate` grounding). After enrichment, a previously `blocked` case can
+be regenerated by the static `automation-generator`.
+
+### 7. Endpoint — repo-scoped, run-aware
+
+`POST /projects/{key}/repos/{repo}/explore` with body
+`{ target: {ticket, screen}, runId?, caseId? }` → returns `{ started, sessionId }`
+immediately (long-running: mirrors the self-heal async start + poll/WS pattern to
+beat the ~100s proxy cap). Progress streams as `explore.progress` over the run
+WebSocket when `runId` is given; `GET .../explore/status` supports
+navigation-survival polling. We conform to the existing `/repos/{repo}`
+convention (repo addressed by **name** — there is no numeric `repoId` in the data
+model), diverging from the brief's `/repositories/{repoId}` wording only there.
+
+### 8. Safety & correctness
+
+- **Real engines only** (ADR 0001): real browser, real app, real Claude. No
+  simulation. Tests mock only the transport (Claude/Node driver).
+- **Read-mostly.** State-changing actions (`fill`, and clicks that submit) are
+  **gated off by default** (`allow_state_changing=False`) and, when enabled,
+  confined to the configured **test environment + test account** — never a
+  production tenant.
+- **Never invent.** Only actually-observed page state is written to the KB. If
+  the target screen can't be reached, nothing is written and the case stays
+  `blocked` (honest failure, no fabricated selectors).
+- **Credentials.** Reuse the project's auth strategy / test account
+  (role + username; password injected via the existing `storageState` capture).
+  Secrets never enter the model prompt.
+- **Human-driven & reviewable.** Triggered by the user from a blocked case; the
+  discovered KB additions are shown before regeneration.
+
+## Consequences
+
+- **Positive:** a missing selector becomes a discovered, runtime-verified
+  selector instead of a `blocked` case; cost is spent only on a real KB gap;
+  generated specs stay fully deterministic (exploration feeds the KB, generation
+  stays static).
+- **Cost / risk:** a new long-lived Node subprocess protocol to maintain; end-to-
+  end validation needs the operator's environment (real app + browsers + Claude),
+  so in-repo verification is mock-transport tests + typecheck/build (per ADR 0001).
+- **Scope:** one repository per session; web targets only; no model training; not
+  an autonomous end-to-end test author (all per the brief's non-goals).
+
+## Alternatives considered
+
+See §1 (browser driving) and §7 (endpoint shape). The overarching alternative — a
+full autonomous test-writer — was rejected to keep generated specs reproducible:
+exploration enriches structured KB data; the deterministic generator still
+produces the spec.
