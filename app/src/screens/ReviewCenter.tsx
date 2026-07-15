@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, ChevronRight, Plus, Sparkles, X } from "lucide-react";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { PipelineRail } from "@/components/ui/PipelineRail";
@@ -29,6 +30,7 @@ function groupByTicket(cases: TestCaseOut[]): Array<{ ticketExternalId: string; 
 const platformIcon: Record<string, string> = { Web: "🖥", Mobile: "📱", API: "🔌" };
 
 export function ReviewCenter() {
+  const { t } = useTranslation("runs");
   const runId = Number(useParams().runId);
   const navigate = useNavigate();
   const { data: run } = useRun(runId);
@@ -87,32 +89,32 @@ export function ReviewCenter() {
           <div className="mb-1 text-[13px] font-medium text-muted">
             {run?.code} &middot; {run?.name}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Review Center</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">{t("review.title")}</h1>
         </div>
         <div className="hidden flex-wrap justify-end gap-2.5 md:flex">
           {selectedIds.length > 0 && (
             <Button variant="success" onClick={approveSelected}>
-              Approve selected ({selectedIds.length})
+              {t("review.approveSelected", { count: selectedIds.length })}
             </Button>
           )}
           <Button variant="glass" onClick={() => approveAll.mutate()} disabled={approveAll.isPending}>
-            Approve all
+            {t("review.approveAll")}
           </Button>
           <Button
             variant="glass"
             onClick={() => startCreateLink(false, true)}
-            title="Record approved cases locally only — nothing is written to the provider"
+            title={t("review.createLocallyHint")}
           >
-            Create locally
+            {t("review.createLocally")}
           </Button>
           <Button
             onClick={() => startCreateLink(false)}
             className="border-[rgba(139,92,246,.32)] bg-[rgba(139,92,246,.16)] text-[#c4b5fd] hover:bg-[rgba(139,92,246,.24)]"
           >
-            Create test cases
+            {t("review.createCases")}
           </Button>
           <Button variant="primary" onClick={() => startCreateLink(true)}>
-            Create &amp; link to ticket
+            {t("review.createAndLink")}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>
@@ -127,15 +129,15 @@ export function ReviewCenter() {
       <div className="mb-4 grid grid-cols-3 gap-3 md:grid-cols-4">
         <GlassCard className="px-[18px] py-4">
           <div className="text-[26px] font-black leading-none text-success-soft">{stats.approved}</div>
-          <div className="mt-[5px] text-xs text-muted">Approved</div>
+          <div className="mt-[5px] text-xs text-muted">{t("review.stat.approved")}</div>
         </GlassCard>
         <GlassCard className="px-[18px] py-4">
           <div className="text-[26px] font-black leading-none text-warning-soft">{stats.pending}</div>
-          <div className="mt-[5px] text-xs text-muted">Needs review</div>
+          <div className="mt-[5px] text-xs text-muted">{t("review.stat.needsReview")}</div>
         </GlassCard>
         <GlassCard className="px-[18px] py-4">
           <div className="text-[26px] font-black leading-none text-danger-soft">{stats.rejected}</div>
-          <div className="mt-[5px] text-xs text-muted">Rejected</div>
+          <div className="mt-[5px] text-xs text-muted">{t("review.stat.rejected")}</div>
         </GlassCard>
         <div
           className="col-span-3 rounded-[20px] border px-[18px] py-4 md:col-span-1"
@@ -145,7 +147,7 @@ export function ReviewCenter() {
           }}
         >
           <div className="text-[26px] font-black leading-none">{stats.pct}%</div>
-          <div className="mt-[5px] text-xs text-ink-soft">Run reviewed</div>
+          <div className="mt-[5px] text-xs text-ink-soft">{t("review.stat.reviewed")}</div>
         </div>
       </div>
 
@@ -160,8 +162,8 @@ export function ReviewCenter() {
       {!isLoading && tickets.length === 0 && (
         <EmptyState
           icon={<Sparkles size={30} className="text-violet" />}
-          title="No test cases yet"
-          body="The AI hasn't generated any test cases for this run yet."
+          title={t("review.empty.title")}
+          body={t("review.empty.body")}
         />
       )}
 
@@ -194,7 +196,7 @@ export function ReviewCenter() {
         >
           <div className="mb-2 flex items-center justify-between text-[11.5px] font-semibold text-ink-dim">
             <span>
-              {stats.approved}/{cases?.length ?? 0} approved
+              {t("review.approvedCount", { approved: stats.approved, total: cases?.length ?? 0 })}
             </span>
             <span>{stats.pct}%</span>
           </div>
@@ -211,7 +213,9 @@ export function ReviewCenter() {
               onClick={() => (selectedIds.length > 0 ? approveSelected() : approveAll.mutate())}
               disabled={approveAll.isPending}
             >
-              {selectedIds.length > 0 ? `Approve selected (${selectedIds.length})` : "Approve all"}
+              {selectedIds.length > 0
+                ? t("review.approveSelected", { count: selectedIds.length })
+                : t("review.approveAll")}
             </Button>
             <Button
               variant="primary"
@@ -219,7 +223,7 @@ export function ReviewCenter() {
               onClick={() => startCreateLink(true)}
               disabled={stats.approved === 0}
             >
-              Continue to Sync
+              {t("review.continueToSync")}
             </Button>
           </div>
         </div>
@@ -253,6 +257,7 @@ function TicketAccordion({
   onSave: (caseId: number, body: CaseDraft) => void;
   onSetAutomation: (caseId: number, automation: string) => void;
 }) {
+  const { t } = useTranslation("runs");
   const approved = cases.filter((c) => c.approval === "approved").length;
   const pending = cases.length - approved;
   const total = cases.length;
@@ -280,7 +285,7 @@ function TicketAccordion({
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center gap-2.5">
             <span className="font-mono text-xs font-semibold text-violet">{ticketExternalId}</span>
-            <span className="hidden text-[11px] text-faint md:inline">{total} test cases</span>
+            <span className="hidden text-[11px] text-faint md:inline">{t("review.ticket.testCases", { count: total })}</span>
           </div>
           <div className="truncate text-[14.5px] font-semibold">{title}</div>
         </div>
@@ -293,10 +298,10 @@ function TicketAccordion({
         </span>
         <div className="hidden shrink-0 items-center gap-1.5 text-[11.5px] font-semibold md:flex">
           <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)">
-            {approved} approved
+            {t("review.ticket.approvedCount", { count: approved })}
           </Pill>
           <Pill color="#fbbf24" bg="rgba(251,191,36,.14)">
-            {pending} pending
+            {t("review.ticket.pendingCount", { count: pending })}
           </Pill>
         </div>
         <button
@@ -313,7 +318,7 @@ function TicketAccordion({
           }
         >
           {fullyApproved && <Check size={13} />}
-          {fullyApproved ? "All approved" : "Approve all"}
+          {fullyApproved ? t("review.ticket.allApproved") : t("review.ticket.approveAll")}
         </button>
         <ChevronDown
           size={16}
@@ -344,7 +349,7 @@ function TicketAccordion({
                 }
               >
                 {fullyApproved && <Check size={13} />}
-                {fullyApproved ? "All approved" : `Approve all ${total} cases`}
+                {fullyApproved ? t("review.ticket.allApproved") : t("review.ticket.approveAllCases", { count: total })}
               </button>
               {cases.map((c) => (
                 <CaseRow
@@ -365,13 +370,6 @@ function TicketAccordion({
   );
 }
 
-const AUTOMATION_OPTIONS = [
-  { value: "Playwright", label: "Playwright" },
-  { value: "Selenium", label: "Selenium" },
-  { value: "Cypress", label: "Cypress" },
-  { value: "Manual", label: "Manual (no automation)" },
-];
-
 function CaseRow({
   testCase: c,
   regenerating,
@@ -387,6 +385,13 @@ function CaseRow({
   onSave: (body: CaseDraft) => void;
   onSetAutomation: (automation: string) => void;
 }) {
+  const { t } = useTranslation("runs");
+  const automationOptions = [
+    { value: "Playwright", label: "Playwright" },
+    { value: "Selenium", label: "Selenium" },
+    { value: "Cypress", label: "Cypress" },
+    { value: "Manual", label: t("review.case.manualOption") },
+  ];
   const expandedCase = useUI((s) => s.expandedCase);
   const toggleCase = useUI((s) => s.toggleCase);
   const editingCase = useUI((s) => s.editingCase);
@@ -435,7 +440,7 @@ function CaseRow({
         {regenerating && (
           <span className="hidden shrink-0 items-center gap-1.5 text-[11px] font-semibold text-violet md:flex">
             <Spinner size={12} />
-            regenerating
+            {t("review.case.regenerating")}
           </span>
         )}
         <Pill color={color} bg={bg}>
@@ -458,37 +463,37 @@ function CaseRow({
               <div>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <span className="rounded-lg bg-white/5 px-2.5 py-[3px] text-[11px] text-ink-dim">
-                    Type: <b className="text-ink-soft">{c.testType}</b>
+                    {t("review.case.type")} <b className="text-ink-soft">{c.testType}</b>
                   </span>
                   <span className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-[3px] text-[11px] text-ink-dim">
                     {platformIcon[c.platform] ?? "🖥"} {c.platform}
                   </span>
                   {/* Automation type is editable — only non-Manual cases are automatable. */}
-                  <span className="ml-1 text-[11px] text-faint">Automation:</span>
+                  <span className="ml-1 text-[11px] text-faint">{t("review.case.automation")}</span>
                   <Select
                     value={c.automation}
-                    options={AUTOMATION_OPTIONS}
+                    options={automationOptions}
                     placeholder="Manual"
                     allowClear={false}
                     onChange={(v) => v && v !== c.automation && onSetAutomation(v)}
                   />
                   {c.automation === "Manual" && (
                     <span className="text-[11px] text-[#94a3b8]">
-                      Set a framework to make this case automatable.
+                      {t("review.case.automationHint")}
                     </span>
                   )}
                 </div>
                 {c.objective ? (
                   <>
-                    <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">OBJECTIVE</div>
+                    <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">{t("review.case.objective")}</div>
                     <p className="m-0 mb-3 text-[12.5px] leading-relaxed text-ink-soft">{c.objective}</p>
                   </>
                 ) : null}
-                <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">PRECONDITION</div>
+                <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">{t("review.case.precondition")}</div>
                 <p className="m-0 mb-3 text-[12.5px] leading-relaxed text-ink-soft">{c.precondition || "—"}</p>
                 {c.testData?.length ? (
                   <>
-                    <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">TEST DATA</div>
+                    <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">{t("review.case.testData")}</div>
                     <div className="mb-3 flex flex-wrap gap-2">
                       {c.testData.map((d, i) => (
                         <span
@@ -503,9 +508,9 @@ function CaseRow({
                 ) : null}
                 <div className="mb-3 overflow-hidden rounded-[11px] border border-white/[0.07]">
                   <div className="hidden grid-cols-[28px_1fr_1fr] gap-2.5 bg-white/[0.04] px-3 py-2 text-[10px] font-bold tracking-wider text-faint md:grid">
-                    <span>#</span>
-                    <span>ACTION</span>
-                    <span>EXPECTED RESULT</span>
+                    <span>{t("review.case.colNum")}</span>
+                    <span>{t("review.case.colAction")}</span>
+                    <span>{t("review.case.colExpected")}</span>
                   </div>
                   {c.steps.map((st, i) => (
                     <div
@@ -525,7 +530,7 @@ function CaseRow({
                 </div>
                 {c.linkedAc?.length ? (
                   <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-semibold tracking-wider text-faint">COVERS AC</span>
+                    <span className="text-[11px] font-semibold tracking-wider text-faint">{t("review.case.coversAc")}</span>
                     {c.linkedAc.map((ac, i) => (
                       <span
                         key={i}
@@ -547,7 +552,7 @@ function CaseRow({
                     }
                   >
                     <Check size={12} />
-                    {c.approval === "approved" ? "Approved" : "Approve"}
+                    {c.approval === "approved" ? t("review.case.approved") : t("review.case.approve")}
                   </button>
                   <button
                     onClick={() => onSetApproval("rejected")}
@@ -559,7 +564,7 @@ function CaseRow({
                     }
                   >
                     <X size={12} />
-                    {c.approval === "rejected" ? "Rejected" : "Reject"}
+                    {c.approval === "rejected" ? t("review.case.rejected") : t("review.case.reject")}
                   </button>
                   <button
                     onClick={onRegenerate}
@@ -569,7 +574,7 @@ function CaseRow({
                     {regenerating ? (
                       <>
                         <Spinner size={12} />
-                        Regenerating…
+                        {t("review.case.regeneratingBusy")}
                       </>
                     ) : (
                       <>
@@ -577,7 +582,7 @@ function CaseRow({
                           <path d="M23 4v6h-6M1 20v-6h6" />
                           <path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15" />
                         </svg>
-                        Regenerate
+                        {t("review.case.regenerate")}
                       </>
                     )}
                   </button>
@@ -595,27 +600,27 @@ function CaseRow({
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
                     </svg>
-                    Edit
+                    {t("review.case.edit")}
                   </button>
                 </div>
               </div>
             ) : (
               draft && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">TITLE</div>
+                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">{t("review.case.titleLabel")}</div>
                   <input
                     value={draft.title}
                     onChange={(e) => updateDraft({ title: e.target.value })}
                     className="mb-3 w-full rounded-[10px] border border-[rgba(139,92,246,.3)] bg-white/5 px-3 py-[9px] text-[13px] text-ink outline-none focus:border-[rgba(139,92,246,.6)]"
                   />
-                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">PRECONDITION</div>
+                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">{t("review.case.precondition")}</div>
                   <textarea
                     value={draft.precondition}
                     onChange={(e) => updateDraft({ precondition: e.target.value })}
                     rows={3}
                     className="mb-3 w-full resize-y rounded-[10px] border border-[rgba(139,92,246,.3)] bg-white/5 px-3 py-[9px] text-[13px] leading-relaxed text-ink outline-none focus:border-[rgba(139,92,246,.6)]"
                   />
-                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">TEST DATA</div>
+                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">{t("review.case.testData")}</div>
                   <div className="mb-3 flex flex-col gap-2">
                     {draft.testData.map((d, i) => (
                       <div
@@ -624,7 +629,7 @@ function CaseRow({
                       >
                         <input
                           value={d.field}
-                          placeholder="Field"
+                          placeholder={t("review.case.fieldPlaceholder")}
                           onChange={(e) => {
                             const testData = draft.testData.map((row, j) =>
                               j === i ? { ...row, field: e.target.value } : row,
@@ -635,7 +640,7 @@ function CaseRow({
                         />
                         <input
                           value={d.value}
-                          placeholder="Value"
+                          placeholder={t("review.case.valuePlaceholder")}
                           onChange={(e) => {
                             const testData = draft.testData.map((row, j) =>
                               j === i ? { ...row, value: e.target.value } : row,
@@ -646,8 +651,8 @@ function CaseRow({
                         />
                         <button
                           type="button"
-                          aria-label={`Remove test data ${i + 1}`}
-                          title="Remove field"
+                          aria-label={t("review.case.removeFieldAria", { num: i + 1 })}
+                          title={t("review.case.removeField")}
                           onClick={() => updateDraft({ testData: draft.testData.filter((_, j) => j !== i) })}
                           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] border border-white/[0.12] bg-white/5 text-ink-dim hover:border-[rgba(248,113,113,.5)] hover:text-red-400"
                         >
@@ -660,10 +665,10 @@ function CaseRow({
                       className="flex items-center gap-1.5 self-start rounded-[9px] border border-dashed border-white/[0.16] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-ink-dim hover:bg-white/[0.08]"
                     >
                       <Plus size={12} />
-                      Add field
+                      {t("review.case.addField")}
                     </button>
                   </div>
-                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">STEPS</div>
+                  <div className="mb-1.5 text-[11px] font-semibold tracking-wider text-faint">{t("review.case.steps")}</div>
                   <div className="mb-3 flex flex-col gap-2">
                     {draft.steps.map((st, i) => (
                       <div
@@ -674,7 +679,7 @@ function CaseRow({
                         <div className="flex flex-col gap-2 md:contents">
                           <input
                             value={st.a}
-                            placeholder="Action"
+                            placeholder={t("review.case.actionPlaceholder")}
                             onChange={(e) => {
                               const steps = draft.steps.map((s, j) => (j === i ? { ...s, a: e.target.value } : s));
                               updateDraft({ steps });
@@ -683,7 +688,7 @@ function CaseRow({
                           />
                           <input
                             value={st.e}
-                            placeholder="Expected result"
+                            placeholder={t("review.case.expectedPlaceholder")}
                             onChange={(e) => {
                               const steps = draft.steps.map((s, j) => (j === i ? { ...s, e: e.target.value } : s));
                               updateDraft({ steps });
@@ -693,8 +698,8 @@ function CaseRow({
                         </div>
                         <button
                           type="button"
-                          aria-label={`Remove step ${i + 1}`}
-                          title="Remove step"
+                          aria-label={t("review.case.removeStepAria", { num: i + 1 })}
+                          title={t("review.case.removeStep")}
                           onClick={() => updateDraft({ steps: draft.steps.filter((_, j) => j !== i) })}
                           className="mt-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] border border-white/[0.12] bg-white/5 text-ink-dim hover:border-[rgba(248,113,113,.5)] hover:text-red-400 md:mt-0"
                         >
@@ -707,7 +712,7 @@ function CaseRow({
                       className="flex items-center gap-1.5 self-start rounded-[9px] border border-dashed border-white/[0.16] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-ink-dim hover:bg-white/[0.08]"
                     >
                       <Plus size={12} />
-                      Add step
+                      {t("review.case.addStep")}
                     </button>
                   </div>
                   <div className="flex gap-2">
@@ -723,10 +728,10 @@ function CaseRow({
                       }}
                     >
                       <Check size={13} />
-                      Save changes
+                      {t("review.case.saveChanges")}
                     </Button>
                     <Button variant="glass" size="sm" onClick={cancelEdit}>
-                      Cancel
+                      {t("review.case.cancel")}
                     </Button>
                   </div>
                 </motion.div>

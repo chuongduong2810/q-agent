@@ -1,0 +1,182 @@
+{
+  "list": {
+    "subtitle": "Batch QA sessions · run many in parallel",
+    "title": "Runs",
+    "createRun": "Create Run",
+    "empty": {
+      "title": "No runs yet",
+      "body": "Create a run to start a batch QA session across one or many tickets."
+    },
+    "emptyView": "No runs in this view.",
+    "stat": {
+      "active": "Active",
+      "review": "In review",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "filter": {
+      "all": "All",
+      "active": "Active",
+      "review": "In review",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
+  },
+  "row": {
+    "select": "Select run",
+    "deselect": "Deselect run",
+    "needsYou": "needs you",
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} tickets",
+    "cases_one": "{{count}} case",
+    "cases_other": "{{count}} cases",
+    "pass": "Pass {{pct}}",
+    "runExecution": "Run execution",
+    "openRun": "Open run"
+  },
+  "actions": {
+    "menu": "Run actions",
+    "cancel": "Cancel run",
+    "retry": "Retry run",
+    "duplicate": "Duplicate",
+    "delete": "Delete run",
+    "confirmCancel": {
+      "title": "Cancel this run?",
+      "message": "\"{{name}}\" will stop where it is. You can retry it afterward.",
+      "confirm": "Cancel run"
+    },
+    "confirmDelete": {
+      "title": "Delete this run?",
+      "message": "\"{{name}}\" and all of its test cases, executions, and evidence will be permanently deleted.",
+      "confirm": "Delete run"
+    },
+    "toast": {
+      "cancelled": "Run cancelled",
+      "cancelFailed": "Failed to cancel run",
+      "retrying": "Retrying run",
+      "retryFailed": "Failed to retry run",
+      "duplicated": "Duplicated to {{code}}",
+      "duplicateFailed": "Failed to duplicate run",
+      "deleted": "Run deleted",
+      "cancelFirst": "Cancel the run first.",
+      "deleteFailed": "Failed to delete run"
+    }
+  },
+  "bulk": {
+    "selected": "selected",
+    "retry": "Retry selected",
+    "cancel": "Cancel selected",
+    "delete": "Delete selected",
+    "clear": "Clear selection",
+    "noneTerminal": "No terminal runs selected",
+    "noneInProgress": "No in-progress runs selected",
+    "verb": {
+      "retried": "Retried",
+      "cancelled": "Cancelled",
+      "deleted": "Deleted"
+    },
+    "result_one": "{{verb}} {{count}} run",
+    "result_other": "{{verb}} {{count}} runs",
+    "failed": ", {{count}} failed",
+    "skipped": ", {{count}} skipped",
+    "confirmDelete": {
+      "title_one": "Delete {{count}} run?",
+      "title_other": "Delete {{count}} runs?",
+      "body_one": "The selected run and all of their test cases, executions, and evidence will be permanently deleted.",
+      "body_other": "The selected runs and all of their test cases, executions, and evidence will be permanently deleted.",
+      "skipped_one": " {{count}} in-progress run will be skipped — cancel it first.",
+      "skipped_other": " {{count}} in-progress runs will be skipped — cancel them first.",
+      "confirm": "Delete runs"
+    }
+  },
+  "detail": {
+    "back": "All runs",
+    "meta": "{{scope}} · {{framework}} · {{env}} · {{workers}} workers",
+    "openReview": "Open Review Center",
+    "analyzing": "Q‑Agent is analyzing your tickets",
+    "readingRequirements": "Reading requirements…",
+    "ticketsAnalyzed": "TICKETS ANALYZED",
+    "generatingCases": "Generating test cases…",
+    "readingTicket": "Reading ticket…",
+    "review": "Review",
+    "queued": "Queued",
+    "analysisFailed": "Analysis failed",
+    "ai": {
+      "title": "AI usage & cost",
+      "subtitle": "Per-ticket spend for {{code}} · {{model}}",
+      "runLevel": "Run‑level",
+      "colTicketProcess": "TICKET / PROCESS",
+      "colProcess": "AI PROCESS",
+      "colInput": "INPUT",
+      "colOutput": "OUTPUT",
+      "colTokens": "TOKENS",
+      "colCost": "COST",
+      "tokens": "{{value}} tokens",
+      "tok": "{{value}} tok"
+    }
+  },
+  "review": {
+    "title": "Review Center",
+    "approveSelected": "Approve selected ({{count}})",
+    "approveAll": "Approve all",
+    "createLocally": "Create locally",
+    "createLocallyHint": "Record approved cases locally only — nothing is written to the provider",
+    "createCases": "Create test cases",
+    "createAndLink": "Create & link to ticket",
+    "stat": {
+      "approved": "Approved",
+      "needsReview": "Needs review",
+      "rejected": "Rejected",
+      "reviewed": "Run reviewed"
+    },
+    "empty": {
+      "title": "No test cases yet",
+      "body": "The AI hasn't generated any test cases for this run yet."
+    },
+    "approvedCount": "{{approved}}/{{total}} approved",
+    "continueToSync": "Continue to Sync",
+    "ticket": {
+      "testCases": "{{count}} test cases",
+      "approvedCount": "{{count}} approved",
+      "pendingCount": "{{count}} pending",
+      "allApproved": "All approved",
+      "approveAll": "Approve all",
+      "approveAllCases": "Approve all {{count}} cases"
+    },
+    "case": {
+      "regenerating": "regenerating",
+      "type": "Type:",
+      "automation": "Automation:",
+      "automationHint": "Set a framework to make this case automatable.",
+      "manualOption": "Manual (no automation)",
+      "objective": "OBJECTIVE",
+      "precondition": "PRECONDITION",
+      "testData": "TEST DATA",
+      "colNum": "#",
+      "colAction": "ACTION",
+      "colExpected": "EXPECTED RESULT",
+      "coversAc": "COVERS AC",
+      "approved": "Approved",
+      "approve": "Approve",
+      "rejected": "Rejected",
+      "reject": "Reject",
+      "regenerate": "Regenerate",
+      "regeneratingBusy": "Regenerating…",
+      "edit": "Edit",
+      "titleLabel": "TITLE",
+      "steps": "STEPS",
+      "fieldPlaceholder": "Field",
+      "valuePlaceholder": "Value",
+      "removeField": "Remove field",
+      "removeFieldAria": "Remove test data {{num}}",
+      "addField": "Add field",
+      "actionPlaceholder": "Action",
+      "expectedPlaceholder": "Expected result",
+      "removeStep": "Remove step",
+      "removeStepAria": "Remove step {{num}}",
+      "addStep": "Add step",
+      "saveChanges": "Save changes",
+      "cancel": "Cancel"
+    }
+  }
+}

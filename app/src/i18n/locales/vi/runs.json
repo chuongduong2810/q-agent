@@ -1,0 +1,182 @@
+{
+  "list": {
+    "subtitle": "Phiên QA hàng loạt · chạy nhiều lượt song song",
+    "title": "Lượt chạy",
+    "createRun": "Tạo lượt chạy",
+    "empty": {
+      "title": "Chưa có lượt chạy nào",
+      "body": "Tạo một lượt chạy để bắt đầu phiên QA hàng loạt trên một hoặc nhiều công việc."
+    },
+    "emptyView": "Không có lượt chạy nào trong mục này.",
+    "stat": {
+      "active": "Đang chạy",
+      "review": "Đang đánh giá",
+      "completed": "Hoàn thành",
+      "failed": "Thất bại"
+    },
+    "filter": {
+      "all": "Tất cả",
+      "active": "Đang chạy",
+      "review": "Đang đánh giá",
+      "completed": "Hoàn thành",
+      "failed": "Thất bại"
+    }
+  },
+  "row": {
+    "select": "Chọn lượt chạy",
+    "deselect": "Bỏ chọn lượt chạy",
+    "needsYou": "cần bạn",
+    "tickets_one": "{{count}} công việc",
+    "tickets_other": "{{count}} công việc",
+    "cases_one": "{{count}} trường hợp",
+    "cases_other": "{{count}} trường hợp",
+    "pass": "Đạt {{pct}}",
+    "runExecution": "Chạy thực thi",
+    "openRun": "Mở lượt chạy"
+  },
+  "actions": {
+    "menu": "Thao tác lượt chạy",
+    "cancel": "Hủy lượt chạy",
+    "retry": "Thử lại lượt chạy",
+    "duplicate": "Nhân bản",
+    "delete": "Xóa lượt chạy",
+    "confirmCancel": {
+      "title": "Hủy lượt chạy này?",
+      "message": "\"{{name}}\" sẽ dừng lại ở vị trí hiện tại. Bạn có thể thử lại sau.",
+      "confirm": "Hủy lượt chạy"
+    },
+    "confirmDelete": {
+      "title": "Xóa lượt chạy này?",
+      "message": "\"{{name}}\" cùng toàn bộ trường hợp kiểm thử, lần thực thi và bằng chứng của nó sẽ bị xóa vĩnh viễn.",
+      "confirm": "Xóa lượt chạy"
+    },
+    "toast": {
+      "cancelled": "Đã hủy lượt chạy",
+      "cancelFailed": "Hủy lượt chạy thất bại",
+      "retrying": "Đang thử lại lượt chạy",
+      "retryFailed": "Thử lại lượt chạy thất bại",
+      "duplicated": "Đã nhân bản thành {{code}}",
+      "duplicateFailed": "Nhân bản lượt chạy thất bại",
+      "deleted": "Đã xóa lượt chạy",
+      "cancelFirst": "Hãy hủy lượt chạy trước.",
+      "deleteFailed": "Xóa lượt chạy thất bại"
+    }
+  },
+  "bulk": {
+    "selected": "đã chọn",
+    "retry": "Thử lại mục đã chọn",
+    "cancel": "Hủy mục đã chọn",
+    "delete": "Xóa mục đã chọn",
+    "clear": "Bỏ chọn tất cả",
+    "noneTerminal": "Chưa chọn lượt chạy đã kết thúc nào",
+    "noneInProgress": "Chưa chọn lượt chạy đang chạy nào",
+    "verb": {
+      "retried": "Đã thử lại",
+      "cancelled": "Đã hủy",
+      "deleted": "Đã xóa"
+    },
+    "result_one": "{{verb}} {{count}} lượt chạy",
+    "result_other": "{{verb}} {{count}} lượt chạy",
+    "failed": ", {{count}} thất bại",
+    "skipped": ", {{count}} bị bỏ qua",
+    "confirmDelete": {
+      "title_one": "Xóa {{count}} lượt chạy?",
+      "title_other": "Xóa {{count}} lượt chạy?",
+      "body_one": "Lượt chạy đã chọn cùng toàn bộ trường hợp kiểm thử, lần thực thi và bằng chứng sẽ bị xóa vĩnh viễn.",
+      "body_other": "Các lượt chạy đã chọn cùng toàn bộ trường hợp kiểm thử, lần thực thi và bằng chứng sẽ bị xóa vĩnh viễn.",
+      "skipped_one": " {{count}} lượt chạy đang chạy sẽ bị bỏ qua — hãy hủy nó trước.",
+      "skipped_other": " {{count}} lượt chạy đang chạy sẽ bị bỏ qua — hãy hủy chúng trước.",
+      "confirm": "Xóa các lượt chạy"
+    }
+  },
+  "detail": {
+    "back": "Tất cả lượt chạy",
+    "meta": "{{scope}} · {{framework}} · {{env}} · {{workers}} luồng",
+    "openReview": "Mở Trung tâm đánh giá",
+    "analyzing": "Q‑Agent đang phân tích các công việc của bạn",
+    "readingRequirements": "Đang đọc yêu cầu…",
+    "ticketsAnalyzed": "CÔNG VIỆC ĐÃ PHÂN TÍCH",
+    "generatingCases": "Đang tạo trường hợp kiểm thử…",
+    "readingTicket": "Đang đọc công việc…",
+    "review": "Đánh giá",
+    "queued": "Đang chờ",
+    "analysisFailed": "Phân tích thất bại",
+    "ai": {
+      "title": "Mức dùng & chi phí AI",
+      "subtitle": "Chi phí theo công việc cho {{code}} · {{model}}",
+      "runLevel": "Cấp lượt chạy",
+      "colTicketProcess": "CÔNG VIỆC / TIẾN TRÌNH",
+      "colProcess": "TIẾN TRÌNH AI",
+      "colInput": "ĐẦU VÀO",
+      "colOutput": "ĐẦU RA",
+      "colTokens": "TOKEN",
+      "colCost": "CHI PHÍ",
+      "tokens": "{{value}} token",
+      "tok": "{{value}} token"
+    }
+  },
+  "review": {
+    "title": "Trung tâm đánh giá",
+    "approveSelected": "Phê duyệt mục đã chọn ({{count}})",
+    "approveAll": "Phê duyệt tất cả",
+    "createLocally": "Tạo cục bộ",
+    "createLocallyHint": "Chỉ ghi nhận các trường hợp đã phê duyệt tại chỗ — không ghi gì lên nhà cung cấp",
+    "createCases": "Tạo trường hợp kiểm thử",
+    "createAndLink": "Tạo & liên kết với công việc",
+    "stat": {
+      "approved": "Đã phê duyệt",
+      "needsReview": "Cần đánh giá",
+      "rejected": "Đã từ chối",
+      "reviewed": "Lượt chạy đã đánh giá"
+    },
+    "empty": {
+      "title": "Chưa có trường hợp kiểm thử nào",
+      "body": "AI chưa tạo trường hợp kiểm thử nào cho lượt chạy này."
+    },
+    "approvedCount": "{{approved}}/{{total}} đã phê duyệt",
+    "continueToSync": "Tiếp tục đến Đồng bộ",
+    "ticket": {
+      "testCases": "{{count}} trường hợp kiểm thử",
+      "approvedCount": "{{count}} đã phê duyệt",
+      "pendingCount": "{{count}} chờ xử lý",
+      "allApproved": "Đã phê duyệt tất cả",
+      "approveAll": "Phê duyệt tất cả",
+      "approveAllCases": "Phê duyệt tất cả {{count}} trường hợp"
+    },
+    "case": {
+      "regenerating": "đang tạo lại",
+      "type": "Loại:",
+      "automation": "Tự động hóa:",
+      "automationHint": "Đặt một framework để trường hợp này có thể tự động hóa.",
+      "manualOption": "Thủ công (không tự động hóa)",
+      "objective": "MỤC TIÊU",
+      "precondition": "ĐIỀU KIỆN TIÊN QUYẾT",
+      "testData": "DỮ LIỆU KIỂM THỬ",
+      "colNum": "#",
+      "colAction": "HÀNH ĐỘNG",
+      "colExpected": "KẾT QUẢ MONG ĐỢI",
+      "coversAc": "BAO PHỦ AC",
+      "approved": "Đã phê duyệt",
+      "approve": "Phê duyệt",
+      "rejected": "Đã từ chối",
+      "reject": "Từ chối",
+      "regenerate": "Tạo lại",
+      "regeneratingBusy": "Đang tạo lại…",
+      "edit": "Chỉnh sửa",
+      "titleLabel": "TIÊU ĐỀ",
+      "steps": "CÁC BƯỚC",
+      "fieldPlaceholder": "Trường",
+      "valuePlaceholder": "Giá trị",
+      "removeField": "Xóa trường",
+      "removeFieldAria": "Xóa dữ liệu kiểm thử {{num}}",
+      "addField": "Thêm trường",
+      "actionPlaceholder": "Hành động",
+      "expectedPlaceholder": "Kết quả mong đợi",
+      "removeStep": "Xóa bước",
+      "removeStepAria": "Xóa bước {{num}}",
+      "addStep": "Thêm bước",
+      "saveChanges": "Lưu thay đổi",
+      "cancel": "Hủy"
+    }
+  }
+}
