@@ -252,6 +252,76 @@ export interface AutomationStatus {
   generating: boolean;
 }
 
+// ----------------------------------------------------- DOM exploration (ADR 0010)
+/** What the exploration agent should find — a blocked case's screen/goal. */
+export interface ExploreTarget {
+  ticket?: string;
+  screen?: string;
+  goal?: string;
+}
+
+/** Body for `POST /projects/{key}/repos/{repo}/explore` (ADR 0010 §7). */
+export interface ExploreRequest {
+  target: ExploreTarget;
+  runId?: number;
+  caseId?: number;
+  allowStateChanging?: boolean;
+}
+
+/** Immediate response — the session started; poll/WS for progress. */
+export interface ExploreStartOut {
+  started: boolean;
+  sessionId: string;
+}
+
+/** Navigation-survival poll: whether a session is in-flight for this repo, plus
+ * the latest terminal result summary once one has completed. */
+export interface ExploreStatus {
+  exploring: boolean;
+  sessionId: string | null;
+  stopReason?: string | null;
+  stepsTaken?: number | null;
+  wroteKb?: boolean | null;
+  discoveredRoutes?: number | null;
+  discoveredSelectors?: number | null;
+}
+
+/** A route the exploration agent observed on the live app. */
+export interface DiscoveredRoute {
+  path: string;
+  description: string;
+}
+
+/** A selector the exploration agent verified against the live DOM, stamped with
+ * the locator strategy that actually worked (`data-testid` → css → role → label). */
+export interface DiscoveredSelector {
+  screen: string;
+  element: string;
+  selector: string;
+  strategy: string;
+}
+
+/** One entry in the ordered exploration log (also the shape of each
+ * `explore.progress` WS step, minus the streaming budget fields). */
+export interface ExploreLogEntry {
+  step: number;
+  reasoning: string;
+  action: string;
+  args: Record<string, unknown>;
+  observedUrl: string;
+}
+
+/** The full outcome of one exploration session (mirrors `ExplorationResultOut`).
+ * Not served by a poll endpoint — reconstructed from the WS stream + status. */
+export interface ExplorationResult {
+  discovered: { routes?: DiscoveredRoute[]; selectors?: DiscoveredSelector[] };
+  log: ExploreLogEntry[];
+  stopReason: string;
+  stepsTaken: number;
+  budgetSpent: { usd?: number; tokens?: number };
+  wroteKb: boolean;
+}
+
 export interface KnowledgeBuildRequest {
   name?: string;
   provider?: string;

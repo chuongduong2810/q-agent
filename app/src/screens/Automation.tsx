@@ -9,10 +9,13 @@ import {
   ALL_TICKETS_PAGE_SIZE,
   useAutomationStatus,
   useExecution,
+  useExploreSpec,
+  useExploreStatus,
   useGenerateAutomation,
   useHealReport,
   useHealSpec,
   useHealStatus,
+  useKnowledgeList,
   useRegenerateSpec,
   useRun,
   useRunCases,
@@ -33,12 +36,13 @@ import { useAutomationEvents } from "./automation/useAutomationEvents";
 import { useThinkingSteps } from "./automation/useThinkingSteps";
 import { useCodeFolding } from "./automation/useCodeFolding";
 import { TargetRepoPanel } from "./automation/TargetRepoPanel";
-import { ThinkingBanner, GeneratingBanner, HealProgressBanner } from "./automation/ProgressBanners";
+import { ThinkingBanner, GeneratingBanner, HealProgressBanner, ExploreProgressBanner } from "./automation/ProgressBanners";
 import { NoAutomationEmptyState } from "./automation/EmptyState";
 import { SpecList } from "./automation/SpecList";
 import { ProductDefectBanner, BlockedBanner } from "./automation/banners";
 import { SpecCodePanel } from "./automation/SpecCodePanel";
 import { HealTimeline } from "./automation/HealTimeline";
+import { ExploreReview } from "./automation/ExploreReview";
 import { diffLines } from "./automation/lineDiff";
 import { SpecChatPanel } from "./automation/chat/SpecChatPanel";
 import { useUI } from "@/store/ui";
@@ -61,6 +65,8 @@ export function Automation() {
   const { data: execution } = useExecution(runId);
   const setTicketRepo = useSetRunTicketRepo(runId);
   const healSpec = useHealSpec(runId);
+  const exploreSpec = useExploreSpec();
+  const { data: knowledgeList } = useKnowledgeList();
   const openChat = useUI((s) => s.openChat);
   const runSpec = useRunSpec(runId);
   const qc = useQueryClient();
@@ -110,8 +116,8 @@ export function Automation() {
   // survives navigation and blocks re-triggering.
   const generating = (autoStatus?.generating ?? false) || generateAutomation.isPending;
 
-  // Live generation + self-heal progress from the run's WS stream.
-  const { genProgress, healProgress } = useAutomationEvents(runId, generating);
+  // Live generation, self-heal, and DOM-exploration progress from the run's WS stream.
+  const { genProgress, healProgress, exploreProgress } = useAutomationEvents(runId, generating);
 
   const specCount = specs ? specs.length : 0;
 
@@ -402,6 +408,89 @@ export function Automation() {
   const gateReport = useMemo(() => parseGateReport(selectedSpec?.gateReport), [selectedSpec?.gateReport]);
   const gateRejected = gateReport?.outcome === "rejected";
 
+  // ---- DOM exploration (ADR 0010): "Explore to unblock" a blocked case. -------
+  // The selected case's target repo — the per-work-item repo (else the project
+  // default), the same source TargetRepoPanel uses.
+  const selectedCase = useMemo(
+    () => cases?.find((c) => c.id === selectedCaseId) ?? null,
+    [cases, selectedCaseId],
+  );
+  const targetRepo = useMemo(() => {
+    const rt = runTickets.find((t) => t.ticketExternalId === selectedCase?.ticketExternalId);
+    return rt?.repo || defaultRepoName;
+  }, [runTickets, selectedCase, defaultRepoName]);
+  // RunOut carries no project key and there is no run→project endpoint, so derive
+  // it from the knowledge list: the run's repos (useRunRepos) belong to exactly
+  // one project, so pick the project whose indexed repos overlap them the most.
+  const projectKey = useMemo(() => {
+    const runRepoNames = new Set((repoOptions ?? []).map((r) => r.name));
+    if (runRepoNames.size === 0 || !knowledgeList) return "";
+    const overlap = new Map<string, number>();
+    for (const k of knowledgeList) {
+      const pk = k.projectKey || k.key;
+      if (pk && k.repo && runRepoNames.has(k.repo)) overlap.set(pk, (overlap.get(pk) ?? 0) + 1);
+    }
+    let best = "";
+    let bestN = 0;
+    for (const [pk, n] of overlap) {
+      if (n > bestN) {
+        best = pk;
+        bestN = n;
+      }
+    }
+    return best;
+  }, [repoOptions, knowledgeList]);
+
+  // Which case triggered the current/last exploration — the review panel shows
+  // only under that case (exploration is repo-scoped, but the review is per-case).
+  const [exploredCaseId, setExploredCaseId] = useState<number | null>(null);
+
+  // Poll exploration status (repo-scoped) so "Exploring…" and the discovered
+  // summary survive navigating away/back. Only relevant for a blocked case or an
+  // in-flight/just-finished session. Mirrors useHealStatus.
+  const exploreRelevant = isBlocked || exploreSpec.isPending || exploreProgress != null;
+  const { data: exploreStatusData } = useExploreStatus(
+    projectKey,
+    targetRepo,
+    exploreRelevant && !!projectKey && !!targetRepo,
+  );
+  // Drive the button/banner from server truth (in-flight status) + the trigger
+  // POST — NOT the WS stream (a missed terminal step would otherwise stick it).
+  const exploringThisCase = exploreSpec.isPending || (exploreStatusData?.exploring ?? false);
+
+  // Kick off a DOM-exploration session for the selected blocked case: drive a real
+  // browser to discover the missing routes/selectors, write them (runtime-verified)
+  // to the KB, then the case can be regenerated. Progress streams over WS.
+  const startExplore = () => {
+    if (!selectedSpec) return;
+    if (!projectKey || !targetRepo) {
+      toast.error("Couldn't resolve the project/repository for this case.");
+      return;
+    }
+    const caseId = selectedSpec.testCaseId;
+    setExploredCaseId(caseId);
+    exploreSpec.mutate(
+      {
+        projectKey,
+        repo: targetRepo,
+        body: {
+          target: {
+            ticket: selectedCase?.ticketExternalId,
+            screen: selectedCase?.title,
+            goal: selectedCase?.objective,
+          },
+          runId,
+          caseId,
+        },
+      },
+      {
+        onSuccess: () =>
+          qc.invalidateQueries({ queryKey: queryKeys.exploreStatus(projectKey, targetRepo) }),
+        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to start exploration"),
+      },
+    );
+  };
+
   const handleCopy = () => {
     if (!selectedSpec) return;
     navigator.clipboard.writeText(selectedSpec.code);
@@ -556,6 +645,10 @@ export function Automation() {
         <HealProgressBanner healProgress={healProgress} />
       )}
 
+      {exploreProgress && exploringThisCase && (
+        <ExploreProgressBanner exploreProgress={exploreProgress} />
+      )}
+
       {/* AI chat panel — edit the selected spec conversationally (portals to body). */}
       <SpecChatPanel runId={runId} spec={selectedSpec} />
 
@@ -584,8 +677,20 @@ export function Automation() {
               reason={selectedSpec?.blockReason ?? ""}
               onRegenerate={handleRegenerate}
               regenerating={specRegenerating}
+              onExplore={startExplore}
+              exploring={exploringThisCase}
             />
           )}
+          {exploreProgress &&
+            !exploringThisCase &&
+            exploredCaseId === selectedSpec?.testCaseId && (
+              <ExploreReview
+                progress={exploreProgress}
+                status={exploreStatusData}
+                regenerating={specRegenerating}
+                onRegenerate={handleRegenerate}
+              />
+            )}
           {regenResult && regenResult.caseId === selectedSpec?.testCaseId && (
             <RegenSummary
               version={regenResult.version}
@@ -623,6 +728,7 @@ export function Automation() {
             generating={generating}
             specRegenerating={specRegenerating}
             healingThisCase={healingThisCase}
+            exploringThisCase={exploringThisCase}
             runningThisSpec={!!runningThisSpec}
             runSuppressed={runSuppressed}
             isBlocked={isBlocked}
@@ -662,6 +768,7 @@ export function Automation() {
             onRegenerate={handleRegenerate}
             onRunSpec={runThisSpec}
             onStartHeal={startHeal}
+            onStartExplore={startExplore}
             onStartExecution={startExecutionAndView}
             onOpenChat={openChat}
             codeOverride={editorCodeOverride}

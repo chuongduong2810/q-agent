@@ -37,6 +37,8 @@ export const queryKeys = {
     ["runs", runId, "automation", "status"] as const,
   healStatus: (caseId: number) => ["cases", caseId, "heal", "status"] as const,
   healReport: (caseId: number) => ["cases", caseId, "heal", "report"] as const,
+  exploreStatus: (projectKey: string, repo: string) =>
+    ["projects", projectKey, "repos", repo, "explore", "status"] as const,
   execution: (runId: number | string) => ["runs", runId, "execution"] as const,
   evidence: (runId: number | string) => ["runs", runId, "evidence"] as const,
   report: (runId: number | string) => ["runs", runId, "report"] as const,
