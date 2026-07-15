@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Download, Laptop, Trash2 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -35,6 +36,7 @@ function isDeviceOnline(device: AgentDeviceOut, now: number): boolean {
 }
 
 export function LocalAgent() {
+  const { t } = useTranslation("dashboard");
   const { data: devices, isLoading } = useAgentDevices();
   const pairCode = usePairCode();
   const revokeDevice = useRevokeDevice();
@@ -62,7 +64,7 @@ export function LocalAgent() {
     const known = new Set(pairing.knownIds);
     const paired = devices.find((d) => !known.has(d.id));
     if (paired) {
-      toast.success(`"${paired.name || "Device"}" paired`);
+      toast.success(t("localAgent.toast.paired", { name: paired.name || t("localAgent.deviceFallback") }));
       setPairing(null);
     }
   }, [devices, pairing]);
@@ -76,7 +78,7 @@ export function LocalAgent() {
           knownIds: (devices ?? []).map((d) => d.id),
         }),
       onError: (err) =>
-        toast.error(err instanceof Error ? err.message : "Failed to generate a pairing code"),
+        toast.error(err instanceof Error ? err.message : t("localAgent.toast.pairCodeFailed")),
     });
   };
 
@@ -90,8 +92,8 @@ export function LocalAgent() {
   return (
     <div className="mx-auto max-w-[860px] py-10">
       <div className="mb-[22px]">
-        <div className="mb-[5px] text-[13px] font-medium text-muted">Local Agent</div>
-        <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">Run suites on your machine</h1>
+        <div className="mb-[5px] text-[13px] font-medium text-muted">{t("localAgent.eyebrow")}</div>
+        <h1 className="m-0 text-[28px] font-black tracking-[-0.03em]">{t("localAgent.title")}</h1>
       </div>
 
       <GlassCard className="mb-5 p-[22px]">
@@ -100,23 +102,23 @@ export function LocalAgent() {
             <Cpu size={19} className="text-violet" strokeWidth={2} />
           </span>
           <div className="flex-1">
-            <div className="mb-1 text-[14.5px] font-bold">What is the Local Agent?</div>
+            <div className="mb-1 text-[14.5px] font-bold">{t("localAgent.about.title")}</div>
             <p className="m-0 text-[13px] leading-[1.65] text-[#c3c3d0]">
-              A small CLI you run on your own computer. It claims execution jobs from Q&#8209;Agent
-              and runs Playwright <b className="font-semibold text-[#ececf1]">headed, locally</b> — so
-              when a suite needs a manual login (e.g. MFA), the browser opens right where you are.
-              Your session cookies never leave your machine; only progress, results, and screenshots
-              are sent back.
+              <Trans
+                t={t}
+                i18nKey="localAgent.about.body"
+                components={{ b: <b className="font-semibold text-[#ececf1]" /> }}
+              />
             </p>
           </div>
         </div>
         <div className="mt-[18px] rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
           <div className="mb-1.5 text-[11px] font-semibold tracking-[.06em] text-[#6c6c7e]">
-            PREREQUISITES
+            {t("localAgent.prereq.title")}
           </div>
           <ul className="m-0 list-none space-y-1 p-0 text-[12.5px] text-[#c3c3d0]">
-            <li>&middot; Nothing to install for the Windows app — Node.js 18+ only if you use the npx option</li>
-            <li>&middot; Chromium is installed automatically the first time you run the agent</li>
+            <li>&middot; {t("localAgent.prereq.item1")}</li>
+            <li>&middot; {t("localAgent.prereq.item2")}</li>
           </ul>
         </div>
 
@@ -127,22 +129,27 @@ export function LocalAgent() {
             className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
             style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)" }}
           >
-            <Download size={15} strokeWidth={2.2} /> Download for Windows
+            <Download size={15} strokeWidth={2.2} /> {t("localAgent.download")}
           </a>
           <span className="text-[12px] text-[#8b8b9e]">
-            Native app — no Node required, and it self-updates. With Node 18+ you can instead run{" "}
-            <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11.5px] text-[#c4b5fd]">
-              npx @q-agent/agent
-            </code>
+            <Trans
+              t={t}
+              i18nKey="localAgent.nativeAppNote"
+              components={{
+                code: (
+                  <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11.5px] text-[#c4b5fd]" />
+                ),
+              }}
+            />
           </span>
         </div>
       </GlassCard>
 
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">PAIRED DEVICES</div>
+        <div className="text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">{t("localAgent.pairedDevices")}</div>
         <Button variant="primary" size="sm" onClick={handleAddDevice} disabled={pairCode.isPending}>
           {pairCode.isPending ? <Spinner size={13} /> : <Laptop size={14} strokeWidth={2.4} />}
-          Add device
+          {t("localAgent.addDevice")}
         </Button>
       </div>
 
@@ -164,7 +171,7 @@ export function LocalAgent() {
           </div>
         ) : !devices?.length ? (
           <div className="p-8 text-center text-[13px] text-ink-dim">
-            No devices paired yet. Click "Add device" to get a pairing command.
+            {t("localAgent.noDevices")}
           </div>
         ) : (
           <div className="flex flex-col gap-2 p-2">
@@ -182,20 +189,20 @@ export function LocalAgent() {
 
       <ConfirmDialog
         open={revoking !== null}
-        title="Revoke this device?"
-        message={`"${revoking?.name ?? "This device"}" will no longer be able to claim or run jobs. You can pair it again later.`}
-        confirmLabel="Revoke device"
+        title={t("localAgent.revoke.title")}
+        message={t("localAgent.revoke.message", { name: revoking?.name ?? t("localAgent.revoke.thisDevice") })}
+        confirmLabel={t("localAgent.revoke.confirm")}
         danger
         loading={revokeDevice.isPending}
         onConfirm={() => {
           if (!revoking) return;
           revokeDevice.mutate(revoking.id, {
             onSuccess: () => {
-              toast.success("Device revoked");
+              toast.success(t("localAgent.toast.revoked"));
               setRevoking(null);
             },
             onError: (err) =>
-              toast.error(err instanceof Error ? err.message : "Failed to revoke device"),
+              toast.error(err instanceof Error ? err.message : t("localAgent.toast.revokeFailed")),
           });
         }}
         onClose={() => setRevoking(null)}
@@ -218,6 +225,7 @@ function PairingCommand({
   expiresAt: number;
   onExpire: () => void;
 }) {
+  const { t } = useTranslation("dashboard");
   const [remainingMs, setRemainingMs] = useState(() => expiresAt - Date.now());
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -243,7 +251,7 @@ function PairingCommand({
       setCopied(key);
       setTimeout(() => setCopied((c) => (c === key ? null : c)), 1400);
     } catch {
-      toast.error("Couldn't copy to clipboard");
+      toast.error(t("localAgent.toast.copyFailed"));
     }
   };
 
@@ -251,29 +259,31 @@ function PairingCommand({
     <GlassCard className="mb-3 p-[18px]">
       <div className="mb-3 flex items-center gap-2">
         <Laptop size={15} className="text-violet" strokeWidth={2.2} />
-        <span className="text-[13px] font-semibold">Pair a device</span>
+        <span className="text-[13px] font-semibold">{t("localAgent.pairing.title")}</span>
         <span className="ml-auto font-mono text-[12px] text-[#8b8b9e]">
-          Expires in {mm}:{ss.toString().padStart(2, "0")}
+          {t("localAgent.pairing.expiresIn", { time: `${mm}:${ss.toString().padStart(2, "0")}` })}
         </span>
       </div>
 
-      <div className="text-[11px] font-semibold tracking-[0.06em] text-[#6c6c7e]">PAIRING CODE</div>
+      <div className="text-[11px] font-semibold tracking-[0.06em] text-[#6c6c7e]">{t("localAgent.pairing.codeLabel")}</div>
       <div className="mt-1.5 flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-3 pl-4">
         <span className="flex-1 font-mono text-[30px] font-bold tracking-[0.28em] text-ink">{code}</span>
         <button
           type="button"
           onClick={() => copyText(code, "code")}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#8b8b9e] transition-colors hover:bg-white/[0.08] hover:text-white"
-          aria-label="Copy code"
+          aria-label={t("localAgent.pairing.copyCode")}
         >
           {copied === "code" ? <Check size={16} className="text-[#6ee7b7]" /> : <Copy size={16} />}
         </button>
       </div>
 
       <p className="mt-3 mb-0 text-[11.5px] leading-[1.55] text-[#8b8b9e]">
-        Open the <b className="text-[#c3c3d0]">Local Agent</b> app, type this code and click{" "}
-        <b className="text-[#c3c3d0]">Connect</b> — the downloaded app already knows this server. Or,
-        from a terminal:
+        <Trans
+          t={t}
+          i18nKey="localAgent.pairing.instructions"
+          components={{ b: <b className="text-[#c3c3d0]" /> }}
+        />
       </p>
       <div className="mt-2 flex items-center gap-2.5 rounded-xl border border-white/10 bg-[#16161f] p-2.5 pl-3.5">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[12px] text-[#c3c3d0]">
@@ -283,7 +293,7 @@ function PairingCommand({
           type="button"
           onClick={() => copyText(command, "cmd")}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#8b8b9e] transition-colors hover:bg-white/[0.08] hover:text-white"
-          aria-label="Copy command"
+          aria-label={t("localAgent.pairing.copyCommand")}
         >
           {copied === "cmd" ? <Check size={15} className="text-[#6ee7b7]" /> : <Copy size={15} />}
         </button>
@@ -301,6 +311,7 @@ function DeviceRow({
   online: boolean;
   onRevoke: () => void;
 }) {
+  const { t } = useTranslation("dashboard");
   return (
     <div className="flex items-center gap-3.5 rounded-[13px] border border-white/[0.06] bg-white/[0.03] p-3">
       <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-white/[0.05] text-ink-dim">
@@ -309,13 +320,15 @@ function DeviceRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-[13.5px] font-semibold text-ink">
-            {device.name || "Unnamed device"}
+            {device.name || t("localAgent.unnamedDevice")}
           </span>
           <StatusBadge online={online} />
         </div>
         <div className="text-[11.5px] text-muted">
-          Last seen {device.lastSeenAt ? relativeTime(device.lastSeenAt) : "never"} &middot; Paired{" "}
-          {relativeTime(device.createdAt)}
+          {t("localAgent.device.lastSeenPaired", {
+            last: device.lastSeenAt ? relativeTime(device.lastSeenAt) : t("localAgent.device.never"),
+            paired: relativeTime(device.createdAt),
+          })}
         </div>
       </div>
       <button
@@ -324,7 +337,7 @@ function DeviceRow({
         className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold text-danger-soft transition-colors hover:bg-[rgba(244,63,94,.1)]"
       >
         <Trash2 size={13} strokeWidth={2.2} />
-        Revoke
+        {t("localAgent.revoke.button")}
       </button>
     </div>
   );
@@ -334,6 +347,7 @@ function DeviceRow({
  * checked in within {@link ONLINE_WINDOW_MS}; "Offline" devices stay paired and
  * reconnect on their own next launch (no re-pairing needed). */
 function StatusBadge({ online }: { online: boolean }) {
+  const { t } = useTranslation("dashboard");
   return (
     <span
       className={
@@ -346,7 +360,7 @@ function StatusBadge({ online }: { online: boolean }) {
         className={`h-1.5 w-1.5 rounded-full ${online ? "bg-[#34d399]" : "bg-[#6c6c7e]"}`}
         aria-hidden
       />
-      {online ? "Connected" : "Offline"}
+      {online ? t("localAgent.status.connected") : t("localAgent.status.offline")}
     </span>
   );
 }

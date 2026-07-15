@@ -1,0 +1,179 @@
+{
+  "dashboard": {
+    "greeting": "Good morning",
+    "missionControl": "Mission control",
+    "runsInReview_one": "{{count}} run in review",
+    "runsInReview_other": "{{count}} runs in review",
+    "stats": {
+      "activeRuns": "Active runs",
+      "casesInReview": "Cases in review",
+      "passRate": "Pass rate",
+      "avgRuntime": "Avg runtime",
+      "allCaughtUp": "All caught up",
+      "inReviewWithCode": "{{code}} in review",
+      "inCode": "in {{code}}",
+      "noRunsYet": "no runs yet",
+      "noReportsYet": "no reports yet",
+      "acrossReports_one": "across {{count}} report",
+      "acrossReports_other": "across {{count}} reports"
+    },
+    "hero": {
+      "noActiveRun": "NO ACTIVE RUN",
+      "title": "Run a whole sprint through one QA pipeline",
+      "activeBody": "{{meta}} — in the {{status}} stage. Review cases, run Playwright in parallel, and publish evidence back to every ticket.",
+      "emptyBody": "Select tickets, batch-generate test cases, review like pull requests, run Playwright in parallel, then publish evidence back to every ticket.",
+      "openRun": "Open run",
+      "newRun": "New Run",
+      "reviewCenter": "Review Center"
+    },
+    "suiteHealth": {
+      "title": "Suite health · 7d",
+      "passRate": "pass rate",
+      "passed": "passed",
+      "failed": "failed"
+    },
+    "recentActivity": {
+      "title": "Recent activity",
+      "empty": "No activity yet — actions you take will show up here."
+    },
+    "recentRuns": {
+      "title": "Recent runs",
+      "viewAll": "View all",
+      "empty": "No runs yet — create one to get started."
+    }
+  },
+  "gettingStarted": {
+    "hero": {
+      "eyebrow": "User guide · Q-Agent",
+      "title": "Getting Started",
+      "subtitle": "Everything you need to go from a backlog of tickets to reviewed, automated, executed, and evidenced test runs. Skim it, or jump straight in with the tour or a live sample run.",
+      "takeTour": "Take the product tour",
+      "exploreSample": "Explore the sample run",
+      "preparingSample": "Preparing sample…"
+    },
+    "sections": {
+      "coreConcepts": "CORE CONCEPTS",
+      "runPipeline": "THE RUN PIPELINE",
+      "yourFirstRun": "YOUR FIRST RUN",
+      "providersCredentials": "PROVIDERS & CREDENTIALS",
+      "tipsFaq": "TIPS & FAQ"
+    },
+    "whatIs": {
+      "title": "What is Q-Agent?",
+      "body1": "Q-Agent is an AI-native QA operating system. It turns the tickets in your backlog into reviewed, automated, executed, and evidenced test runs — end to end. Instead of writing test cases and Playwright scripts by hand, you point Q-Agent at your work items and codebase; it drafts the cases, you review them, and it generates the automation, runs it, captures the evidence, and reports back to the tickets.",
+      "body2": "You stay in control at every step — the AI proposes, you approve. Nothing is created in your provider until you say so."
+    },
+    "concepts": {
+      "projects": {
+        "title": "Projects",
+        "body": "A product or repo you test. Each project wires up its work-item source and the codebase Q-Agent generates automation against."
+      },
+      "tickets": {
+        "title": "Tickets",
+        "body": "Work items synced live from Azure DevOps or Jira. They're the raw input the AI reads to draft test cases."
+      },
+      "runs": {
+        "title": "Runs",
+        "body": "A batch QA session over a set of selected tickets. A run carries its own cases, automation, execution results, and evidence."
+      },
+      "knowledgeBases": {
+        "title": "Knowledge bases",
+        "body": "Per-repo indexed context. Q-Agent reads your code so the cases and Playwright specs it writes fit how your app actually works."
+      }
+    },
+    "pipelineIntro": {
+      "title": "Eight stages, one run",
+      "body": "Every run moves through the same pipeline — the exact stages you'll see in the run workspace sidebar. Each one hands off to the next."
+    },
+    "pipeline": {
+      "syncSelect": { "label": "Sync & Select", "what": "Pull the latest tickets from your provider and pick the ones this run should cover." },
+      "analyze": { "label": "Analyze", "what": "The AI reads each ticket against your knowledge base and drafts candidate test cases." },
+      "review": { "label": "Review", "what": "Approve, edit, or reject the AI-generated cases before anything leaves Q-Agent." },
+      "link": { "label": "Link", "what": "Create the reviewed cases in your provider and link them back to their source tickets." },
+      "automation": { "label": "Automation", "what": "Generate runnable Playwright specs from the approved cases." },
+      "execution": { "label": "Execution", "what": "Run the generated scripts and collect pass/fail results per case." },
+      "evidence": { "label": "Evidence", "what": "Capture screenshots, video, and a trace for every executed case." },
+      "publish": { "label": "Publish", "what": "Post the results and evidence back onto the originating tickets." }
+    },
+    "firstRunIntro": {
+      "title": "From zero to published",
+      "body": "The full happy path, once. After the first time it becomes second nature."
+    },
+    "firstRun": {
+      "connectProvider": { "title": "Connect a provider", "body": "In Settings, link your work-item source (ADO or Jira) and the repo you want automation written against." },
+      "syncTickets": { "title": "Sync tickets", "body": "Pull your backlog into Q-Agent. Use Basic or Advanced filters to reflect exactly what you care about." },
+      "selectCreateRun": { "title": "Select & create a run", "body": "Pick the tickets to cover, then spin them into a new run — your workspace for this QA session." },
+      "reviewCases": { "title": "Review the cases", "body": "Open Review and approve or refine the AI-drafted cases. Nothing is created upstream until you say so." },
+      "linkUpstream": { "title": "Link them upstream", "body": "Push the approved cases into your provider and link them to their tickets from the Link stage." },
+      "generateAutomation": { "title": "Generate automation", "body": "From Automation, turn the cases into Playwright specs tailored to your codebase." },
+      "execute": { "title": "Execute", "body": "Run the scripts from Execution and watch pass/fail results land per case." },
+      "reviewEvidence": { "title": "Review evidence & publish", "body": "Inspect the captured screenshots, video, and traces, then Publish the outcome back to the tickets." }
+    },
+    "providers": {
+      "connections": {
+        "title": "Provider connections",
+        "body": "In Settings, connect a work-item source — Azure DevOps or Jira — so Q-Agent can sync tickets and publish results. Connect the repo you want automation generated against so the AI has real code context."
+      },
+      "claude": {
+        "title": "Claude credentials",
+        "body": "Claude credentials are per-user and set in Settings. They power the analysis and generation stages, and they stay private to your account — you manage your own."
+      }
+    },
+    "faq": {
+      "credentials": { "q": "Do I need real credentials to explore?", "a": "No. Click “Explore the sample run” above to open a fully-populated run with no setup." },
+      "rewatchTour": { "q": "How do I re-watch the tour?", "a": "Open the command palette (⌘K) and choose “Start product tour” any time." },
+      "runsLive": { "q": "Where do my runs live?", "a": "Runs are private to you — only you see the runs you create." },
+      "editDrafts": { "q": "Can I edit what the AI drafts?", "a": "Yes. The Review stage exists precisely so you approve or edit every case before it's linked upstream." }
+    }
+  },
+  "localAgent": {
+    "eyebrow": "Local Agent",
+    "title": "Run suites on your machine",
+    "about": {
+      "title": "What is the Local Agent?",
+      "body": "A small CLI you run on your own computer. It claims execution jobs from Q‑Agent and runs Playwright <b>headed, locally</b> — so when a suite needs a manual login (e.g. MFA), the browser opens right where you are. Your session cookies never leave your machine; only progress, results, and screenshots are sent back."
+    },
+    "prereq": {
+      "title": "PREREQUISITES",
+      "item1": "Nothing to install for the Windows app — Node.js 18+ only if you use the npx option",
+      "item2": "Chromium is installed automatically the first time you run the agent"
+    },
+    "download": "Download for Windows",
+    "nativeAppNote": "Native app — no Node required, and it self-updates. With Node 18+ you can instead run <code>npx @q-agent/agent</code>",
+    "pairedDevices": "PAIRED DEVICES",
+    "addDevice": "Add device",
+    "noDevices": "No devices paired yet. Click \"Add device\" to get a pairing command.",
+    "unnamedDevice": "Unnamed device",
+    "deviceFallback": "Device",
+    "device": {
+      "lastSeenPaired": "Last seen {{last}} · Paired {{paired}}",
+      "never": "never"
+    },
+    "status": {
+      "connected": "Connected",
+      "offline": "Offline"
+    },
+    "pairing": {
+      "title": "Pair a device",
+      "expiresIn": "Expires in {{time}}",
+      "codeLabel": "PAIRING CODE",
+      "copyCode": "Copy code",
+      "instructions": "Open the <b>Local Agent</b> app, type this code and click <b>Connect</b> — the downloaded app already knows this server. Or, from a terminal:",
+      "copyCommand": "Copy command"
+    },
+    "revoke": {
+      "title": "Revoke this device?",
+      "message": "\"{{name}}\" will no longer be able to claim or run jobs. You can pair it again later.",
+      "thisDevice": "This device",
+      "confirm": "Revoke device",
+      "button": "Revoke"
+    },
+    "toast": {
+      "paired": "\"{{name}}\" paired",
+      "pairCodeFailed": "Failed to generate a pairing code",
+      "revoked": "Device revoked",
+      "revokeFailed": "Failed to revoke device",
+      "copyFailed": "Couldn't copy to clipboard"
+    }
+  }
+}
