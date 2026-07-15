@@ -705,4 +705,15 @@ def agent_explore_finalize(
             "discoveredSelectors": len(selectors),
         },
     )
+    logger.info(
+        "Exploration finalize (session={} run={}): stopReason={} steps={} routes={} selectors={} wroteKb={} | log={}",
+        session_id,
+        session.get("run_id"),
+        body.stop_reason,
+        body.steps_taken,
+        len(routes),
+        len(selectors),
+        wrote_kb,
+        (body.log or [])[:6],
+    )
     return ExploreFinalizeOut(ok=True, wrote_kb=wrote_kb)

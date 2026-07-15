@@ -429,6 +429,16 @@ def decide_next_action(
             "stop": True,
             "stopReason": "malformed",
         }
+    logger.info(
+        "Exploration decide (run={} step={}): action={} args={} reason={!r} | observed url={} elements={}",
+        run_id,
+        steps_taken,
+        decision["action"],
+        decision["args"],
+        (decision["reasoning"] or "")[:300],
+        observation.get("url"),
+        len(observation.get("elements") or []),
+    )
     return decision
 
 
