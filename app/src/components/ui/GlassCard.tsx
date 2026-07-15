@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
-import type { ReactNode } from "react";
+import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useTilt } from "@/hooks/useTilt";
-import { TiltGlare } from "@/components/ui/TiltGlare";
+import { TiltSweep } from "@/components/ui/TiltSweep";
 
 interface GlassCardProps {
   children: ReactNode;
@@ -26,6 +26,11 @@ interface GlassCardProps {
 export function GlassCard({ children, className, hover, index = 0, onClick, style }: GlassCardProps) {
   const interactive = hover || Boolean(onClick);
   const tilt = useTilt();
+  // Bumped on each hover-enter to remount (and thus replay) the shine sweep.
+  const [sweepKey, setSweepKey] = useState(0);
+  const replaySweep = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "touch") setSweepKey((k) => k + 1);
+  };
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -42,6 +47,7 @@ export function GlassCard({ children, className, hover, index = 0, onClick, styl
         transition: { duration: 0.25, ease: [0.2, 0.8, 0.2, 1] },
       }}
       onClick={onClick}
+      onPointerEnter={replaySweep}
       onPointerMove={tilt.onPointerMove}
       onPointerLeave={tilt.onPointerLeave}
       // tilt.style provides the perspective + rotate/scale motion values; the
@@ -55,7 +61,7 @@ export function GlassCard({ children, className, hover, index = 0, onClick, styl
       )}
     >
       {children}
-      <TiltGlare px={tilt.px} py={tilt.py} glow={tilt.glow} />
+      {sweepKey > 0 && <TiltSweep key={sweepKey} />}
     </motion.div>
   );
 }

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Check, Clock, LayoutList, Sparkles, TrendingUp } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
 import { useTilt } from "@/hooks/useTilt";
-import { TiltGlare } from "@/components/ui/TiltGlare";
+import { TiltSweep } from "@/components/ui/TiltSweep";
 import { runColor, runEffectiveStatus, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
 import { useAuditEvents, useReports, useRunCases, useRuns } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
@@ -30,6 +31,11 @@ const ACTOR_FG: Record<string, string> = {
 export function Dashboard() {
   const navigate = useNavigate();
   const heroTilt = useTilt();
+  // Bumped on each hover-enter to remount (and replay) the hero's shine sweep.
+  const [heroSweepKey, setHeroSweepKey] = useState(0);
+  const replayHeroSweep = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "touch") setHeroSweepKey((k) => k + 1);
+  };
   const { data: runs, isLoading: runsLoading } = useRuns();
   const openCreateRun = useUI((s) => s.openCreateRun);
   // Runs sorted newest-first; the hero card displays the most recent run.
@@ -154,6 +160,7 @@ export function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
           whileHover={{ zIndex: 20 }}
+          onPointerEnter={replayHeroSweep}
           onPointerMove={heroTilt.onPointerMove}
           onPointerLeave={heroTilt.onPointerLeave}
           className="relative overflow-hidden rounded-[22px] p-[18px] md:p-[26px]"
@@ -215,7 +222,7 @@ export function Dashboard() {
               </Button>
             </div>
           </div>
-          <TiltGlare px={heroTilt.px} py={heroTilt.py} glow={heroTilt.glow} />
+          {heroSweepKey > 0 && <TiltSweep key={heroSweepKey} />}
         </motion.div>
 
         <GlassCard className="flex flex-col p-[22px]">
