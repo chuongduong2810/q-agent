@@ -8,6 +8,7 @@
  * sample run to explore hands-on.
  */
 import type { ComponentType } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   Rocket,
@@ -35,75 +36,56 @@ import { Button } from "@/components/ui/Button";
 import { useTour } from "@/store/tour";
 import { useEnsureSampleRun } from "@/hooks/queries";
 
-/** A single core concept, rendered as a card in the concepts grid. */
+/** A single core concept, rendered as a card in the concepts grid.
+ * `key` indexes into the `gettingStarted.concepts.*` i18n subtree. */
 interface Concept {
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
-  title: string;
-  body: string;
+  key: string;
 }
 
 const CONCEPTS: Concept[] = [
-  {
-    icon: FolderGit2,
-    title: "Projects",
-    body: "A product or repo you test. Each project wires up its work-item source and the codebase Q-Agent generates automation against.",
-  },
-  {
-    icon: Ticket,
-    title: "Tickets",
-    body: "Work items synced live from Azure DevOps or Jira. They're the raw input the AI reads to draft test cases.",
-  },
-  {
-    icon: SquareStack,
-    title: "Runs",
-    body: "A batch QA session over a set of selected tickets. A run carries its own cases, automation, execution results, and evidence.",
-  },
-  {
-    icon: Library,
-    title: "Knowledge bases",
-    body: "Per-repo indexed context. Q-Agent reads your code so the cases and Playwright specs it writes fit how your app actually works.",
-  },
+  { icon: FolderGit2, key: "projects" },
+  { icon: Ticket, key: "tickets" },
+  { icon: SquareStack, key: "runs" },
+  { icon: Library, key: "knowledgeBases" },
 ];
 
-/** One stage of the run pipeline — mirrors RunSidebar's PIPELINE order/labels. */
+/** One stage of the run pipeline — mirrors RunSidebar's PIPELINE order/labels.
+ * `key` indexes into the `gettingStarted.pipeline.*` i18n subtree. */
 interface Stage {
   icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-  label: string;
-  what: string;
+  key: string;
 }
 
 const PIPELINE: Stage[] = [
-  { icon: ListChecks, label: "Sync & Select", what: "Pull the latest tickets from your provider and pick the ones this run should cover." },
-  { icon: Sparkles, label: "Analyze", what: "The AI reads each ticket against your knowledge base and drafts candidate test cases." },
-  { icon: ClipboardCheck, label: "Review", what: "Approve, edit, or reject the AI-generated cases before anything leaves Q-Agent." },
-  { icon: GitBranch, label: "Link", what: "Create the reviewed cases in your provider and link them back to their source tickets." },
-  { icon: FlaskConical, label: "Automation", what: "Generate runnable Playwright specs from the approved cases." },
-  { icon: PlayCircle, label: "Execution", what: "Run the generated scripts and collect pass/fail results per case." },
-  { icon: Camera, label: "Evidence", what: "Capture screenshots, video, and a trace for every executed case." },
-  { icon: MessageSquare, label: "Publish", what: "Post the results and evidence back onto the originating tickets." },
+  { icon: ListChecks, key: "syncSelect" },
+  { icon: Sparkles, key: "analyze" },
+  { icon: ClipboardCheck, key: "review" },
+  { icon: GitBranch, key: "link" },
+  { icon: FlaskConical, key: "automation" },
+  { icon: PlayCircle, key: "execution" },
+  { icon: Camera, key: "evidence" },
+  { icon: MessageSquare, key: "publish" },
 ];
 
-/** A numbered step in the "Your first run" walkthrough. */
-const FIRST_RUN: { title: string; body: string }[] = [
-  { title: "Connect a provider", body: "In Settings, link your work-item source (ADO or Jira) and the repo you want automation written against." },
-  { title: "Sync tickets", body: "Pull your backlog into Q-Agent. Use Basic or Advanced filters to reflect exactly what you care about." },
-  { title: "Select & create a run", body: "Pick the tickets to cover, then spin them into a new run — your workspace for this QA session." },
-  { title: "Review the cases", body: "Open Review and approve or refine the AI-drafted cases. Nothing is created upstream until you say so." },
-  { title: "Link them upstream", body: "Push the approved cases into your provider and link them to their tickets from the Link stage." },
-  { title: "Generate automation", body: "From Automation, turn the cases into Playwright specs tailored to your codebase." },
-  { title: "Execute", body: "Run the scripts from Execution and watch pass/fail results land per case." },
-  { title: "Review evidence & publish", body: "Inspect the captured screenshots, video, and traces, then Publish the outcome back to the tickets." },
+/** A numbered step in the "Your first run" walkthrough — `key` indexes into
+ * the `gettingStarted.firstRun.*` i18n subtree. */
+const FIRST_RUN: string[] = [
+  "connectProvider",
+  "syncTickets",
+  "selectCreateRun",
+  "reviewCases",
+  "linkUpstream",
+  "generateAutomation",
+  "execute",
+  "reviewEvidence",
 ];
 
-/** A single FAQ entry. */
-const FAQ: { q: string; a: string }[] = [
-  { q: "Do I need real credentials to explore?", a: "No. Click “Explore the sample run” above to open a fully-populated run with no setup." },
-  { q: "How do I re-watch the tour?", a: "Open the command palette (⌘K) and choose “Start product tour” any time." },
-  { q: "Where do my runs live?", a: "Runs are private to you — only you see the runs you create." },
-  { q: "Can I edit what the AI drafts?", a: "Yes. The Review stage exists precisely so you approve or edit every case before it's linked upstream." },
-];
+/** A single FAQ entry — `key` indexes into the `gettingStarted.faq.*` subtree. */
+const FAQ: string[] = ["credentials", "rewatchTour", "runsLive", "editDrafts"];
 
 export function GettingStarted() {
+  const { t } = useTranslation("dashboard");
   const navigate = useNavigate();
   const startTour = useTour((s) => s.start);
   const ensureSample = useEnsureSampleRun();
@@ -118,15 +100,14 @@ export function GettingStarted() {
     <div className="px-1 pb-10 pt-0.5">
       {/* Hero */}
       <div className="mb-[22px]">
-        <div className="mb-[5px] text-[13px] font-medium text-muted">User guide · Q-Agent</div>
-        <h1 className="m-0 text-[28px] font-black tracking-tight">Getting Started</h1>
+        <div className="mb-[5px] text-[13px] font-medium text-muted">{t("gettingStarted.hero.eyebrow")}</div>
+        <h1 className="m-0 text-[28px] font-black tracking-tight">{t("gettingStarted.hero.title")}</h1>
         <p className="mb-0 mt-2.5 max-w-[640px] text-[13.5px] leading-relaxed text-ink-dim">
-          Everything you need to go from a backlog of tickets to reviewed, automated, executed, and
-          evidenced test runs. Skim it, or jump straight in with the tour or a live sample run.
+          {t("gettingStarted.hero.subtitle")}
         </p>
         <div className="mt-4 flex flex-wrap gap-2.5">
           <Button variant="primary" onClick={startTour}>
-            <Compass size={15} /> Take the product tour
+            <Compass size={15} /> {t("gettingStarted.hero.takeTour")}
           </Button>
           <Button variant="glass" onClick={openSampleRun} disabled={ensureSample.isPending}>
             {ensureSample.isPending ? (
@@ -134,7 +115,7 @@ export function GettingStarted() {
             ) : (
               <Rocket size={15} />
             )}
-            {ensureSample.isPending ? "Preparing sample…" : "Explore the sample run"}
+            {ensureSample.isPending ? t("gettingStarted.hero.preparingSample") : t("gettingStarted.hero.exploreSample")}
           </Button>
         </div>
       </div>
@@ -148,38 +129,33 @@ export function GettingStarted() {
           >
             <BookOpen size={18} strokeWidth={2} />
           </span>
-          <h2 className="m-0 text-[17px] font-extrabold tracking-tight">What is Q-Agent?</h2>
+          <h2 className="m-0 text-[17px] font-extrabold tracking-tight">{t("gettingStarted.whatIs.title")}</h2>
         </div>
         <p className="m-0 max-w-[760px] text-[13.5px] leading-relaxed text-ink-soft">
-          Q-Agent is an AI-native QA operating system. It turns the tickets in your backlog into
-          reviewed, automated, executed, and evidenced test runs — end to end. Instead of writing
-          test cases and Playwright scripts by hand, you point Q-Agent at your work items and
-          codebase; it drafts the cases, you review them, and it generates the automation, runs it,
-          captures the evidence, and reports back to the tickets.
+          {t("gettingStarted.whatIs.body1")}
         </p>
         <p className="m-0 mt-3 max-w-[760px] text-[13.5px] leading-relaxed text-ink-dim">
-          You stay in control at every step — the AI proposes, you approve. Nothing is created in
-          your provider until you say so.
+          {t("gettingStarted.whatIs.body2")}
         </p>
       </GlassCard>
 
       {/* Core concepts */}
       <div className="mb-1.5 mt-6 px-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
-        CORE CONCEPTS
+        {t("gettingStarted.sections.coreConcepts")}
       </div>
       <div className="mb-3.5 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {CONCEPTS.map((c, i) => {
           const Icon = c.icon;
           return (
-            <GlassCard key={c.title} index={i} hover className="p-[18px]">
+            <GlassCard key={c.key} index={i} hover className="p-[18px]">
               <span
                 className="mb-3 flex h-9 w-9 items-center justify-center rounded-[11px]"
                 style={{ background: "rgba(139,92,246,.14)", color: "#c4b5fd" }}
               >
                 <Icon size={17} strokeWidth={2} />
               </span>
-              <div className="mb-1.5 text-[14px] font-bold tracking-tight">{c.title}</div>
-              <p className="m-0 text-[12.5px] leading-relaxed text-ink-dim">{c.body}</p>
+              <div className="mb-1.5 text-[14px] font-bold tracking-tight">{t(`gettingStarted.concepts.${c.key}.title`)}</div>
+              <p className="m-0 text-[12.5px] leading-relaxed text-ink-dim">{t(`gettingStarted.concepts.${c.key}.body`)}</p>
             </GlassCard>
           );
         })}
@@ -187,13 +163,12 @@ export function GettingStarted() {
 
       {/* The run pipeline */}
       <div className="mb-1.5 mt-6 px-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
-        THE RUN PIPELINE
+        {t("gettingStarted.sections.runPipeline")}
       </div>
       <GlassCard index={0} className="mb-3.5 p-6">
-        <h2 className="m-0 mb-1 text-[17px] font-extrabold tracking-tight">Eight stages, one run</h2>
+        <h2 className="m-0 mb-1 text-[17px] font-extrabold tracking-tight">{t("gettingStarted.pipelineIntro.title")}</h2>
         <p className="m-0 mb-5 max-w-[720px] text-[13px] leading-relaxed text-ink-dim">
-          Every run moves through the same pipeline — the exact stages you'll see in the run
-          workspace sidebar. Each one hands off to the next.
+          {t("gettingStarted.pipelineIntro.body")}
         </p>
         <div className="relative flex flex-col gap-px">
           {/* connector rail behind the nodes (node center ≈ 18px from the left) */}
@@ -201,7 +176,7 @@ export function GettingStarted() {
           {PIPELINE.map((stage, i) => {
             const Icon = stage.icon;
             return (
-              <div key={stage.label} className="flex items-start gap-[13px] rounded-[11px] px-2 py-2.5">
+              <div key={stage.key} className="flex items-start gap-[13px] rounded-[11px] px-2 py-2.5">
                 <span
                   className="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold text-white"
                   style={{
@@ -214,9 +189,9 @@ export function GettingStarted() {
                 <div className="min-w-0 flex-1 pt-0.5">
                   <div className="flex items-center gap-2">
                     <Icon size={15} strokeWidth={2} className="text-violet" />
-                    <span className="text-[14px] font-bold tracking-tight">{stage.label}</span>
+                    <span className="text-[14px] font-bold tracking-tight">{t(`gettingStarted.pipeline.${stage.key}.label`)}</span>
                   </div>
-                  <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-ink-dim">{stage.what}</p>
+                  <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-ink-dim">{t(`gettingStarted.pipeline.${stage.key}.what`)}</p>
                 </div>
               </div>
             );
@@ -226,17 +201,17 @@ export function GettingStarted() {
 
       {/* Your first run */}
       <div className="mb-1.5 mt-6 px-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
-        YOUR FIRST RUN
+        {t("gettingStarted.sections.yourFirstRun")}
       </div>
       <GlassCard index={0} className="mb-3.5 p-6">
-        <h2 className="m-0 mb-1 text-[17px] font-extrabold tracking-tight">From zero to published</h2>
+        <h2 className="m-0 mb-1 text-[17px] font-extrabold tracking-tight">{t("gettingStarted.firstRunIntro.title")}</h2>
         <p className="m-0 mb-5 max-w-[720px] text-[13px] leading-relaxed text-ink-dim">
-          The full happy path, once. After the first time it becomes second nature.
+          {t("gettingStarted.firstRunIntro.body")}
         </p>
         <ol className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 md:grid-cols-2">
           {FIRST_RUN.map((step, i) => (
             <li
-              key={step.title}
+              key={step}
               className="flex items-start gap-3 rounded-[13px] p-3"
               style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.05)" }}
             >
@@ -244,8 +219,8 @@ export function GettingStarted() {
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-bold tracking-tight">{step.title}</div>
-                <p className="m-0 mt-0.5 text-[12px] leading-relaxed text-ink-dim">{step.body}</p>
+                <div className="text-[13px] font-bold tracking-tight">{t(`gettingStarted.firstRun.${step}.title`)}</div>
+                <p className="m-0 mt-0.5 text-[12px] leading-relaxed text-ink-dim">{t(`gettingStarted.firstRun.${step}.body`)}</p>
               </div>
             </li>
           ))}
@@ -254,7 +229,7 @@ export function GettingStarted() {
 
       {/* Providers & Claude credentials */}
       <div className="mb-1.5 mt-6 px-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
-        PROVIDERS & CREDENTIALS
+        {t("gettingStarted.sections.providersCredentials")}
       </div>
       <div className="mb-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-2">
         <GlassCard index={0} className="p-[22px]">
@@ -264,11 +239,9 @@ export function GettingStarted() {
           >
             <PlugZap size={17} strokeWidth={2} />
           </span>
-          <div className="mb-1.5 text-[14px] font-bold tracking-tight">Provider connections</div>
+          <div className="mb-1.5 text-[14px] font-bold tracking-tight">{t("gettingStarted.providers.connections.title")}</div>
           <p className="m-0 text-[12.5px] leading-relaxed text-ink-dim">
-            In Settings, connect a work-item source — Azure DevOps or Jira — so Q-Agent can sync
-            tickets and publish results. Connect the repo you want automation generated against so
-            the AI has real code context.
+            {t("gettingStarted.providers.connections.body")}
           </p>
         </GlassCard>
         <GlassCard index={1} className="p-[22px]">
@@ -278,35 +251,34 @@ export function GettingStarted() {
           >
             <KeyRound size={17} strokeWidth={2} />
           </span>
-          <div className="mb-1.5 text-[14px] font-bold tracking-tight">Claude credentials</div>
+          <div className="mb-1.5 text-[14px] font-bold tracking-tight">{t("gettingStarted.providers.claude.title")}</div>
           <p className="m-0 text-[12.5px] leading-relaxed text-ink-dim">
-            Claude credentials are per-user and set in Settings. They power the analysis and
-            generation stages, and they stay private to your account — you manage your own.
+            {t("gettingStarted.providers.claude.body")}
           </p>
         </GlassCard>
       </div>
 
       {/* Tips & FAQ */}
       <div className="mb-1.5 mt-6 px-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
-        TIPS & FAQ
+        {t("gettingStarted.sections.tipsFaq")}
       </div>
       <GlassCard index={0} className="mb-3.5 p-6">
         <div className="flex flex-col gap-3.5">
           {FAQ.map((item) => (
-            <div key={item.q} className="flex items-start gap-3">
+            <div key={item} className="flex items-start gap-3">
               <span className="mt-0.5 shrink-0 text-violet">
                 <HelpCircle size={16} strokeWidth={2} />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[13.5px] font-bold tracking-tight">{item.q}</div>
-                <p className="m-0 mt-0.5 text-[12.5px] leading-relaxed text-ink-dim">{item.a}</p>
+                <div className="text-[13.5px] font-bold tracking-tight">{t(`gettingStarted.faq.${item}.q`)}</div>
+                <p className="m-0 mt-0.5 text-[12.5px] leading-relaxed text-ink-dim">{t(`gettingStarted.faq.${item}.a`)}</p>
               </div>
             </div>
           ))}
         </div>
         <div className="mt-5 flex flex-wrap gap-2.5 border-t border-white/[0.06] pt-5">
           <Button variant="primary" onClick={startTour}>
-            <Compass size={15} /> Take the product tour
+            <Compass size={15} /> {t("gettingStarted.hero.takeTour")}
           </Button>
           <Button variant="glass" onClick={openSampleRun} disabled={ensureSample.isPending}>
             {ensureSample.isPending ? (
@@ -314,7 +286,7 @@ export function GettingStarted() {
             ) : (
               <Rocket size={15} />
             )}
-            {ensureSample.isPending ? "Preparing sample…" : "Explore the sample run"}
+            {ensureSample.isPending ? t("gettingStarted.hero.preparingSample") : t("gettingStarted.hero.exploreSample")}
           </Button>
         </div>
       </GlassCard>

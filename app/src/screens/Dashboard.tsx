@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Check, Clock, LayoutList, Sparkles, TrendingUp } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -29,6 +30,7 @@ const ACTOR_FG: Record<string, string> = {
 };
 
 export function Dashboard() {
+  const { t } = useTranslation("dashboard");
   const navigate = useNavigate();
   const heroTilt = useTilt();
   // Bumped on each hover-enter to remount (and replay) the hero's shine sweep.
@@ -57,7 +59,9 @@ export function Dashboard() {
   const avgRuntimeLabel = reportCount
     ? `${Math.round(reports!.reduce((sum, r) => sum + r.durationS, 0) / reportCount)}s`
     : "—";
-  const acrossLabel = reportCount ? `across ${reportCount} report${reportCount === 1 ? "" : "s"}` : "no reports yet";
+  const acrossLabel = reportCount
+    ? t("dashboard.stats.acrossReports", { count: reportCount })
+    : t("dashboard.stats.noReportsYet");
 
   // Suite health ring — aggregate pass/fail across all real reports.
   const suitePassed = reports?.reduce((sum, r) => sum + r.passed, 0) ?? 0;
@@ -72,24 +76,26 @@ export function Dashboard() {
 
   const stats = [
     {
-      label: "Active runs",
+      label: t("dashboard.stats.activeRuns"),
       value: runsLoading ? "—" : String(activeRuns.length),
-      trend: reviewRuns[0] ? `${reviewRuns[0].code} in review` : "All caught up",
+      trend: reviewRuns[0]
+        ? t("dashboard.stats.inReviewWithCode", { code: reviewRuns[0].code })
+        : t("dashboard.stats.allCaughtUp"),
       trendColor: "#fbbf24",
       color: "#a78bfa",
       icon: <LayoutList size={17} strokeWidth={2} />,
     },
     {
-      label: "Cases in review",
+      label: t("dashboard.stats.casesInReview"),
       value: heroRun ? String(casesInReview) : "—",
-      trend: heroRun ? `in ${heroRun.code}` : "no runs yet",
+      trend: heroRun ? t("dashboard.stats.inCode", { code: heroRun.code }) : t("dashboard.stats.noRunsYet"),
       trendColor: "#6ee7b7",
       color: "#22d3ee",
       icon: <CheckCircle2 size={17} strokeWidth={2} />,
     },
     // Derived from real report data via useReports() (see api.listReports()).
     {
-      label: "Pass rate",
+      label: t("dashboard.stats.passRate"),
       value: passRateLabel,
       trend: acrossLabel,
       trendColor: "#6ee7b7",
@@ -97,7 +103,7 @@ export function Dashboard() {
       icon: <TrendingUp size={17} strokeWidth={2} />,
     },
     {
-      label: "Avg runtime",
+      label: t("dashboard.stats.avgRuntime"),
       value: avgRuntimeLabel,
       trend: acrossLabel,
       trendColor: "#6ee7b7",
@@ -116,9 +122,9 @@ export function Dashboard() {
               month: "long",
               day: "numeric",
             })}{" "}
-            · Good morning{firstName ? `, ${firstName}` : ""}
+            · {t("dashboard.greeting")}{firstName ? `, ${firstName}` : ""}
           </div>
-          <h1 className="m-0 text-[26px] font-black tracking-tight md:text-[32px]">Mission control</h1>
+          <h1 className="m-0 text-[26px] font-black tracking-tight md:text-[32px]">{t("dashboard.missionControl")}</h1>
         </div>
         {reviewRuns.length > 0 && (
           <div
@@ -130,7 +136,7 @@ export function Dashboard() {
               style={{ background: "#f59e0b", animation: "pulseDot 1.8s infinite" }}
             />
             <span className="text-[12.5px] font-semibold text-[#fbbf24]">
-              {reviewRuns.length} run{reviewRuns.length === 1 ? "" : "s"} in review
+              {t("dashboard.runsInReview", { count: reviewRuns.length })}
             </span>
           </div>
         )}
@@ -189,15 +195,15 @@ export function Dashboard() {
                   animation: "pulseDot 1.5s infinite",
                 }}
               />
-              {heroRun ? `${heroRun.code} · ${heroRun.status.toUpperCase()}` : "NO ACTIVE RUN"}
+              {heroRun ? `${heroRun.code} · ${heroRun.status.toUpperCase()}` : t("dashboard.hero.noActiveRun")}
             </div>
             <h2 className="m-0 mb-2 max-w-[440px] text-[23px] font-extrabold tracking-tight">
-              {heroRun ? heroRun.name : "Run a whole sprint through one QA pipeline"}
+              {heroRun ? heroRun.name : t("dashboard.hero.title")}
             </h2>
             <p className="m-0 mb-5 max-w-[440px] text-[14px] leading-relaxed text-[#c3c3d4]">
               {heroRun
-                ? `${runMeta(heroRun)} — in the ${heroRun.status} stage. Review cases, run Playwright in parallel, and publish evidence back to every ticket.`
-                : "Select tickets, batch-generate test cases, review like pull requests, run Playwright in parallel, then publish evidence back to every ticket."}
+                ? t("dashboard.hero.activeBody", { meta: runMeta(heroRun), status: heroRun.status })
+                : t("dashboard.hero.emptyBody")}
             </p>
             <div className="flex gap-2.5">
               {heroRun ? (
@@ -206,11 +212,11 @@ export function Dashboard() {
                   size="lg"
                   onClick={() => navigate(`/runs/${heroRun.id}`)}
                 >
-                  <Check size={16} strokeWidth={2.3} /> Open run
+                  <Check size={16} strokeWidth={2.3} /> {t("dashboard.hero.openRun")}
                 </Button>
               ) : (
                 <Button variant="white" size="lg" onClick={openCreateRun}>
-                  <Check size={16} strokeWidth={2.3} /> New Run
+                  <Check size={16} strokeWidth={2.3} /> {t("dashboard.hero.newRun")}
                 </Button>
               )}
               <Button
@@ -218,7 +224,7 @@ export function Dashboard() {
                 size="lg"
                 onClick={() => navigate(heroRun ? `/runs/${heroRun.id}/review` : "/runs")}
               >
-                Review Center
+                {t("dashboard.hero.reviewCenter")}
               </Button>
             </div>
           </div>
@@ -226,7 +232,7 @@ export function Dashboard() {
         </motion.div>
 
         <GlassCard className="flex flex-col p-[22px]">
-          <div className="mb-1.5 text-[13px] font-semibold text-[#c7c7d4]">Suite health · 7d</div>
+          <div className="mb-1.5 text-[13px] font-semibold text-[#c7c7d4]">{t("dashboard.suiteHealth.title")}</div>
           {/* No aggregate suite-health endpoint yet — decorative per design. */}
           <div className="relative flex flex-1 items-center justify-center">
             <svg width="150" height="150" viewBox="0 0 150 150">
@@ -254,15 +260,15 @@ export function Dashboard() {
               <div className="text-[34px] font-black tracking-tight">
                 {suitePassRate == null ? "—" : `${suitePassRate.toFixed(1)}%`}
               </div>
-              <div className="text-[11.5px] font-medium text-muted">pass rate</div>
+              <div className="text-[11.5px] font-medium text-muted">{t("dashboard.suiteHealth.passRate")}</div>
             </div>
           </div>
           <div className="mt-1.5 flex justify-between text-[11.5px] text-muted">
             <span>
-              <span className="font-bold text-[#10b981]">{suitePassed.toLocaleString()}</span> passed
+              <span className="font-bold text-[#10b981]">{suitePassed.toLocaleString()}</span> {t("dashboard.suiteHealth.passed")}
             </span>
             <span>
-              <span className="font-bold text-[#f43f5e]">{suiteFailed.toLocaleString()}</span> failed
+              <span className="font-bold text-[#f43f5e]">{suiteFailed.toLocaleString()}</span> {t("dashboard.suiteHealth.failed")}
             </span>
           </div>
         </GlassCard>
@@ -270,11 +276,11 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
         <GlassCard className="p-5">
-          <div className="mb-4 text-[15px] font-bold">Recent activity</div>
+          <div className="mb-4 text-[15px] font-bold">{t("dashboard.recentActivity.title")}</div>
           <div className="flex flex-col gap-0.5">
             {(activity ?? []).length === 0 ? (
               <p className="m-0 px-1.5 py-3 text-[12.5px] text-ink-dim">
-                No activity yet — actions you take will show up here.
+                {t("dashboard.recentActivity.empty")}
               </p>
             ) : (
               (activity ?? []).slice(0, 5).map((e) => (
@@ -312,12 +318,12 @@ export function Dashboard() {
 
         <GlassCard className="p-5">
           <div className="mb-4 flex items-center">
-            <span className="flex-1 text-[15px] font-bold">Recent runs</span>
+            <span className="flex-1 text-[15px] font-bold">{t("dashboard.recentRuns.title")}</span>
             <button
               onClick={() => navigate("/runs")}
               className="cursor-pointer border-none bg-transparent text-[12.5px] font-semibold text-[#a78bfa]"
             >
-              View all
+              {t("dashboard.recentRuns.viewAll")}
             </button>
           </div>
           {runsLoading ? (
@@ -327,7 +333,7 @@ export function Dashboard() {
           ) : recentRuns.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-6 text-center">
               <Sparkles size={20} className="text-muted" />
-              <p className="m-0 text-[12.5px] text-ink-dim">No runs yet — create one to get started.</p>
+              <p className="m-0 text-[12.5px] text-ink-dim">{t("dashboard.recentRuns.empty")}</p>
             </div>
           ) : (
             <div className="flex flex-col gap-[9px]">

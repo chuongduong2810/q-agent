@@ -1,0 +1,179 @@
+{
+  "dashboard": {
+    "greeting": "Chào buổi sáng",
+    "missionControl": "Trung tâm điều hành",
+    "runsInReview_one": "{{count}} lượt chạy đang chờ đánh giá",
+    "runsInReview_other": "{{count}} lượt chạy đang chờ đánh giá",
+    "stats": {
+      "activeRuns": "Lượt chạy đang hoạt động",
+      "casesInReview": "Trường hợp đang đánh giá",
+      "passRate": "Tỷ lệ đạt",
+      "avgRuntime": "Thời gian chạy TB",
+      "allCaughtUp": "Đã xử lý hết",
+      "inReviewWithCode": "{{code}} đang đánh giá",
+      "inCode": "trong {{code}}",
+      "noRunsYet": "chưa có lượt chạy",
+      "noReportsYet": "chưa có báo cáo",
+      "acrossReports_one": "trên {{count}} báo cáo",
+      "acrossReports_other": "trên {{count}} báo cáo"
+    },
+    "hero": {
+      "noActiveRun": "KHÔNG CÓ LƯỢT CHẠY",
+      "title": "Chạy toàn bộ sprint qua một quy trình QA",
+      "activeBody": "{{meta}} — đang ở giai đoạn {{status}}. Đánh giá các trường hợp, chạy Playwright song song, và xuất bản bằng chứng về từng công việc.",
+      "emptyBody": "Chọn công việc, tạo hàng loạt trường hợp kiểm thử, đánh giá như pull request, chạy Playwright song song, rồi xuất bản bằng chứng về từng công việc.",
+      "openRun": "Mở lượt chạy",
+      "newRun": "Lượt chạy mới",
+      "reviewCenter": "Trung tâm đánh giá"
+    },
+    "suiteHealth": {
+      "title": "Tình trạng bộ kiểm thử · 7 ngày",
+      "passRate": "tỷ lệ đạt",
+      "passed": "đạt",
+      "failed": "không đạt"
+    },
+    "recentActivity": {
+      "title": "Hoạt động gần đây",
+      "empty": "Chưa có hoạt động — các thao tác của bạn sẽ hiển thị ở đây."
+    },
+    "recentRuns": {
+      "title": "Lượt chạy gần đây",
+      "viewAll": "Xem tất cả",
+      "empty": "Chưa có lượt chạy — tạo một lượt để bắt đầu."
+    }
+  },
+  "gettingStarted": {
+    "hero": {
+      "eyebrow": "Hướng dẫn sử dụng · Q-Agent",
+      "title": "Bắt đầu",
+      "subtitle": "Mọi thứ bạn cần để đi từ danh sách công việc tồn đọng đến các lượt chạy kiểm thử đã được đánh giá, tự động hóa, thực thi và có bằng chứng. Lướt qua, hoặc bắt đầu ngay với hướng dẫn hoặc một lượt chạy mẫu trực tiếp.",
+      "takeTour": "Xem hướng dẫn sản phẩm",
+      "exploreSample": "Khám phá lượt chạy mẫu",
+      "preparingSample": "Đang chuẩn bị mẫu…"
+    },
+    "sections": {
+      "coreConcepts": "KHÁI NIỆM CỐT LÕI",
+      "runPipeline": "QUY TRÌNH LƯỢT CHẠY",
+      "yourFirstRun": "LƯỢT CHẠY ĐẦU TIÊN",
+      "providersCredentials": "NHÀ CUNG CẤP & THÔNG TIN ĐĂNG NHẬP",
+      "tipsFaq": "MẸO & CÂU HỎI THƯỜNG GẶP"
+    },
+    "whatIs": {
+      "title": "Q-Agent là gì?",
+      "body1": "Q-Agent là một hệ điều hành QA thuần AI. Nó biến các công việc trong danh sách tồn đọng của bạn thành các lượt chạy kiểm thử đã được đánh giá, tự động hóa, thực thi và có bằng chứng — từ đầu đến cuối. Thay vì viết các trường hợp kiểm thử và kịch bản Playwright bằng tay, bạn trỏ Q-Agent đến các công việc và mã nguồn của mình; nó soạn các trường hợp, bạn đánh giá chúng, rồi nó tạo phần tự động hóa, chạy, thu thập bằng chứng và báo cáo lại vào các công việc.",
+      "body2": "Bạn luôn nắm quyền kiểm soát ở mọi bước — AI đề xuất, bạn phê duyệt. Không có gì được tạo trong nhà cung cấp của bạn cho đến khi bạn đồng ý."
+    },
+    "concepts": {
+      "projects": {
+        "title": "Dự án",
+        "body": "Một sản phẩm hoặc kho mã bạn kiểm thử. Mỗi dự án kết nối nguồn công việc và mã nguồn mà Q-Agent tạo tự động hóa cho."
+      },
+      "tickets": {
+        "title": "Công việc",
+        "body": "Các công việc được đồng bộ trực tiếp từ Azure DevOps hoặc Jira. Chúng là đầu vào thô mà AI đọc để soạn các trường hợp kiểm thử."
+      },
+      "runs": {
+        "title": "Lượt chạy",
+        "body": "Một phiên QA hàng loạt trên một tập công việc đã chọn. Mỗi lượt chạy mang theo các trường hợp, tự động hóa, kết quả thực thi và bằng chứng riêng."
+      },
+      "knowledgeBases": {
+        "title": "Cơ sở tri thức",
+        "body": "Ngữ cảnh được lập chỉ mục theo từng kho mã. Q-Agent đọc mã của bạn để các trường hợp và kịch bản Playwright nó viết phù hợp với cách ứng dụng của bạn thực sự hoạt động."
+      }
+    },
+    "pipelineIntro": {
+      "title": "Tám giai đoạn, một lượt chạy",
+      "body": "Mỗi lượt chạy đều đi qua cùng một quy trình — chính xác các giai đoạn bạn sẽ thấy trong thanh bên không gian làm việc của lượt chạy. Mỗi giai đoạn bàn giao cho giai đoạn tiếp theo."
+    },
+    "pipeline": {
+      "syncSelect": { "label": "Đồng bộ & Chọn", "what": "Kéo các công việc mới nhất từ nhà cung cấp và chọn những công việc mà lượt chạy này cần bao phủ." },
+      "analyze": { "label": "Phân tích", "what": "AI đọc từng công việc dựa trên cơ sở tri thức của bạn và soạn các trường hợp kiểm thử ứng viên." },
+      "review": { "label": "Đánh giá", "what": "Phê duyệt, chỉnh sửa hoặc từ chối các trường hợp do AI tạo trước khi bất cứ thứ gì rời khỏi Q-Agent." },
+      "link": { "label": "Liên kết", "what": "Tạo các trường hợp đã đánh giá trong nhà cung cấp của bạn và liên kết chúng trở lại các công việc nguồn." },
+      "automation": { "label": "Tự động hóa", "what": "Tạo các kịch bản Playwright có thể chạy từ các trường hợp đã phê duyệt." },
+      "execution": { "label": "Thực thi", "what": "Chạy các kịch bản đã tạo và thu thập kết quả đạt/không đạt cho từng trường hợp." },
+      "evidence": { "label": "Bằng chứng", "what": "Chụp ảnh màn hình, quay video và tạo dấu vết cho mỗi trường hợp đã thực thi." },
+      "publish": { "label": "Xuất bản", "what": "Đăng kết quả và bằng chứng trở lại các công việc gốc." }
+    },
+    "firstRunIntro": {
+      "title": "Từ số không đến xuất bản",
+      "body": "Toàn bộ lộ trình thuận lợi, một lần. Sau lần đầu tiên, nó sẽ trở thành bản năng."
+    },
+    "firstRun": {
+      "connectProvider": { "title": "Kết nối nhà cung cấp", "body": "Trong Cài đặt, liên kết nguồn công việc của bạn (ADO hoặc Jira) và kho mã bạn muốn viết tự động hóa cho." },
+      "syncTickets": { "title": "Đồng bộ công việc", "body": "Kéo danh sách tồn đọng của bạn vào Q-Agent. Dùng bộ lọc Cơ bản hoặc Nâng cao để phản ánh chính xác điều bạn quan tâm." },
+      "selectCreateRun": { "title": "Chọn & tạo lượt chạy", "body": "Chọn các công việc cần bao phủ, rồi biến chúng thành một lượt chạy mới — không gian làm việc cho phiên QA này." },
+      "reviewCases": { "title": "Đánh giá các trường hợp", "body": "Mở Đánh giá và phê duyệt hoặc tinh chỉnh các trường hợp do AI soạn. Không có gì được tạo ở phía nguồn cho đến khi bạn đồng ý." },
+      "linkUpstream": { "title": "Liên kết lên nguồn", "body": "Đẩy các trường hợp đã phê duyệt vào nhà cung cấp của bạn và liên kết chúng với các công việc từ giai đoạn Liên kết." },
+      "generateAutomation": { "title": "Tạo tự động hóa", "body": "Từ Tự động hóa, biến các trường hợp thành các kịch bản Playwright phù hợp với mã nguồn của bạn." },
+      "execute": { "title": "Thực thi", "body": "Chạy các kịch bản từ Thực thi và theo dõi kết quả đạt/không đạt của từng trường hợp." },
+      "reviewEvidence": { "title": "Đánh giá bằng chứng & xuất bản", "body": "Kiểm tra ảnh chụp màn hình, video và dấu vết đã thu thập, rồi Xuất bản kết quả trở lại các công việc." }
+    },
+    "providers": {
+      "connections": {
+        "title": "Kết nối nhà cung cấp",
+        "body": "Trong Cài đặt, kết nối một nguồn công việc — Azure DevOps hoặc Jira — để Q-Agent có thể đồng bộ công việc và xuất bản kết quả. Kết nối kho mã bạn muốn tạo tự động hóa cho để AI có ngữ cảnh mã thực tế."
+      },
+      "claude": {
+        "title": "Thông tin đăng nhập Claude",
+        "body": "Thông tin đăng nhập Claude thuộc về từng người dùng và được thiết lập trong Cài đặt. Chúng cung cấp năng lượng cho các giai đoạn phân tích và tạo, và luôn riêng tư với tài khoản của bạn — bạn tự quản lý."
+      }
+    },
+    "faq": {
+      "credentials": { "q": "Tôi có cần thông tin đăng nhập thật để khám phá không?", "a": "Không. Nhấp “Khám phá lượt chạy mẫu” ở trên để mở một lượt chạy đầy đủ dữ liệu mà không cần thiết lập." },
+      "rewatchTour": { "q": "Làm cách nào để xem lại hướng dẫn?", "a": "Mở bảng lệnh (⌘K) và chọn “Bắt đầu hướng dẫn sản phẩm” bất cứ lúc nào." },
+      "runsLive": { "q": "Các lượt chạy của tôi ở đâu?", "a": "Các lượt chạy là riêng tư với bạn — chỉ bạn thấy các lượt chạy mình tạo." },
+      "editDrafts": { "q": "Tôi có thể chỉnh sửa những gì AI soạn không?", "a": "Có. Giai đoạn Đánh giá tồn tại chính là để bạn phê duyệt hoặc chỉnh sửa mọi trường hợp trước khi nó được liên kết lên nguồn." }
+    }
+  },
+  "localAgent": {
+    "eyebrow": "Tác nhân cục bộ",
+    "title": "Chạy bộ kiểm thử trên máy của bạn",
+    "about": {
+      "title": "Tác nhân cục bộ là gì?",
+      "body": "Một CLI nhỏ bạn chạy trên máy tính của mình. Nó nhận các công việc thực thi từ Q‑Agent và chạy Playwright <b>hiển thị, cục bộ</b> — nên khi một bộ kiểm thử cần đăng nhập thủ công (ví dụ MFA), trình duyệt sẽ mở ngay tại nơi bạn đang ở. Cookie phiên của bạn không bao giờ rời khỏi máy; chỉ tiến trình, kết quả và ảnh chụp màn hình được gửi về."
+    },
+    "prereq": {
+      "title": "YÊU CẦU TRƯỚC",
+      "item1": "Không cần cài đặt gì cho ứng dụng Windows — chỉ cần Node.js 18+ nếu bạn dùng tùy chọn npx",
+      "item2": "Chromium được cài đặt tự động trong lần đầu bạn chạy tác nhân"
+    },
+    "download": "Tải xuống cho Windows",
+    "nativeAppNote": "Ứng dụng gốc — không cần Node, và tự cập nhật. Với Node 18+ bạn có thể chạy thay bằng <code>npx @q-agent/agent</code>",
+    "pairedDevices": "THIẾT BỊ ĐÃ GHÉP NỐI",
+    "addDevice": "Thêm thiết bị",
+    "noDevices": "Chưa ghép nối thiết bị nào. Nhấp \"Thêm thiết bị\" để nhận lệnh ghép nối.",
+    "unnamedDevice": "Thiết bị chưa đặt tên",
+    "deviceFallback": "Thiết bị",
+    "device": {
+      "lastSeenPaired": "Thấy lần cuối {{last}} · Ghép nối {{paired}}",
+      "never": "chưa bao giờ"
+    },
+    "status": {
+      "connected": "Đã kết nối",
+      "offline": "Ngoại tuyến"
+    },
+    "pairing": {
+      "title": "Ghép nối thiết bị",
+      "expiresIn": "Hết hạn sau {{time}}",
+      "codeLabel": "MÃ GHÉP NỐI",
+      "copyCode": "Sao chép mã",
+      "instructions": "Mở ứng dụng <b>Tác nhân cục bộ</b>, nhập mã này rồi nhấp <b>Kết nối</b> — ứng dụng đã tải xuống đã biết máy chủ này. Hoặc, từ terminal:",
+      "copyCommand": "Sao chép lệnh"
+    },
+    "revoke": {
+      "title": "Thu hồi thiết bị này?",
+      "message": "\"{{name}}\" sẽ không thể nhận hoặc chạy công việc nữa. Bạn có thể ghép nối lại sau.",
+      "thisDevice": "Thiết bị này",
+      "confirm": "Thu hồi thiết bị",
+      "button": "Thu hồi"
+    },
+    "toast": {
+      "paired": "Đã ghép nối \"{{name}}\"",
+      "pairCodeFailed": "Không tạo được mã ghép nối",
+      "revoked": "Đã thu hồi thiết bị",
+      "revokeFailed": "Không thu hồi được thiết bị",
+      "copyFailed": "Không sao chép được vào clipboard"
+    }
+  }
+}
