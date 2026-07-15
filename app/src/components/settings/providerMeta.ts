@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import type { ProviderCategory, ProviderKind } from "@/types/api";
 
 export interface FieldSpec {
@@ -52,16 +53,16 @@ export function connectionConfigSummary(kind: ProviderKind, config: Record<strin
 
 /** Compact relative time ("2h ago", "just now"), or "never" for null. */
 export function relativeTime(iso: string | null): string {
-  if (!iso) return "never";
+  if (!iso) return i18n.t("settings:relativeTime.never");
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "never";
+  if (Number.isNaN(then)) return i18n.t("settings:relativeTime.never");
   const secs = Math.round((Date.now() - then) / 1000);
-  if (secs < 45) return "just now";
+  if (secs < 45) return i18n.t("settings:relativeTime.justNow");
   const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return i18n.t("settings:relativeTime.minutesAgo", { n: mins });
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return i18n.t("settings:relativeTime.hoursAgo", { n: hours });
   const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return i18n.t("settings:relativeTime.daysAgo", { n: days });
   return new Date(iso).toLocaleDateString();
 }

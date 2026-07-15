@@ -1,6 +1,8 @@
 import { Check, File, KeyRound, Lock, ShieldCheck, Trash2, UploadCloud, Users } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
+import i18n from "@/i18n";
 import { toast } from "@/lib/toast";
 import { Pill } from "@/components/ui/badges";
 import { ClaudeLogo, Spinner } from "@/components/ui/misc";
@@ -21,11 +23,11 @@ export function formatExpiry(iso: string | null | undefined): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
   const diffMs = then - Date.now();
-  if (diffMs <= 0) return "Expired";
+  if (diffMs <= 0) return i18n.t("settings:expiry.expired");
   const hours = Math.round(diffMs / 3_600_000);
-  if (hours < 24) return `in ${hours} hour${hours === 1 ? "" : "s"}`;
+  if (hours < 24) return i18n.t("settings:expiry.inHours", { count: hours });
   const days = Math.round(hours / 24);
-  return `in ${days} day${days === 1 ? "" : "s"}`;
+  return i18n.t("settings:expiry.inDays", { count: days });
 }
 
 /** True when a credential's metadata indicates the token is no longer usable: a
@@ -43,13 +45,14 @@ export function isCredentialExpired(meta: ClaudeCredentialsMeta | null | undefin
 
 /** Active/Expired chip driven by the credential's real status. */
 function StatusPill({ meta }: { meta: ClaudeCredentialsMeta | null | undefined }) {
+  const { t } = useTranslation("settings");
   return isCredentialExpired(meta) ? (
     <Pill color="#fbbf24" bg="rgba(251,191,36,.14)" dot>
-      Expired
+      {t("credential.expired")}
     </Pill>
   ) : (
     <Pill color="#6ee7b7" bg="rgba(16,185,129,.14)" dot>
-      Active
+      {t("credential.active")}
     </Pill>
   );
 }
@@ -57,6 +60,7 @@ function StatusPill({ meta }: { meta: ClaudeCredentialsMeta | null | undefined }
 /** "Test credential" button — runs a real minimal Claude call under the
  * effective credential and toasts the outcome. */
 function TestCredentialButton() {
+  const { t } = useTranslation("settings");
   const test = useTestClaudeCredentials();
   return (
     <button
@@ -64,14 +68,14 @@ function TestCredentialButton() {
       onClick={() =>
         test.mutate(undefined, {
           onSuccess: (r) => (r.ok ? toast.success(r.message) : toast.error(r.message)),
-          onError: (e) => toast.error((e as Error).message || "Test failed"),
+          onError: (e) => toast.error((e as Error).message || t("credential.testFailed")),
         })
       }
       disabled={test.isPending}
       className="flex w-full items-center justify-center gap-2 rounded-[11px] border border-white/[0.1] bg-white/[0.05] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#dcdce4] transition-colors hover:bg-white/[0.1] disabled:opacity-50 sm:w-auto"
     >
       {test.isPending ? <Spinner size={14} /> : <ShieldCheck size={14} strokeWidth={2} />}
-      {test.isPending ? "Testing…" : "Test credential"}
+      {test.isPending ? t("status.testing") : t("credential.test")}
     </button>
   );
 }
@@ -174,17 +178,16 @@ export function Field({
  * design, for security), so "reveal" only toggles a fixed mask for an
  * explicit disclosure message — it never displays a real secret. */
 export function AccessTokenRow({ accent = "#67e8f9" }: { accent?: string }) {
+  const { t } = useTranslation("settings");
   const [revealed, setRevealed] = useState(false);
   return (
     <div className="mt-[14px]">
       <div className="mb-[7px] text-[10.5px] font-bold tracking-[0.05em] text-[#6c6c7e]">
-        ACCESS TOKEN
+        {t("credential.accessToken")}
       </div>
       <div className="flex items-center gap-[10px] rounded-[11px] border border-white/[0.08] bg-[rgba(8,8,13,.6)] px-[13px] py-[10px]">
         <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[#c3c3d0]">
-          {revealed
-            ? "Not exposed by the API — the server never returns credential contents."
-            : "•".repeat(28)}
+          {revealed ? t("credential.tokenNotExposed") : "•".repeat(28)}
         </span>
         <button
           type="button"
@@ -192,7 +195,7 @@ export function AccessTokenRow({ accent = "#67e8f9" }: { accent?: string }) {
           className="shrink-0 font-mono text-[11.5px] font-semibold"
           style={{ color: accent }}
         >
-          {revealed ? "Hide" : "Show"}
+          {revealed ? t("credential.hide") : t("credential.show")}
         </button>
       </div>
     </div>
@@ -253,6 +256,7 @@ function SourceCard({
  * `status.shared` (#95) — subscription/expiry/scopes from the uploaded
  * `.credentials.json`; "—" only when that field is genuinely absent. */
 function SharedAccountCard({ meta }: { meta: ClaudeCredentialsMeta | null | undefined }) {
+  const { t } = useTranslation("settings");
   return (
     <div className="rounded-[16px] border border-white/[0.08] bg-white/[0.03] p-4">
       <div className="flex items-center gap-3">
@@ -261,19 +265,19 @@ function SharedAccountCard({ meta }: { meta: ClaudeCredentialsMeta | null | unde
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-bold">
-            {meta?.accountEmail ?? "Shared Claude account"}
+            {meta?.accountEmail ?? t("credential.sharedAccount")}
           </div>
           <div className="truncate font-mono text-[12px] text-[#8b8b9e]">
-            {meta?.accountOrg ?? "Maintained by your workspace admin"}
+            {meta?.accountOrg ?? t("credential.maintainedByAdmin")}
           </div>
         </div>
         <StatusPill meta={meta} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="SUBSCRIPTION" value={meta?.subscriptionType ?? "—"} />
-        <Field label="TOKEN EXPIRES" value={formatExpiry(meta?.expiresAt)} />
-        <Field label="SCOPES" value={<ScopeChips scopes={meta?.scopes} />} />
-        <Field label="MAINTAINED BY" value="Workspace admin" valueClassName="text-[#c4b5fd]" />
+        <Field label={t("credential.fields.subscription")} value={meta?.subscriptionType ?? "—"} />
+        <Field label={t("credential.fields.tokenExpires")} value={formatExpiry(meta?.expiresAt)} />
+        <Field label={t("credential.fields.scopes")} value={<ScopeChips scopes={meta?.scopes} />} />
+        <Field label={t("credential.fields.maintainedBy")} value={t("credential.workspaceAdmin")} valueClassName="text-[#c4b5fd]" />
       </div>
       <div className="mt-4 flex flex-col gap-[10px] border-t border-white/[0.06] pt-[14px] sm:flex-row sm:flex-wrap">
         <TestCredentialButton />
@@ -281,9 +285,11 @@ function SharedAccountCard({ meta }: { meta: ClaudeCredentialsMeta | null | unde
       <div className="mt-3 flex items-center gap-2 text-[11.5px] text-[#7a7a8c]">
         <Lock size={13} strokeWidth={2} className="shrink-0" />
         <span>
-          The admin rotates and maintains this token. Switch to{" "}
-          <b className="font-semibold text-[#a6a6b6]">Your own account</b> to use a personal plan
-          instead.
+          <Trans
+            t={t}
+            i18nKey="credential.switchToOwn"
+            components={{ b: <b className="font-semibold text-[#a6a6b6]" /> }}
+          />
         </span>
       </div>
     </div>
@@ -303,6 +309,7 @@ function PersonalAccountCard({
   onRemove: () => void;
   removing: boolean;
 }) {
+  const { t } = useTranslation("settings");
   return (
     <div className="rounded-[16px] border border-[rgba(34,211,238,.22)] bg-white/[0.03] p-4">
       <div className="flex items-center gap-3">
@@ -314,17 +321,17 @@ function PersonalAccountCard({
             {meta?.accountEmail ?? ".credentials.json"}
           </div>
           <div className="truncate text-[11.5px] text-[#8b8b9e]">
-            {meta?.accountOrg ?? "Your personal Claude account"}
+            {meta?.accountOrg ?? t("credential.personalAccount")}
           </div>
         </div>
         <StatusPill meta={meta} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="SUBSCRIPTION" value={meta?.subscriptionType ?? "—"} />
-        <Field label="TOKEN EXPIRES" value={formatExpiry(meta?.expiresAt)} />
-        <Field label="SCOPES" value={<ScopeChips scopes={meta?.scopes} />} />
+        <Field label={t("credential.fields.subscription")} value={meta?.subscriptionType ?? "—"} />
+        <Field label={t("credential.fields.tokenExpires")} value={formatExpiry(meta?.expiresAt)} />
+        <Field label={t("credential.fields.scopes")} value={<ScopeChips scopes={meta?.scopes} />} />
         <Field
-          label="LAST REFRESHED"
+          label={t("credential.fields.lastRefreshed")}
           value={meta?.lastRefreshed ? relativeTime(meta.lastRefreshed) : "—"}
         />
       </div>
@@ -337,7 +344,7 @@ function PersonalAccountCard({
           dragClassName="border-[rgba(34,211,238,.5)] bg-[rgba(34,211,238,.1)]"
         >
           <UploadCloud size={14} strokeWidth={2} />
-          {uploading ? "Uploading…" : "Replace file"}
+          {uploading ? t("status.uploading") : t("credential.card.replaceFile")}
         </FileDropLabel>
         <button
           type="button"
@@ -346,7 +353,7 @@ function PersonalAccountCard({
           className="flex w-full items-center justify-center gap-2 rounded-[11px] border border-[rgba(244,63,94,.28)] bg-[rgba(244,63,94,.1)] px-[15px] py-[9px] text-[12.5px] font-semibold text-[#fb7185] transition-colors hover:bg-[rgba(244,63,94,.18)] disabled:opacity-50 sm:w-auto"
         >
           <Trash2 size={14} strokeWidth={2} />
-          {removing ? "Removing…" : "Remove & use shared"}
+          {removing ? t("status.removing") : t("credential.card.removeUseShared")}
         </button>
       </div>
     </div>
@@ -362,6 +369,7 @@ function UploadDropzone({
   onFile: (file: File | undefined) => void;
   error: string | null;
 }) {
+  const { t } = useTranslation("settings");
   const [dragOver, setDragOver] = useState(false);
   return (
     <div>
@@ -392,8 +400,8 @@ function UploadDropzone({
         {uploading ? (
           <>
             <Spinner size={32} />
-            <div className="text-[13.5px] font-bold">Reading token…</div>
-            <div className="text-[11.5px] text-[#8b8b9e]">Parsing your .credentials.json</div>
+            <div className="text-[13.5px] font-bold">{t("status.readingToken")}</div>
+            <div className="text-[11.5px] text-[#8b8b9e]">{t("credential.dropzone.parsing")}</div>
           </>
         ) : (
           <>
@@ -401,11 +409,18 @@ function UploadDropzone({
               <UploadCloud size={22} strokeWidth={2} />
             </span>
             <div className="text-[14px] font-bold">
-              Drop your <span className="font-mono text-[12.5px]">.credentials.json</span>
+              <Trans
+                t={t}
+                i18nKey="credential.dropzone.dropTitle"
+                components={{ code: <span className="font-mono text-[12.5px]" /> }}
+              />
             </div>
             <div className="text-[12px] text-[#8b8b9e]">
-              or click to browse · found at{" "}
-              <span className="font-mono text-[11px] text-[#a6a6b6]">~/.claude/.credentials.json</span>
+              <Trans
+                t={t}
+                i18nKey="credential.dropzone.browse"
+                components={{ code: <span className="font-mono text-[11px] text-[#a6a6b6]" /> }}
+              />
             </div>
           </>
         )}
@@ -427,6 +442,7 @@ function UploadDropzone({
  * be pinned via a `?claudeSource=shared|personal` query param so the AI
  * status popover's Shared/Personal shortcuts land on the right panel. */
 export function ClaudeCredentialsCard() {
+  const { t } = useTranslation("settings");
   const { data: status } = useClaudeCredentialsStatus();
   const uploadOwn = useUploadOwnClaudeCredentials();
   const deleteOwn = useDeleteOwnClaudeCredentials();
@@ -453,24 +469,27 @@ export function ClaudeCredentialsCard() {
       uploadOwn.mutate(
         { credentials: contents },
         {
-          onSuccess: () => toast.success("Personal Claude credentials updated"),
-          onError: () => toast.error("Could not save that credentials file"),
+          onSuccess: () => toast.success(t("credential.card.credentialsUpdated")),
+          onError: () => toast.error(t("credential.card.credentialsSaveFailed")),
         },
       );
     } catch {
-      setFileError("Could not read that file.");
+      setFileError(t("credential.card.readFailed"));
     }
   };
 
   return (
     <div>
       <p className="mb-[18px] text-[13.5px] leading-[1.6] text-[#a6a6b6]">
-        Q&#8209;Agent authenticates the Claude CLI with the token inside a{" "}
-        <span className="rounded-[5px] bg-[rgba(139,92,246,.14)] px-[6px] py-[1px] font-mono text-[12px] text-[#c4b5fd]">
-          .credentials.json
-        </span>{" "}
-        file. Use the shared account your admin maintains, or upload your own personal Claude
-        account.
+        <Trans
+          t={t}
+          i18nKey="credential.card.intro"
+          components={{
+            code: (
+              <span className="rounded-[5px] bg-[rgba(139,92,246,.14)] px-[6px] py-[1px] font-mono text-[12px] text-[#c4b5fd]" />
+            ),
+          }}
+        />
       </p>
 
       <div className="mb-[18px] flex gap-3">
@@ -479,8 +498,8 @@ export function ClaudeCredentialsCard() {
           icon={<Users size={16} strokeWidth={2} />}
           iconBg="rgba(139,92,246,.16)"
           iconColor="#c4b5fd"
-          title="Shared account"
-          description="Managed by your workspace admin. Nothing to set up — you're ready to run."
+          title={t("credential.card.sharedTitle")}
+          description={t("credential.card.sharedDescription")}
           onClick={() => setSource("shared")}
         />
         <SourceCard
@@ -488,12 +507,13 @@ export function ClaudeCredentialsCard() {
           icon={<KeyRound size={16} strokeWidth={2} />}
           iconBg="rgba(34,211,238,.14)"
           iconColor="#67e8f9"
-          title="Your own account"
+          title={t("credential.card.ownTitle")}
           description={
-            <>
-              Upload your personal <span className="font-mono text-[11px]">.credentials.json</span>{" "}
-              to use your own Claude plan.
-            </>
+            <Trans
+              t={t}
+              i18nKey="credential.card.ownDescription"
+              components={{ code: <span className="font-mono text-[11px]" /> }}
+            />
           }
           onClick={() => setSource("personal")}
         />
@@ -504,9 +524,11 @@ export function ClaudeCredentialsCard() {
           <SharedAccountCard meta={status.shared} />
         ) : (
           <div className="rounded-[16px] border border-white/[0.08] bg-white/[0.03] p-4 text-[13px] leading-[1.6] text-[#9a9aae]">
-            Your admin hasn&rsquo;t set up a shared Claude account yet. Ask them to add one from{" "}
-            <b className="font-semibold text-[#c3c3d0]">Admin &#8250; Claude credentials</b>, or
-            upload your own below.
+            <Trans
+              t={t}
+              i18nKey="credential.card.noShared"
+              components={{ b: <b className="font-semibold text-[#c3c3d0]" /> }}
+            />
           </div>
         )
       ) : status?.hasOwn ? (
@@ -517,8 +539,8 @@ export function ClaudeCredentialsCard() {
           onRemove={() =>
             deleteOwn.mutate(undefined, {
               onSuccess: () =>
-                toast.success("Removed your personal credentials — now using the shared account"),
-              onError: () => toast.error("Failed to remove your credentials"),
+                toast.success(t("credential.card.credentialsRemoved")),
+              onError: () => toast.error(t("credential.card.credentialsRemoveFailed")),
             })
           }
           removing={deleteOwn.isPending}
