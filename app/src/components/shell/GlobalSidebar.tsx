@@ -142,17 +142,23 @@ export function GlobalSidebar() {
   return (
     <aside className="glass-strong flex w-[248px] shrink-0 flex-col rounded-[22px] p-[20px_14px] shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)]">
       {/* EMESOFT 3D brand logo (background keyed out) — floats transparently on
-          the sidebar with a cursor-tracked tilt (see useTilt). */}
-      <div className="flex justify-center px-2 pb-3 pt-1">
-        <motion.img
-          src={emeLogo}
-          alt="EMESOFT"
-          draggable={false}
+          the sidebar with a cursor-tracked tilt (see useTilt). The tilt +
+          pointer handlers live on a generously padded wrapper so the hover
+          zone is a comfortable target, not the thin logo strip itself. */}
+      <div className="px-1 pb-2 pt-1">
+        <motion.div
           onPointerMove={logoTilt.onPointerMove}
           onPointerLeave={logoTilt.onPointerLeave}
           style={logoTilt.style}
-          className="h-auto w-full max-w-[188px] select-none drop-shadow-[0_10px_16px_rgba(0,0,0,0.5)]"
-        />
+          className="flex w-full cursor-pointer justify-center px-4 py-5"
+        >
+          <img
+            src={emeLogo}
+            alt="EMESOFT"
+            draggable={false}
+            className="h-auto w-full max-w-[204px] select-none drop-shadow-[0_10px_16px_rgba(0,0,0,0.5)]"
+          />
+        </motion.div>
       </div>
 
       <div className="flex items-center gap-[11px] px-2 pb-[18px] pt-1.5">
