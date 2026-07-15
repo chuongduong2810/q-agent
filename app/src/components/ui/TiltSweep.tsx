@@ -23,15 +23,17 @@ export function TiltSweep({ className }: { className?: string }) {
       className={cn("pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]", className)}
     >
       <motion.div
-        className="absolute inset-y-0 left-0 w-1/2"
+        className="absolute inset-0"
         style={{
+          // 135deg gradient → the bright band runs at a 45° diagonal ("/"),
+          // and translating x sweeps that diagonal streak across the card.
           background:
-            "linear-gradient(105deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%)",
+            "linear-gradient(135deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 62%)",
           mixBlendMode: "soft-light",
         }}
-        initial={{ x: "-120%" }}
-        animate={{ x: "220%" }}
-        transition={{ duration: 0.85, ease: [0.22, 0.7, 0.3, 1] }}
+        initial={{ x: "-100%" }}
+        animate={{ x: "100%" }}
+        transition={{ duration: 1.2, ease: [0.22, 0.7, 0.3, 1] }}
       />
     </div>
   );
