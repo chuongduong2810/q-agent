@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Telescope } from "lucide-react";
 import { Pill } from "@/components/ui/badges";
 import { PRODUCT_DEFECT_HUE } from "./specStatus";
 import { RegenerateWithNote } from "./RegenerateWithNote";
@@ -37,10 +37,16 @@ export function BlockedBanner({
   reason,
   onRegenerate,
   regenerating,
+  onExplore,
+  exploring,
 }: {
   reason: string;
   onRegenerate: (comment?: string) => void;
   regenerating: boolean;
+  /** Kick off a DOM-exploration session to discover the missing routes/selectors
+   * (ADR 0010). When omitted, only the Regenerate path is offered. */
+  onExplore?: () => void;
+  exploring?: boolean;
 }) {
   return (
     <div
@@ -57,13 +63,33 @@ export function BlockedBanner({
         {reason || "This spec is blocked and cannot run. Resolve the underlying issue first."}
       </p>
       <div className="flex flex-wrap items-center gap-3">
+        {onExplore && (
+          <button
+            onClick={onExplore}
+            disabled={exploring || regenerating}
+            title="Drive a real browser to discover the missing routes/selectors and write them to the Knowledge Base, then regenerate"
+            className="flex items-center gap-1.5 rounded-[9px] border border-sky-400/30 bg-sky-400/10 px-[13px] py-1.5 text-[12px] font-semibold text-sky-300 hover:bg-sky-400/20 disabled:opacity-60"
+          >
+            {exploring ? (
+              <span
+                className="h-[13px] w-[13px] rounded-full border-2"
+                style={{ borderColor: "rgba(56,189,248,.35)", borderTopColor: "#38bdf8", animation: "spin .8s linear infinite" }}
+              />
+            ) : (
+              <Telescope size={13} />
+            )}
+            {exploring ? "Exploring…" : "Explore to unblock"}
+          </button>
+        )}
         <RegenerateWithNote
           label="Regenerate to retry"
           variant="amber"
           regenerating={regenerating}
           onRegenerate={onRegenerate}
         />
-        <span className="text-[11px] text-muted">Re-run project bootstrap, then regenerate to unblock.</span>
+        <span className="text-[11px] text-muted">
+          Explore the live app to discover selectors, or re-run project bootstrap, then regenerate.
+        </span>
       </div>
     </div>
   );

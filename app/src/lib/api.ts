@@ -31,6 +31,9 @@ import type {
   EvidenceGrouped,
   EvidenceOut,
   ExecutionOut,
+  ExploreRequest,
+  ExploreStartOut,
+  ExploreStatus,
   HealReport,
   PairCodeOut,
   InviteUserResponse,
@@ -454,6 +457,20 @@ export const api = {
   healReport: (caseId: number) =>
     get<HealReport | Record<string, never>>(`/cases/${caseId}/spec/heal/report`),
   runSpec: (caseId: number) => post<ExecutionOut>(`/cases/${caseId}/spec/run`),
+
+  // DOM exploration (ADR 0010) — user-triggered from a blocked case. Fire-and-
+  // forget like self-heal: the POST only starts the background observe→decide→act
+  // loop (long-running) and returns a session id; progress streams as
+  // `explore.progress` on the run WS and `explore/status` supports poll survival.
+  exploreSpec: (projectKey: string, repo: string, body: ExploreRequest) =>
+    post<ExploreStartOut>(
+      `/projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repo)}/explore`,
+      body,
+    ),
+  exploreStatus: (projectKey: string, repo: string) =>
+    get<ExploreStatus>(
+      `/projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repo)}/explore/status`,
+    ),
 
   // execution
   startExecution: (

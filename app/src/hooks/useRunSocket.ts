@@ -47,6 +47,12 @@ export function useRunSocket(
         if (evt.event.startsWith("automation")) {
           qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
         }
+        if (evt.event.startsWith("explore")) {
+          // Exploration enriches the KB, which can unblock a case — refresh the
+          // specs + cases so a `blocked` case reflects any new grounding.
+          qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+          qc.invalidateQueries({ queryKey: queryKeys.runCases(runId) });
+        }
         if (evt.event.startsWith("exec")) {
           qc.invalidateQueries({ queryKey: queryKeys.execution(runId) });
         }

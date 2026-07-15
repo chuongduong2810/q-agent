@@ -18,6 +18,7 @@ import type {
   ClaudeCredentialsUpload,
   ConnectionUpdate,
   ExecutionTarget,
+  ExploreRequest,
   KnowledgeBuildRequest,
   ProjectConfigUpdate,
   ProviderKind,
@@ -750,6 +751,34 @@ export const useHealStatus = (caseId: number, enabled: boolean) =>
     // then poll only while a heal is actually in flight — the live button state
     // during an active session is driven by the WS stream + mutation isPending.
     refetchInterval: (q) => (q.state.data?.healing ? 1500 : false),
+  });
+
+// Start a DOM-exploration session for a blocked case (ADR 0010). Like self-heal,
+// the POST only kicks off the background observe→decide→act loop; progress
+// arrives over the run WS (`explore.progress`) and the repo-scoped status poll.
+export const useExploreSpec = () =>
+  useMutation({
+    mutationFn: ({
+      projectKey,
+      repo,
+      body,
+    }: {
+      projectKey: string;
+      repo: string;
+      body: ExploreRequest;
+    }) => api.exploreSpec(projectKey, repo, body),
+  });
+
+// Poll exploration status so the "Exploring…" state (and the discovered summary)
+// survives navigating away and back. Repo-scoped — one session per repo at a time.
+export const useExploreStatus = (projectKey: string, repo: string, enabled: boolean) =>
+  useQuery({
+    queryKey: queryKeys.exploreStatus(projectKey, repo),
+    queryFn: () => api.exploreStatus(projectKey, repo),
+    enabled: enabled && !!projectKey && !!repo,
+    // Fetch once on select (catches a session already running after navigation),
+    // then poll only while a session is actually in flight — mirrors useHealStatus.
+    refetchInterval: (q) => (q.state.data?.exploring ? 1500 : false),
   });
 
 // The last self-heal trail for a case (per-attempt error + diff + outcome).

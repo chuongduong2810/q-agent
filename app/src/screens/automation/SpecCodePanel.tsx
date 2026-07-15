@@ -1,4 +1,4 @@
-import { ChevronsDownUp, ChevronsUpDown, Copy, Download, Pencil, Play, Save, Sparkles, Wand2, X } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Copy, Download, Pencil, Play, Save, Sparkles, Telescope, Wand2, X } from "lucide-react";
 import { OverflowMenu } from "@/components/ui/OverflowMenu";
 import type { AutomationSpecOut } from "@/types/api";
 import { Pill } from "@/components/ui/badges";
@@ -26,6 +26,7 @@ export function SpecCodePanel({
   generating,
   specRegenerating,
   healingThisCase,
+  exploringThisCase,
   runningThisSpec,
   runSuppressed,
   isBlocked,
@@ -46,6 +47,7 @@ export function SpecCodePanel({
   onRegenerate,
   onRunSpec,
   onStartHeal,
+  onStartExplore,
   onStartExecution,
   onOpenChat,
   codeOverride,
@@ -64,6 +66,7 @@ export function SpecCodePanel({
   generating: boolean;
   specRegenerating: boolean;
   healingThisCase: boolean;
+  exploringThisCase: boolean;
   runningThisSpec: boolean;
   runSuppressed: boolean;
   isBlocked: boolean;
@@ -84,6 +87,8 @@ export function SpecCodePanel({
   onRegenerate: (comment?: string) => void;
   onRunSpec: () => void;
   onStartHeal: () => void;
+  /** Kick off a DOM-exploration session (only meaningful for a blocked spec). */
+  onStartExplore: () => void;
   onStartExecution: () => void;
   onOpenChat: () => void;
   /** When set, shown in the code viewer instead of the spec's code — used to
@@ -186,6 +191,24 @@ export function SpecCodePanel({
                 )}
                 {healingThisCase ? "Healing…" : "Self-heal"}
               </button>
+              {isBlocked && (
+                <button
+                  onClick={onStartExplore}
+                  disabled={generating || specRegenerating || healingThisCase || exploringThisCase}
+                  title="Drive a real browser to discover the missing routes/selectors and write them to the Knowledge Base, then regenerate to unblock"
+                  className="flex items-center gap-1.5 rounded-[9px] border border-sky-400/25 bg-sky-400/10 px-[11px] py-1.5 text-[11.5px] font-semibold text-sky-300 hover:bg-sky-400/20 disabled:opacity-60"
+                >
+                  {exploringThisCase ? (
+                    <span
+                      className="h-[13px] w-[13px] rounded-full border-2"
+                      style={{ borderColor: "rgba(56,189,248,.35)", borderTopColor: "#38bdf8", animation: "spin .8s linear infinite" }}
+                    />
+                  ) : (
+                    <Telescope size={13} />
+                  )}
+                  {exploringThisCase ? "Exploring…" : "Explore to unblock"}
+                </button>
+              )}
               <button
                 onClick={onOpenChat}
                 disabled={generating || specRegenerating}

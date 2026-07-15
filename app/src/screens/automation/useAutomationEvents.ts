@@ -25,6 +25,30 @@ export type HealProgress = {
   error: string;
 };
 
+/** One step of a DOM-exploration session, as streamed on `explore.progress`
+ * (ADR 0010). `action === "done"` marks the terminal step. */
+export type ExploreStep = {
+  step: number;
+  reasoning: string;
+  action: string;
+  args: Record<string, unknown>;
+  observedUrl: string;
+  ok?: boolean;
+  spentUsd: number;
+  remainingBudgetUsd: number;
+};
+
+/** Live DOM-exploration progress: the ordered step trail for one session. The
+ * banner reads it while a session runs; the discovery-review panel reads the
+ * same trail once the session ends (the repo-scoped `explore/status` poll
+ * supplies the durable discovered counts). */
+export type ExploreProgress = {
+  sessionId: string;
+  steps: ExploreStep[];
+  /** True once the model emitted the terminal `done` action. */
+  done: boolean;
+};
+
 /**
  * Wraps the run's WS event handling for the Automation screen: captures live
  * generation and self-heal progress for the banners, surfaces per-spec errors as
@@ -33,7 +57,7 @@ export type HealProgress = {
  *
  * @param runId The active run's id.
  * @param generating Whether generation is currently in flight.
- * @returns The current generation and self-heal progress (or null).
+ * @returns The current generation, self-heal, and DOM-exploration progress (or null).
  */
 export function useAutomationEvents(runId: number, generating: boolean) {
   const qc = useQueryClient();
@@ -45,6 +69,11 @@ export function useAutomationEvents(runId: number, generating: boolean) {
   // Live self-heal progress (from the WS stream). Cleared shortly after a
   // terminal phase (passed/failed).
   const [healProgress, setHealProgress] = useState<HealProgress | null>(null);
+
+  // Live DOM-exploration trail (from the WS stream). Accumulates each step for
+  // the live banner; the same trail powers the discovery-review panel once the
+  // session ends. Reset only when a new session starts (a different sessionId).
+  const [exploreProgress, setExploreProgress] = useState<ExploreProgress | null>(null);
 
   // Capture live progress for the banner, surface per-spec generation errors,
   // and clear progress when the background pass finishes (run.status flips once
@@ -102,6 +131,47 @@ export function useAutomationEvents(runId: number, generating: boolean) {
         setTimeout(() => setHealProgress(null), 4000);
       }
     }
+    if (evt.event === "explore.progress") {
+      const p = evt.payload as {
+        sessionId?: string;
+        step: number;
+        reasoning?: string;
+        action: string;
+        args?: Record<string, unknown>;
+        observedUrl?: string;
+        ok?: boolean;
+        spentUsd?: number;
+        remainingBudgetUsd?: number;
+      };
+      const sessionId = p.sessionId ?? "";
+      const step: ExploreStep = {
+        step: p.step,
+        reasoning: p.reasoning ?? "",
+        action: p.action,
+        args: p.args ?? {},
+        observedUrl: p.observedUrl ?? "",
+        ok: p.ok,
+        spentUsd: p.spentUsd ?? 0,
+        remainingBudgetUsd: p.remainingBudgetUsd ?? 0,
+      };
+      const isDone = p.action === "done";
+      setExploreProgress((prev) => {
+        // A different sessionId ⇒ a fresh run: start a new trail.
+        const sameSession = prev != null && prev.sessionId === sessionId;
+        const steps = sameSession ? [...prev.steps] : [];
+        const existing = steps.findIndex((s) => s.step === step.step);
+        if (existing >= 0) steps[existing] = step; // WS re-delivery: replace in place
+        else steps.push(step);
+        return { sessionId, steps, done: (sameSession && prev.done) || isDone };
+      });
+      if (isDone) {
+        // Terminal step: the KB may have gained runtime-verified entries that
+        // unblock the case — refresh specs + cases so the banner reflects it.
+        qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+        qc.invalidateQueries({ queryKey: queryKeys.runCases(runId) });
+      }
+      return;
+    }
   }, [qc, runId]);
   useRunEvents(onRunEvent);
 
@@ -111,5 +181,5 @@ export function useAutomationEvents(runId: number, generating: boolean) {
     if (!generating) setGenProgress(null);
   }, [generating]);
 
-  return { genProgress, healProgress };
+  return { genProgress, healProgress, exploreProgress };
 }
