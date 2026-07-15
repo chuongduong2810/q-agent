@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Copy, MoreVertical, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { toast } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -29,6 +30,7 @@ export function RunActionsMenu({
   /** Called after a successful delete, e.g. to navigate away from the run. */
   onDeleted?: () => void;
 }) {
+  const { t } = useTranslation("runs");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [confirming, setConfirming] = useState<"cancel" | "delete" | null>(null);
@@ -78,18 +80,18 @@ export function RunActionsMenu({
   const handleCancel = () => {
     cancelRun.mutate(run.id, {
       onSuccess: () => {
-        toast.success("Run cancelled");
+        toast.success(t("actions.toast.cancelled"));
         setConfirming(null);
       },
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to cancel run"),
+      onError: (e) => toast.error(e instanceof Error ? e.message : t("actions.toast.cancelFailed")),
     });
   };
 
   const handleRetry = () => {
     setOpen(false);
     retryRun.mutate(run.id, {
-      onSuccess: () => toast.success("Retrying run"),
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to retry run"),
+      onSuccess: () => toast.success(t("actions.toast.retrying")),
+      onError: (e) => toast.error(e instanceof Error ? e.message : t("actions.toast.retryFailed")),
     });
   };
 
@@ -109,8 +111,8 @@ export function RunActionsMenu({
         retryPolicy: run.retryPolicy,
       },
       {
-        onSuccess: (created) => toast.success(`Duplicated to ${created.code}`),
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to duplicate run"),
+        onSuccess: (created) => toast.success(t("actions.toast.duplicated", { code: created.code })),
+        onError: (e) => toast.error(e instanceof Error ? e.message : t("actions.toast.duplicateFailed")),
       },
     );
   };
@@ -118,17 +120,17 @@ export function RunActionsMenu({
   const handleDelete = () => {
     deleteRun.mutate(run.id, {
       onSuccess: () => {
-        toast.success("Run deleted");
+        toast.success(t("actions.toast.deleted"));
         setConfirming(null);
         onDeleted?.();
       },
       onError: (e) => {
         const message =
           e instanceof ApiError && e.status === 409
-            ? "Cancel the run first."
+            ? t("actions.toast.cancelFirst")
             : e instanceof Error
               ? e.message
-              : "Failed to delete run";
+              : t("actions.toast.deleteFailed");
         toast.error(message);
       },
     });
@@ -145,7 +147,7 @@ export function RunActionsMenu({
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        title="Run actions"
+        title={t("actions.menu")}
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-ink-dim transition-colors hover:bg-white/[0.08] hover:text-ink"
       >
         <MoreVertical size={15} strokeWidth={2} />
@@ -174,7 +176,7 @@ export function RunActionsMenu({
                   className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-semibold text-[#fbbf24] hover:bg-white/[0.06]"
                 >
                   <XCircle size={14} strokeWidth={2} />
-                  Cancel run
+                  {t("actions.cancel")}
                 </button>
               )}
               {terminal && (
@@ -185,7 +187,7 @@ export function RunActionsMenu({
                   className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-semibold text-ink-soft hover:bg-white/[0.06] disabled:opacity-50"
                 >
                   <RotateCcw size={14} strokeWidth={2} />
-                  Retry run
+                  {t("actions.retry")}
                 </button>
               )}
               <button
@@ -195,7 +197,7 @@ export function RunActionsMenu({
                 className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-semibold text-ink-soft hover:bg-white/[0.06] disabled:opacity-50"
               >
                 <Copy size={14} strokeWidth={2} />
-                Duplicate
+                {t("actions.duplicate")}
               </button>
               <div className="my-1 h-px bg-white/[0.08]" />
               <button
@@ -207,7 +209,7 @@ export function RunActionsMenu({
                 className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-semibold text-[#fb7185] hover:bg-white/[0.06]"
               >
                 <Trash2 size={14} strokeWidth={2} />
-                Delete run
+                {t("actions.delete")}
               </button>
             </motion.div>
           )}
@@ -217,9 +219,9 @@ export function RunActionsMenu({
 
       <ConfirmDialog
         open={confirming === "cancel"}
-        title="Cancel this run?"
-        message={`"${run.name}" will stop where it is. You can retry it afterward.`}
-        confirmLabel="Cancel run"
+        title={t("actions.confirmCancel.title")}
+        message={t("actions.confirmCancel.message", { name: run.name })}
+        confirmLabel={t("actions.confirmCancel.confirm")}
         danger
         loading={cancelRun.isPending}
         onConfirm={handleCancel}
@@ -227,9 +229,9 @@ export function RunActionsMenu({
       />
       <ConfirmDialog
         open={confirming === "delete"}
-        title="Delete this run?"
-        message={`"${run.name}" and all of its test cases, executions, and evidence will be permanently deleted.`}
-        confirmLabel="Delete run"
+        title={t("actions.confirmDelete.title")}
+        message={t("actions.confirmDelete.message", { name: run.name })}
+        confirmLabel={t("actions.confirmDelete.confirm")}
         danger
         loading={deleteRun.isPending}
         onConfirm={handleDelete}

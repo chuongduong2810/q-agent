@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { RotateCcw, Square, Trash2, X } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { toast } from "@/lib/toast";
 import { isTerminalRun } from "@/components/dashboard/runStatus";
@@ -22,6 +23,7 @@ export function RunBulkBar({
   selected: RunOut[];
   onClear: () => void;
 }) {
+  const { t } = useTranslation("runs");
   const cancelRun = useCancelRun();
   const retryRun = useRetryRun();
   const deleteRun = useDeleteRun();
@@ -39,7 +41,7 @@ export function RunBulkBar({
     skipped: number,
   ) => {
     if (!rows.length) {
-      toast.error(`No ${verb === "Retried" ? "terminal" : "in-progress"} runs selected`);
+      toast.error(verb === "Retried" ? t("bulk.noneTerminal") : t("bulk.noneInProgress"));
       return;
     }
     setBusy(true);
@@ -47,10 +49,15 @@ export function RunBulkBar({
     setBusy(false);
     const ok = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.length - ok;
+    const verbLabel: Record<string, string> = {
+      Retried: t("bulk.verb.retried"),
+      Cancelled: t("bulk.verb.cancelled"),
+      Deleted: t("bulk.verb.deleted"),
+    };
     toast.success(
-      `${verb} ${ok} run${ok === 1 ? "" : "s"}` +
-        (failed ? `, ${failed} failed` : "") +
-        (skipped ? `, ${skipped} skipped` : ""),
+      t("bulk.result", { count: ok, verb: verbLabel[verb] }) +
+        (failed ? t("bulk.failed", { count: failed }) : "") +
+        (skipped ? t("bulk.skipped", { count: skipped }) : ""),
     );
     onClear();
   };
@@ -82,16 +89,16 @@ export function RunBulkBar({
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet px-1.5 text-[11px] font-bold text-white">
                 {count}
               </span>
-              selected
+              {t("bulk.selected")}
             </span>
-            <BulkBtn title="Retry selected" onClick={handleRetry} disabled={busy}>
+            <BulkBtn title={t("bulk.retry")} onClick={handleRetry} disabled={busy}>
               <RotateCcw size={16} strokeWidth={2} />
             </BulkBtn>
-            <BulkBtn title="Cancel selected" onClick={handleCancel} disabled={busy}>
+            <BulkBtn title={t("bulk.cancel")} onClick={handleCancel} disabled={busy}>
               <Square size={15} strokeWidth={2.2} />
             </BulkBtn>
             <BulkBtn
-              title="Delete selected"
+              title={t("bulk.delete")}
               onClick={() => setConfirmingDelete(true)}
               disabled={busy}
               danger
@@ -99,7 +106,7 @@ export function RunBulkBar({
               <Trash2 size={16} strokeWidth={2} />
             </BulkBtn>
             <div className="mx-0.5 h-6 w-px bg-white/[0.1]" />
-            <BulkBtn title="Clear selection" onClick={onClear} disabled={busy}>
+            <BulkBtn title={t("bulk.clear")} onClick={onClear} disabled={busy}>
               <X size={16} strokeWidth={2} />
             </BulkBtn>
           </motion.div>
@@ -108,15 +115,12 @@ export function RunBulkBar({
 
       <ConfirmDialog
         open={confirmingDelete}
-        title={`Delete ${terminal.length} run${terminal.length === 1 ? "" : "s"}?`}
+        title={t("bulk.confirmDelete.title", { count: terminal.length })}
         message={
-          `The selected run${terminal.length === 1 ? "" : "s"} and all of their test cases, ` +
-          `executions, and evidence will be permanently deleted.` +
-          (inProgress.length
-            ? ` ${inProgress.length} in-progress run${inProgress.length === 1 ? "" : "s"} will be skipped — cancel ${inProgress.length === 1 ? "it" : "them"} first.`
-            : "")
+          t("bulk.confirmDelete.body", { count: terminal.length }) +
+          (inProgress.length ? t("bulk.confirmDelete.skipped", { count: inProgress.length }) : "")
         }
-        confirmLabel="Delete runs"
+        confirmLabel={t("bulk.confirmDelete.confirm")}
         danger
         loading={busy}
         onConfirm={handleDelete}

@@ -14,6 +14,7 @@ import {
   Terminal,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { providerGlyph } from "@/components/ui/badges";
 import { PipelineRail, runStatusToStage } from "@/components/ui/PipelineRail";
@@ -43,6 +44,7 @@ const RUN_STATUS_BADGE: Record<string, { color: string; bg: string }> = {
 
 /** Run detail: pipeline stage, live processing banner, and per-ticket generation status. */
 export function RunDetail() {
+  const { t } = useTranslation("runs");
   const runId = Number(useParams().runId);
   const navigate = useNavigate();
 
@@ -83,7 +85,7 @@ export function RunDetail() {
   const total = run.runTickets.length;
   const analyzed = run.runTickets.filter((rt) => rt.genStatus === "done").length;
   const pct = total ? Math.round((analyzed / total) * 100) : 0;
-  const headline = Object.values(phaseMsgs).at(-1) ?? "Reading requirements…";
+  const headline = Object.values(phaseMsgs).at(-1) ?? t("detail.readingRequirements");
 
   return (
     <div className="px-1 pb-10 pt-0.5">
@@ -92,7 +94,7 @@ export function RunDetail() {
         className="mb-3.5 flex cursor-pointer items-center gap-[7px] border-none bg-transparent p-0 text-[12.5px] font-semibold text-ink-dim hover:text-[#c7c7d4]"
       >
         <ArrowLeft size={14} strokeWidth={2.2} />
-        All runs
+        {t("detail.back")}
       </button>
 
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
@@ -111,11 +113,16 @@ export function RunDetail() {
           </div>
           <h1 className="m-0 text-[22px] font-black tracking-tight md:text-[26px]">{run.name}</h1>
           <div className="mt-1.5 text-[12.5px] text-ink-dim">
-            {run.scopeLabel} &middot; {run.framework} &middot; {run.env} &middot; {run.workers} workers
+            {t("detail.meta", {
+              scope: run.scopeLabel,
+              framework: run.framework,
+              env: run.env,
+              workers: run.workers,
+            })}
           </div>
         </div>
         <Button variant="primary" onClick={goReview} className="w-full shrink-0 md:w-auto">
-          Open Review Center
+          {t("detail.openReview")}
           <ArrowRight size={14} strokeWidth={2.2} />
         </Button>
       </div>
@@ -188,7 +195,7 @@ export function RunDetail() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-[10px]">
                 <span className="text-[15px] font-extrabold tracking-[-.01em]">
-                  Q&#8209;Agent is analyzing your tickets
+                  {t("detail.analyzing")}
                 </span>
                 <span className="inline-flex gap-[3px]">
                   <span
@@ -213,7 +220,7 @@ export function RunDetail() {
                 <span className="text-[13px] font-bold text-[#b9a8e6]">/{total}</span>
               </div>
               <div className="text-[10.5px] font-semibold tracking-[.03em] text-[#b9a8e6]">
-                TICKETS ANALYZED
+                {t("detail.ticketsAnalyzed")}
               </div>
             </div>
           </div>
@@ -279,6 +286,7 @@ function RunTicketRow({
   index: number;
   onReview: () => void;
 }) {
+  const { t } = useTranslation("runs");
   const [glyph, color] = providerGlyph[providerKind] ?? ["?", "#8b8b9e"];
   const done = runTicket.genStatus === "done";
   const analyzing = runTicket.genStatus === "analyzing";
@@ -287,7 +295,7 @@ function RunTicketRow({
   const queued = runTicket.genStatus === "queued";
   const errored = runTicket.genStatus === "error";
   // Prefer the live phase message; else a status-specific default per the design.
-  const statusText = phaseMsg ?? (generating ? "Generating test cases…" : "Reading ticket…");
+  const statusText = phaseMsg ?? (generating ? t("detail.generatingCases") : t("detail.readingTicket"));
 
   return (
     <motion.div
@@ -350,16 +358,16 @@ function RunTicketRow({
       {done && (
         <Button variant="success" size="sm" onClick={onReview}>
           <Check size={13} strokeWidth={2.6} />
-          Review
+          {t("detail.review")}
         </Button>
       )}
       {queued && (
         <span className="flex items-center gap-1.5 text-[12px] font-semibold text-[#6b7280]">
           <Clock size={13} strokeWidth={2} />
-          Queued
+          {t("detail.queued")}
         </span>
       )}
-      {errored && <span className="text-[12px] font-semibold text-[#fb7185]">Analysis failed</span>}
+      {errored && <span className="text-[12px] font-semibold text-[#fb7185]">{t("detail.analysisFailed")}</span>}
     </motion.div>
   );
 }
@@ -434,6 +442,7 @@ function AiTicketGroup({
   ticket: RunAiTicket;
   resolveTicket: (externalId: string) => { title: string; providerKind: string };
 }) {
+  const { t } = useTranslation("runs");
   const runLevel = ticket.ticketExternalId === "";
   const { title, providerKind } = resolveTicket(ticket.ticketExternalId);
   const [glyph, color] = providerGlyph[providerKind] ?? ["?", "#8b8b9e"];
@@ -461,7 +470,7 @@ function AiTicketGroup({
         )}
         <div className="min-w-0 flex-1">
           {runLevel ? (
-            <div className="text-[13px] font-bold">Run&#8209;level</div>
+            <div className="text-[13px] font-bold">{t("detail.ai.runLevel")}</div>
           ) : (
             <>
               <div className="font-mono text-[11px] font-semibold text-violet">
@@ -477,7 +486,9 @@ function AiTicketGroup({
           <div className="font-mono text-[13.5px] font-black tracking-[-.02em] text-[#6ee7b7]">
             {fmtCost(ticket.costUsd)}
           </div>
-          <div className="text-[10px] text-[#8b8b9e]">{fmtCompact(ticket.tokens)} tokens</div>
+          <div className="text-[10px] text-[#8b8b9e]">
+            {t("detail.ai.tokens", { value: fmtCompact(ticket.tokens) })}
+          </div>
         </div>
       </div>
       {ticket.processes.map((p) => (
@@ -502,6 +513,7 @@ function AiUsageCard({
   runCode: string;
   resolveTicket: (externalId: string) => { title: string; providerKind: string };
 }) {
+  const { t } = useTranslation("runs");
   const grouped = usage.tickets && usage.tickets.length > 0;
   return (
     <div className="glass mt-[18px] overflow-hidden rounded-[18px]">
@@ -519,16 +531,18 @@ function AiUsageCard({
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-bold">AI usage &amp; cost</div>
+          <div className="text-[14px] font-bold">{t("detail.ai.title")}</div>
           <div className="text-[11.5px] text-[#8b8b9e]">
-            Per-ticket spend for {runCode} &middot; {usage.modelLabel}
+            {t("detail.ai.subtitle", { code: runCode, model: usage.modelLabel })}
           </div>
         </div>
         <div className="text-right">
           <div className="font-mono text-[18px] font-black tracking-[-.02em] text-[#6ee7b7]">
             {fmtCost(usage.totalCostUsd)}
           </div>
-          <div className="text-[10.5px] text-[#8b8b9e]">{fmtCompact(usage.totalTokens)} tokens</div>
+          <div className="text-[10.5px] text-[#8b8b9e]">
+            {t("detail.ai.tokens", { value: fmtCompact(usage.totalTokens) })}
+          </div>
         </div>
       </div>
 
@@ -538,11 +552,11 @@ function AiUsageCard({
           className="grid items-center gap-[10px] p-[9px_18px] text-[10px] font-bold tracking-[.05em] text-[#6c6c7e]"
           style={{ gridTemplateColumns: AI_COST_GRID, background: "rgba(255,255,255,.02)" }}
         >
-          <span>{grouped ? "TICKET / PROCESS" : "AI PROCESS"}</span>
-          <span className="text-right">INPUT</span>
-          <span className="text-right">OUTPUT</span>
-          <span className="text-right">TOKENS</span>
-          <span className="text-right">COST</span>
+          <span>{grouped ? t("detail.ai.colTicketProcess") : t("detail.ai.colProcess")}</span>
+          <span className="text-right">{t("detail.ai.colInput")}</span>
+          <span className="text-right">{t("detail.ai.colOutput")}</span>
+          <span className="text-right">{t("detail.ai.colTokens")}</span>
+          <span className="text-right">{t("detail.ai.colCost")}</span>
         </div>
 
         {grouped
@@ -574,6 +588,7 @@ function AiUsageCard({
 
 /** Mobile stacked-row equivalent of {@link AiProcessRow} (no grid, name + tokens/cost stack). */
 function AiProcessRowMobile({ process }: { process: RunAiProcess }) {
+  const { t } = useTranslation("runs");
   const Icon = PROCESS_ICON[process.key] ?? Cpu;
   return (
     <div
@@ -591,7 +606,9 @@ function AiProcessRowMobile({ process }: { process: RunAiProcess }) {
         <div className="truncate text-[10px] text-[#7a7a8c]">{process.meta}</div>
       </div>
       <div className="shrink-0 text-right">
-        <div className="font-mono text-[11px] font-semibold text-[#c7c7d4]">{fmtCompact(process.tokens)} tok</div>
+        <div className="font-mono text-[11px] font-semibold text-[#c7c7d4]">
+          {t("detail.ai.tok", { value: fmtCompact(process.tokens) })}
+        </div>
         <div className="font-mono text-[11px] font-bold text-[#6ee7b7]">{fmtCost(process.costUsd)}</div>
       </div>
     </div>
@@ -606,6 +623,7 @@ function AiTicketGroupMobile({
   ticket: RunAiTicket;
   resolveTicket: (externalId: string) => { title: string; providerKind: string };
 }) {
+  const { t } = useTranslation("runs");
   const runLevel = ticket.ticketExternalId === "";
   const { title, providerKind } = resolveTicket(ticket.ticketExternalId);
   const [glyph, color] = providerGlyph[providerKind] ?? ["?", "#8b8b9e"];
@@ -633,7 +651,7 @@ function AiTicketGroupMobile({
         )}
         <div className="min-w-0 flex-1">
           {runLevel ? (
-            <div className="text-[12.5px] font-bold">Run&#8209;level</div>
+            <div className="text-[12.5px] font-bold">{t("detail.ai.runLevel")}</div>
           ) : (
             <>
               <div className="font-mono text-[10.5px] font-semibold text-violet">{ticket.ticketExternalId}</div>
@@ -645,7 +663,9 @@ function AiTicketGroupMobile({
           <div className="font-mono text-[12.5px] font-black tracking-[-.02em] text-[#6ee7b7]">
             {fmtCost(ticket.costUsd)}
           </div>
-          <div className="text-[9.5px] text-[#8b8b9e]">{fmtCompact(ticket.tokens)} tok</div>
+          <div className="text-[9.5px] text-[#8b8b9e]">
+            {t("detail.ai.tok", { value: fmtCompact(ticket.tokens) })}
+          </div>
         </div>
       </div>
       {ticket.processes.map((p) => (

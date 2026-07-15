@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { ArrowRight, ListChecks, Loader2, Pause, Play, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   isPausedRun,
@@ -21,11 +22,11 @@ import type { RunOut } from "@/types/api";
 /** Low-alpha tint of a 6-digit hex accent, for badge/pill backgrounds. */
 const tint = (hex: string, alpha = "22") => `${hex}${alpha}`;
 
-const STAT_CARDS: { key: Exclude<RunFilter, "all">; label: string; color: string }[] = [
-  { key: "active", label: "Active", color: "#a78bfa" },
-  { key: "review", label: "In review", color: "#f59e0b" },
-  { key: "completed", label: "Completed", color: "#10b981" },
-  { key: "failed", label: "Failed", color: "#fb7185" },
+const STAT_CARDS: { key: Exclude<RunFilter, "all">; color: string }[] = [
+  { key: "active", color: "#a78bfa" },
+  { key: "review", color: "#f59e0b" },
+  { key: "completed", color: "#10b981" },
+  { key: "failed", color: "#fb7185" },
 ];
 
 /**
@@ -35,6 +36,7 @@ const STAT_CARDS: { key: Exclude<RunFilter, "all">; label: string; color: string
  * from the aggregates on `RunOut` (GET /runs).
  */
 export function Runs() {
+  const { t } = useTranslation("runs");
   const openCreateRun = useUI((s) => s.openCreateRun);
   const runFilter = useUI((s) => s.runFilter);
   const setRunFilter = useUI((s) => s.setRunFilter);
@@ -54,12 +56,12 @@ export function Runs() {
     failed: all.filter((r) => groupOf(r) === "failed").length,
   };
 
-  const tabs: { key: RunFilter; label: string; count: number }[] = [
-    { key: "all", label: "All", count: all.length },
-    { key: "active", label: "Active", count: counts.active },
-    { key: "review", label: "In review", count: counts.review },
-    { key: "completed", label: "Completed", count: counts.completed },
-    { key: "failed", label: "Failed", count: counts.failed },
+  const tabs: { key: RunFilter; count: number }[] = [
+    { key: "all", count: all.length },
+    { key: "active", count: counts.active },
+    { key: "review", count: counts.review },
+    { key: "completed", count: counts.completed },
+    { key: "failed", count: counts.failed },
   ];
 
   // Surface actionable runs first (needs-you review → in-flight → completed →
@@ -82,13 +84,13 @@ export function Runs() {
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-[5px] text-[13px] font-medium text-ink-dim">
-            Batch QA sessions &middot; run many in parallel
+            {t("list.subtitle")}
           </div>
-          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">Runs</h1>
+          <h1 className="m-0 text-[24px] font-black tracking-tight md:text-[28px]">{t("list.title")}</h1>
         </div>
         <Button variant="primary" className="w-full md:w-auto" onClick={openCreateRun}>
           <Plus size={15} strokeWidth={2.4} />
-          Create Run
+          {t("list.createRun")}
         </Button>
       </div>
 
@@ -106,12 +108,12 @@ export function Runs() {
       ) : !all.length ? (
         <EmptyState
           icon={<ListChecks size={28} color="#8b8b9e" strokeWidth={1.6} />}
-          title="No runs yet"
-          body="Create a run to start a batch QA session across one or many tickets."
+          title={t("list.empty.title")}
+          body={t("list.empty.body")}
           action={
             <Button variant="primary" onClick={openCreateRun}>
               <Plus size={15} strokeWidth={2.4} />
-              Create Run
+              {t("list.createRun")}
             </Button>
           }
         />
@@ -127,28 +129,28 @@ export function Runs() {
                     {counts[c.key]}
                   </span>
                 </div>
-                <div className="mt-1.5 text-[13px] text-ink-dim">{c.label}</div>
+                <div className="mt-1.5 text-[13px] text-ink-dim">{t("list.stat." + c.key)}</div>
               </div>
             ))}
           </div>
 
           {/* Status filter tabs */}
           <div className="scrollbar-none mb-4 flex gap-2 overflow-x-auto md:flex-wrap">
-            {tabs.map((t) => {
-              const active = runFilter === t.key;
+            {tabs.map((tab) => {
+              const active = runFilter === tab.key;
               return (
                 <button
-                  key={t.key}
+                  key={tab.key}
                   type="button"
-                  onClick={() => setRunFilter(t.key)}
+                  onClick={() => setRunFilter(tab.key)}
                   className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-3 py-[7px] text-[13px] font-semibold transition-colors ${
                     active
                       ? "bg-white/[0.1] text-ink"
                       : "text-ink-dim hover:bg-white/[0.05] hover:text-ink-soft"
                   }`}
                 >
-                  {t.label}
-                  <span className={active ? "text-ink-soft" : "text-ink-dim/70"}>{t.count}</span>
+                  {t("list.filter." + tab.key)}
+                  <span className={active ? "text-ink-soft" : "text-ink-dim/70"}>{tab.count}</span>
                 </button>
               );
             })}
@@ -157,7 +159,7 @@ export function Runs() {
           {/* Run rows */}
           {!filtered.length ? (
             <div className="glass rounded-2xl px-5 py-8 text-center text-[13px] text-ink-dim">
-              No runs in this view.
+              {t("list.emptyView")}
             </div>
           ) : (
             <div className="flex flex-col gap-[10px]">
@@ -197,6 +199,7 @@ function RunRow({
   onOpen: () => void;
   onPlay: () => void;
 }) {
+  const { t } = useTranslation("runs");
   const badge = runBadge(runEffectiveStatus(run));
   const working = isWorkingRun(run.status);
   const paused = isPausedRun(run.status);
@@ -226,7 +229,7 @@ function RunRow({
       {/* Select checkbox */}
       <button
         type="button"
-        aria-label={selected ? "Deselect run" : "Select run"}
+        aria-label={selected ? t("row.deselect") : t("row.select")}
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
@@ -272,7 +275,7 @@ function RunRow({
           {isReview && (
             <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#f59e0b]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" style={{ animation: "pulseDot 1.6s infinite" }} />
-              needs you
+              {t("row.needsYou")}
             </span>
           )}
         </div>
@@ -280,8 +283,8 @@ function RunRow({
           {run.name}
         </div>
         <div className="mt-[3px] truncate text-[12px] text-ink-dim">
-          {run.ticketIds.length} ticket{run.ticketIds.length === 1 ? "" : "s"} &middot; {run.caseCount}{" "}
-          case{run.caseCount === 1 ? "" : "s"} &middot; {run.framework} &middot; {run.env}
+          {t("row.tickets", { count: run.ticketIds.length })} &middot;{" "}
+          {t("row.cases", { count: run.caseCount })} &middot; {run.framework} &middot; {run.env}
         </div>
       </div>
 
@@ -297,7 +300,7 @@ function RunRow({
             </div>
           </div>
           <div className="text-[11px] text-ink-dim">
-            Pass {run.passRate != null ? `${Math.round(run.passRate)}%` : "—"} &middot;{" "}
+            {t("row.pass", { pct: run.passRate != null ? `${Math.round(run.passRate)}%` : "—" })} &middot;{" "}
             {timeAgoShort(run.finishedAt ?? run.createdAt)}
           </div>
         </div>
@@ -308,7 +311,7 @@ function RunRow({
         {canRun && (
           <button
             type="button"
-            title="Run execution"
+            title={t("row.runExecution")}
             onClick={(e) => {
               e.stopPropagation();
               onPlay();
@@ -320,7 +323,7 @@ function RunRow({
         )}
         <button
           type="button"
-          title="Open run"
+          title={t("row.openRun")}
           onClick={(e) => {
             e.stopPropagation();
             onOpen();
