@@ -5,6 +5,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { CountUp } from "@/components/ui/CountUp";
 import { Spinner } from "@/components/ui/misc";
+import { useTilt } from "@/hooks/useTilt";
 import { runColor, runEffectiveStatus, runMeta, runRateLabel, timeAgo } from "@/components/dashboard/runStatus";
 import { useAuditEvents, useReports, useRunCases, useRuns } from "@/hooks/queries";
 import { useAuth } from "@/store/auth";
@@ -27,6 +28,7 @@ const ACTOR_FG: Record<string, string> = {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const heroTilt = useTilt();
   const { data: runs, isLoading: runsLoading } = useRuns();
   const openCreateRun = useUI((s) => s.openCreateRun);
   // Runs sorted newest-first; the hero card displays the most recent run.
@@ -150,8 +152,12 @@ export function Dashboard() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
+          whileHover={{ zIndex: 20 }}
+          onPointerMove={heroTilt.onPointerMove}
+          onPointerLeave={heroTilt.onPointerLeave}
           className="relative overflow-hidden rounded-[22px] p-[18px] md:p-[26px]"
           style={{
+            ...heroTilt.style,
             background: "linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.09))",
             border: "1px solid rgba(139,92,246,.26)",
           }}

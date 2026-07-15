@@ -1,9 +1,12 @@
 import { LogOut, Sparkles, User, UserRound } from "lucide-react";
+import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
+import { useTilt } from "@/hooks/useTilt";
 import { useLogout } from "@/hooks/useLogout";
+import emeLogo from "@/public/eme-3d-logo.png";
 import { useAuth } from "@/store/auth";
 import {
   ADMIN_NAV,
@@ -18,6 +21,9 @@ import {
 export function GlobalSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  // Stronger tilt for the hero brand logo than the default card tilt.
+  const logoTilt = useTilt({ maxX: 13, maxY: 17, scale: 1.06, perspective: 900 });
 
   // Identity comes from the authenticated principal (/auth/me) — the app subtree
   // renders only behind RequireAuth, so `user` is present in normal use. The
@@ -135,6 +141,27 @@ export function GlobalSidebar() {
 
   return (
     <aside className="glass-strong flex w-[248px] shrink-0 flex-col rounded-[22px] p-[20px_14px] shadow-[0_24px_60px_-20px_rgba(0,0,0,.6)]">
+      {/* EMESOFT 3D brand logo on a rounded dark plate — cursor-tracked tilt
+          (see useTilt). The asset is a photographic 3D render with a baked-in
+          dark backdrop (no transparent cut exists), so we frame it as an
+          intentional brand tile whose dark plate merges with that backdrop
+          instead of exposing a hard rectangle against the glass sidebar. */}
+      <div className="mb-1 px-1 pb-2.5 pt-0.5">
+        <motion.div
+          onPointerMove={logoTilt.onPointerMove}
+          onPointerLeave={logoTilt.onPointerLeave}
+          style={logoTilt.style}
+          className="flex justify-center overflow-hidden rounded-2xl bg-[#0c0c11] px-3 py-3 ring-1 ring-white/[0.06] shadow-[0_10px_30px_-14px_rgba(0,0,0,.8)]"
+        >
+          <img
+            src={emeLogo}
+            alt="EMESOFT"
+            draggable={false}
+            className="h-auto w-full max-w-[176px] select-none"
+          />
+        </motion.div>
+      </div>
+
       <div className="flex items-center gap-[11px] px-2 pb-[18px] pt-1.5">
         <div className="accent-gradient flex h-[34px] w-[34px] items-center justify-center rounded-[11px] shadow-[0_6px_18px_-4px_rgba(139,92,246,.7)]">
           <Sparkles size={19} color="#fff" strokeWidth={2.2} />
@@ -143,6 +170,10 @@ export function GlobalSidebar() {
           <div className="text-[16px] font-black leading-tight tracking-tight">Q&#8209;Agent</div>
           <div className="text-[10.5px] font-medium tracking-[0.04em] text-[#7a7a8c]">
             QA OPERATING SYSTEM
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 text-[9.5px] font-semibold tracking-[0.08em] text-[#5c5c6e]">
+            <span className="h-1 w-1 rounded-full bg-[#8b5cf6]" />
+            AN EMESOFT PRODUCT
           </div>
         </div>
       </div>
