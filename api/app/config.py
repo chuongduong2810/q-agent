@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     # Self-heal loop: max times to re-generate + re-run a single failing spec
     # (feeding the failure back to Claude) before giving up.
     heal_max_attempts: int = 3
+    # DOM exploration agent (ADR 0010): max observe→decide→act steps per session
+    # (hard-clamped to <=20 in the loop) and the per-session Claude cost ceiling in
+    # USD — the loop halts when either is reached, so exploration can never run
+    # unbounded or burn unlimited spend.
+    explore_max_steps: int = 15
+    explore_cost_budget_usd: float = 0.50
     # Max seconds to wait for the operator to complete a manual login (headed
     # browser) before the capture is abandoned and the run fails cleanly.
     auth_capture_timeout_s: int = 300
