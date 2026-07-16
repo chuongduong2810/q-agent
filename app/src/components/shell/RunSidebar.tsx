@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown, ScrollText } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -185,6 +185,33 @@ export function RunSidebar({ runId }: { runId: number }) {
           );
         })}
       </nav>
+
+      {(() => {
+        const activeUrl = urlSeg === "activity";
+        return (
+          <button
+            data-tour="stage-activity"
+            onClick={() => navigate(`/runs/${runId}/activity`)}
+            className={cn(
+              "mt-1.5 flex items-center gap-[11px] rounded-[9px] px-2 py-[7px] text-left text-[12px] font-semibold",
+              !activeUrl && "text-[#c7c7d4] hover:bg-white/[0.05]",
+            )}
+            style={
+              activeUrl
+                ? {
+                    background:
+                      "linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.1))",
+                    boxShadow: "inset 0 0 0 1px rgba(139,92,246,.28)",
+                    color: "#fff",
+                  }
+                : undefined
+            }
+          >
+            <ScrollText size={15} strokeWidth={2} className="shrink-0" />
+            {t("run.activity")}
+          </button>
+        );
+      })()}
 
       <div className="mt-auto border-t border-white/[0.06] pt-2.5">
         <div className="px-2 pb-1.5 text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">

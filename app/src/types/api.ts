@@ -694,6 +694,8 @@ export interface AuditEventOut {
   ip: string;
   status: "success" | "warning" | "error";
   meta: string;
+  /** Run this event belongs to (e.g. "RUN-202"); "" when not run-scoped (#394). */
+  runCode: string;
 }
 
 export interface AuditStats {

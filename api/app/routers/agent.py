@@ -709,6 +709,23 @@ def agent_explore_finalize(
             "discoveredSelectors": len(selectors),
         },
     )
+    # Durable per-run record of the outcome so the run's activity timeline shows
+    # what this Explore did — including "ran but discovered nothing" and hard
+    # failures (e.g. a Claude decide-error) — not just the transient WS trail (#394).
+    run = (
+        db.query(Run).filter(Run.id == session.get("run_id")).first()
+        if session.get("run_id")
+        else None
+    )
+    exploration_agent.audit_exploration_result(
+        target=session.get("target") or {},
+        stop_reason=body.stop_reason,
+        steps_taken=body.steps_taken,
+        discovered_routes=len(routes),
+        discovered_selectors=len(selectors),
+        wrote_kb=wrote_kb,
+        run_code=run.code if run is not None else None,
+    )
     logger.info(
         "Exploration finalize (session={} run={}): stopReason={} steps={} routes={} selectors={} wroteKb={} | log={}",
         session_id,

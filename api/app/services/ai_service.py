@@ -477,6 +477,13 @@ def _run_pipeline(run_id: int) -> None:
             db.rollback()
             run.failed_stage = run.status
             set_run_status(db, run, "failed")
+            # Surface the failure in the run's activity timeline (#394) — otherwise
+            # a crashed pipeline is only visible in the container logs.
+            audit_service.record(
+                category="ai", actor_type="ai", action="Test generation failed",
+                target=f"{run.code} · {run.failed_stage or 'generation'}",
+                status="error", meta=str(exc)[:400], run_code=run.code,
+            )
     finally:
         db.close()
         run_context.clear()

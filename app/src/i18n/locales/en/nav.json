@@ -41,7 +41,8 @@
     "loading": "Loading run…",
     "screenTag": "screen",
     "meta": "{{count}} tickets · {{framework}} · {{env}}",
-    "switchHint": "SWITCH RUN — KEEPS YOU ON THIS STAGE"
+    "switchHint": "SWITCH RUN — KEEPS YOU ON THIS STAGE",
+    "activity": "Activity"
   },
   "pipeline": {
     "syncSelect": "Sync & Select",

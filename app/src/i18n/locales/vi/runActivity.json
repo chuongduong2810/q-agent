@@ -1,0 +1,24 @@
+{
+  "title": "Hoạt động",
+  "subtitle": "Mọi diễn biến trong lượt chạy · tạo sinh, tự động hóa, khám phá, thực thi",
+  "live": "Trực tiếp",
+  "refresh": "Làm mới",
+  "count_one": "{{count}} sự kiện",
+  "count_other": "{{count}} sự kiện",
+  "loading": "Đang tải hoạt động…",
+  "empty": {
+    "title": "Chưa có hoạt động",
+    "hint": "Sự kiện sẽ xuất hiện ở đây khi lượt chạy tạo sinh, tự động hóa, khám phá và thực thi."
+  },
+  "statuses": {
+    "success": "OK",
+    "warning": "Cảnh báo",
+    "error": "Lỗi"
+  },
+  "field": {
+    "when": "THỜI ĐIỂM",
+    "actor": "TÁC NHÂN",
+    "category": "DANH MỤC",
+    "details": "CHI TIẾT"
+  }
+}

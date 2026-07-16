@@ -41,7 +41,8 @@
     "loading": "Đang tải lượt chạy…",
     "screenTag": "màn hình",
     "meta": "{{count}} công việc · {{framework}} · {{env}}",
-    "switchHint": "CHUYỂN LƯỢT CHẠY — GIỮ NGUYÊN GIAI ĐOẠN"
+    "switchHint": "CHUYỂN LƯỢT CHẠY — GIỮ NGUYÊN GIAI ĐOẠN",
+    "activity": "Hoạt động"
   },
   "pipeline": {
     "syncSelect": "Đồng bộ & Chọn",

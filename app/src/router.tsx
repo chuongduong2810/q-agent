@@ -21,6 +21,7 @@ import { Tickets } from "@/screens/Tickets";
 import { TicketDetail } from "@/screens/TicketDetail";
 import { Runs } from "@/screens/Runs";
 import { RunDetail } from "@/screens/RunDetail";
+import { RunActivity } from "@/screens/RunActivity";
 import { ReviewCenter } from "@/screens/ReviewCenter";
 import { CreateLinkSync } from "@/screens/CreateLinkSync";
 import { Automation } from "@/screens/Automation";
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
               { path: "execution", element: <Execution /> },
               { path: "evidence", element: <Evidence /> },
               { path: "comment", element: <CommentPublish /> },
+              { path: "activity", element: <RunActivity /> },
             ],
           },
           { path: "reports", element: <Reports /> },

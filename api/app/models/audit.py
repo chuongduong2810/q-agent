@@ -36,3 +36,6 @@ class AuditLog(Base):
     ip: Mapped[str] = mapped_column(String(64), default="internal")
     status: Mapped[str] = mapped_column(String(16), default="success")
     meta: Mapped[str] = mapped_column(Text, default="")
+    # The run this event belongs to (e.g. "RUN-202"), for the per-run activity
+    # timeline (#394). NULL for events not scoped to a run (auth, settings, …).
+    run_code: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)

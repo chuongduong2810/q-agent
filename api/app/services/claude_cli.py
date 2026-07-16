@@ -293,6 +293,18 @@ def _persist_refreshed_credential(owner_id: int | None) -> None:
         logger.warning("Could not persist refreshed Claude credential: {}", exc)
 
 
+# Substrings (lowercased) in a failed CLI call's output that mean the Claude
+# credential is invalid/expired — covers both the local-token phrasing and a
+# rejected-token API 401.
+_AUTH_ERROR_MARKERS = (
+    "not logged in",
+    "please run /login",
+    "invalid authentication credentials",
+    "failed to authenticate",
+    "api error: 401",
+)
+
+
 def run_prompt(
     prompt: str,
     *,
@@ -398,10 +410,21 @@ def run_prompt(
         )
         activity.finish(call_id, ok=False, error=f"exit {proc.returncode}")
         # Feed an auth failure back into the stored credential so the UI can flag
-        # it (Layer 1) — the CLI writes "Not logged in · Please run /login" to
-        # stdout as JSON when the token is expired/revoked.
-        if "not logged in" in (out + err).lower() or "please run /login" in (out + err).lower():
+        # it (Layer 1). The CLI reports auth failures a few ways: "Not logged in ·
+        # Please run /login" (expired local token) AND "API Error: 401 Invalid
+        # authentication credentials" / "Failed to authenticate" (rejected token).
+        # Match all so a real 401 flags the credential (previously only the
+        # "/login" phrasing did, so API 401s slipped through) and lands in the run
+        # activity log (#394).
+        if any(m in (out + err).lower() for m in _AUTH_ERROR_MARKERS):
             _mark_credential_invalid(owner_id)
+            from app.services import audit_service
+
+            audit_service.record(
+                category="ai", actor_type="system", action="Claude authentication failed",
+                target="Claude API credentials", status="error",
+                meta="Invalid or expired credentials — update them in Settings, then re-run.",
+            )
         detail = (err or out or "no output on stderr/stdout")[:800]
         raise ClaudeError(f"Claude CLI exited {proc.returncode}: {detail}")
 
