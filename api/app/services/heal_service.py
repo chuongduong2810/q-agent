@@ -98,7 +98,7 @@ def _resolve_grounding(db, case: TestCase, run: Run) -> tuple[dict, dict, list[d
     )
     repo = heal_ticket.repo if heal_ticket else ""
     examples = (
-        spec_examples.select_examples(db, project_key, repo, case, limit=2) if project_key else []
+        spec_examples.select_examples(db, project_key, repo, case, limit=1) if project_key else []
     )
     return context, known, examples
 

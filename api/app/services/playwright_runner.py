@@ -68,14 +68,14 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  timeout: 30000,
+  timeout: __TIMEOUT__,
   workers: __WORKERS__,
   reporter: [['json', { outputFile: 'report.json' }]],
   use: {
     headless: __HEADLESS__,
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-    trace: 'retain-on-failure',
+    video: '__VIDEO__',
+    trace: '__TRACE__',
 __EXTRA_USE__  },
 });
 """
@@ -106,6 +106,10 @@ def _write_config(
     headless: bool,
     base_url: str = "",
     storage_state: str = "",
+    *,
+    test_timeout_ms: int = 30000,
+    action_timeout_ms: int | None = None,
+    heavy_evidence: bool = True,
 ) -> None:
     """(Re)write playwright.config.ts from current settings.
 
@@ -120,16 +124,32 @@ def _write_config(
             ``page.goto('/path')`` calls resolve against the app.
         storage_state: When non-empty, an absolute path injected as
             ``use.storageState`` so tests start from a saved auth session.
+        test_timeout_ms: Per-test timeout. Heal re-runs pass a shorter value
+            (``settings.heal_test_timeout_ms``) so a broken locator fails fast
+            instead of stalling the full 30s every attempt (#398).
+        action_timeout_ms: When set, injected as ``use.actionTimeout`` /
+            ``use.navigationTimeout`` so individual broken actions fail fast too
+            (heal re-runs only).
+        heavy_evidence: When False, ``video``/``trace`` are ``'off'`` — used for
+            intermediate heal attempts, where trace/video encoding is wasted work
+            (kept on the final attempt for evidence). Screenshot-on-failure stays.
     """
     extra_lines: list[str] = []
     if base_url:
         extra_lines.append(f"    baseURL: {json.dumps(base_url)},")
     if storage_state:
         extra_lines.append(f"    storageState: {json.dumps(storage_state)},")
+    if action_timeout_ms is not None:
+        extra_lines.append(f"    actionTimeout: {int(action_timeout_ms)},")
+        extra_lines.append(f"    navigationTimeout: {int(action_timeout_ms)},")
     extra_use = ("\n".join(extra_lines) + "\n") if extra_lines else ""
+    retain = "retain-on-failure" if heavy_evidence else "off"
     content = (
         _PLAYWRIGHT_CONFIG_TEMPLATE.replace("__WORKERS__", str(workers))
+        .replace("__TIMEOUT__", str(int(test_timeout_ms)))
         .replace("__HEADLESS__", "true" if headless else "false")
+        .replace("__VIDEO__", retain)
+        .replace("__TRACE__", retain)
         .replace("__EXTRA_USE__", extra_use)
     )
     (spec_dir / "playwright.config.ts").write_text(content, encoding="utf-8")
@@ -236,19 +256,20 @@ def _capture_once(base_url: str, dest: Path) -> bool:
     return ok
 
 
-def _fixtures_ts(session_file: Path, replay_session: bool) -> str:
+def _fixtures_ts(session_file: Path, replay_session: bool, capture_raw: bool = True) -> str:
     """TypeScript for a generated ``fixtures.ts`` that captures the page DOM after
     every test, and optionally replays a captured sessionStorage.
 
     The module re-exports Playwright's ``test`` extended with:
 
-    * an ``{auto: true}`` fixture that, after each test, best-effort attaches the
-      live page's raw HTML (``qagent-dom-raw``) and a distilled inventory of the
-      page's interactable elements (``qagent-dom-distilled``) via
-      ``testInfo.attach`` — so the runner and self-heal loop can ground on the real
-      DOM (actual selectors/routes) instead of guessing. Capture is wrapped in
-      try/catch so it can never fail a test (the page may be closed/navigated at a
-      failure point).
+    * an ``{auto: true}`` fixture that, after each test, best-effort attaches a
+      distilled inventory of the page's interactable elements
+      (``qagent-dom-distilled``) — and, when ``capture_raw``, the full raw HTML
+      (``qagent-dom-raw``) — via ``testInfo.attach``, so the runner and self-heal
+      loop ground on the REAL failure-page DOM instead of guessing. The distilled
+      capture retries once after a short settle so a transiently-busy page still
+      yields elements (#398 — "ensure real DOM, not the spec with no DOM"); all
+      capture is wrapped in try/catch so it can never fail a test.
     * (only when ``replay_session``) a ``context`` override adding an init script
       that restores the captured ``sessionStorage`` entries (where MSAL/SPA tokens
       live) for the current origin before any app code runs, so the restored
@@ -260,10 +281,25 @@ def _fixtures_ts(session_file: Path, replay_session: bool) -> str:
             ``replay_session`` is set.
         replay_session: Whether to inject the sessionStorage-replay ``context``
             override (DOM capture is always injected regardless).
+        capture_raw: When False, skip the (large, heal-unused) raw-HTML attachment
+            — used for intermediate heal attempts; the distilled inventory the
+            fixer needs is always captured (#398).
 
     Returns:
         The fixtures module source.
     """
+    raw_block = (
+        (
+            "    try {\n"
+            "      const raw = await page.content();\n"
+            "      const rawPath = testInfo.outputPath('qagent-dom-raw.html');\n"
+            "      fs.writeFileSync(rawPath, raw, 'utf-8');\n"
+            "      await testInfo.attach('qagent-dom-raw', { path: rawPath, contentType: 'text/html' });\n"
+            "    } catch {}\n"
+        )
+        if capture_raw
+        else ""
+    )
     context_fixture = (
         (
             "  context: async ({ context }, use) => {\n"
@@ -293,35 +329,42 @@ def _fixtures_ts(session_file: Path, replay_session: bool) -> str:
         "  // runner (evidence) and self-heal loop (real selectors) can use it.\n"
         "  _domCapture: [async ({ page }, use, testInfo) => {\n"
         "    await use();\n"
-        "    try {\n"
-        "      const raw = await page.content();\n"
-        "      const rawPath = testInfo.outputPath('qagent-dom-raw.html');\n"
-        "      fs.writeFileSync(rawPath, raw, 'utf-8');\n"
-        "      await testInfo.attach('qagent-dom-raw', { path: rawPath, contentType: 'text/html' });\n"
-        "    } catch {}\n"
-        "    try {\n"
-        "      const snapshot = await page.evaluate(() => {\n"
-        "        const SEL = 'a,button,input,select,textarea,[role],[data-testid],[data-test],[id]';\n"
-        "        const elements = Array.from(document.querySelectorAll(SEL)).slice(0, 400).map((node) => {\n"
-        "          const el = node as HTMLElement;\n"
-        "          const text = (el.innerText || '').trim().slice(0, 80);\n"
-        "          return {\n"
-        "            tag: el.tagName.toLowerCase(),\n"
-        "            role: el.getAttribute('role') || undefined,\n"
-        "            testId: el.getAttribute('data-testid') || el.getAttribute('data-test') || undefined,\n"
-        "            id: el.id || undefined,\n"
-        "            name: el.getAttribute('name') || undefined,\n"
-        "            text: text || undefined,\n"
-        "            placeholder: el.getAttribute('placeholder') || undefined,\n"
-        "            type: el.getAttribute('type') || undefined,\n"
-        "          };\n"
-        "        });\n"
-        "        return { path: location.pathname, url: location.href, elements };\n"
+        "    // Distilled inventory FIRST (it's what self-heal needs) — retry once\n"
+        "    // after a short settle so a transiently-busy failure page still yields\n"
+        "    // real elements instead of leaving the fixer with no DOM (#398).\n"
+        "    const runDistill = () => page.evaluate(() => {\n"
+        "      const SEL = 'a,button,input,select,textarea,[role],[data-testid],[data-test],[id]';\n"
+        "      const elements = Array.from(document.querySelectorAll(SEL)).slice(0, 400).map((node) => {\n"
+        "        const el = node as HTMLElement;\n"
+        "        const text = (el.innerText || '').trim().slice(0, 80);\n"
+        "        return {\n"
+        "          tag: el.tagName.toLowerCase(),\n"
+        "          role: el.getAttribute('role') || undefined,\n"
+        "          testId: el.getAttribute('data-testid') || el.getAttribute('data-test') || undefined,\n"
+        "          id: el.id || undefined,\n"
+        "          name: el.getAttribute('name') || undefined,\n"
+        "          text: text || undefined,\n"
+        "          placeholder: el.getAttribute('placeholder') || undefined,\n"
+        "          type: el.getAttribute('type') || undefined,\n"
+        "        };\n"
         "      });\n"
-        "      const distilledPath = testInfo.outputPath('qagent-dom-distilled.json');\n"
-        "      fs.writeFileSync(distilledPath, JSON.stringify(snapshot), 'utf-8');\n"
-        "      await testInfo.attach('qagent-dom-distilled', { path: distilledPath, contentType: 'application/json' });\n"
-        "    } catch {}\n"
+        "      return { path: location.pathname, url: location.href, elements };\n"
+        "    });\n"
+        "    let snapshot: { path: string; url: string; elements: unknown[] } | null = null;\n"
+        "    for (let i = 0; i < 2; i++) {\n"
+        "      if (page.isClosed()) break;\n"
+        "      try { snapshot = await runDistill(); } catch { snapshot = null; }\n"
+        "      if (snapshot && Array.isArray(snapshot.elements) && snapshot.elements.length > 0) break;\n"
+        "      try { await page.waitForTimeout(400); } catch { break; }\n"
+        "    }\n"
+        "    if (snapshot) {\n"
+        "      try {\n"
+        "        const distilledPath = testInfo.outputPath('qagent-dom-distilled.json');\n"
+        "        fs.writeFileSync(distilledPath, JSON.stringify(snapshot), 'utf-8');\n"
+        "        await testInfo.attach('qagent-dom-distilled', { path: distilledPath, contentType: 'application/json' });\n"
+        "      } catch {}\n"
+        "    }\n"
+        f"{raw_block}"
         "  }, { auto: true }],\n"
         "});\n"
         "\n"
@@ -330,7 +373,9 @@ def _fixtures_ts(session_file: Path, replay_session: bool) -> str:
     )
 
 
-def _apply_fixtures(spec_dir: Path, session_file: Path, replay_session: bool) -> None:
+def _apply_fixtures(
+    spec_dir: Path, session_file: Path, replay_session: bool, capture_raw: bool = True
+) -> None:
     """Point every spec's Playwright import at the generated ``fixtures.ts`` and write it.
 
     DOM capture is always on, so fixtures are ALWAYS injected (unlike the previous
@@ -345,6 +390,8 @@ def _apply_fixtures(spec_dir: Path, session_file: Path, replay_session: bool) ->
         session_file: Absolute path to the ``sessionStorage.json`` snapshot embedded
             in the generated ``fixtures.ts``.
         replay_session: Whether sessionStorage replay is active for this run.
+        capture_raw: Whether to also capture the raw-HTML DOM attachment (off for
+            intermediate heal attempts — #398).
     """
     replacements = (("'@playwright/test'", "'./fixtures'"), ('"@playwright/test"', '"./fixtures"'))
     for spec in spec_dir.glob("*.spec.ts"):
@@ -354,7 +401,9 @@ def _apply_fixtures(spec_dir: Path, session_file: Path, replay_session: bool) ->
             new_text = new_text.replace(old, new)
         if new_text != text:
             spec.write_text(new_text, encoding="utf-8")
-    (spec_dir / "fixtures.ts").write_text(_fixtures_ts(session_file, replay_session), encoding="utf-8")
+    (spec_dir / "fixtures.ts").write_text(
+        _fixtures_ts(session_file, replay_session, capture_raw), encoding="utf-8"
+    )
 
 
 # --------------------------------------------------------- standalone auth capture
@@ -1122,7 +1171,9 @@ def heal_spec(case_id: int) -> None:
         )
         heal_repo = heal_ticket.repo if heal_ticket else ""
         examples = (
-            spec_examples.select_examples(db, project_key, heal_repo, case, limit=2)
+            # One example is enough grounding for a targeted fix; a second full
+            # spec just bloats the (now fast-model) fix prompt (#398).
+            spec_examples.select_examples(db, project_key, heal_repo, case, limit=1)
             if project_key
             else []
         )
@@ -1173,8 +1224,16 @@ def heal_spec(case_id: int) -> None:
                 logger.info("Run {} cancelled — stopping self-heal for case {}", run.code, case_id)
                 return
             emit("running", attempt, f"Running spec (attempt {attempt}/{max_attempts})")
-            _write_config(spec_dir, 1, headless, base_url, storage_state)
-            _apply_fixtures(spec_dir, session_file, replay_session)
+            # Heal re-runs fail fast (shorter timeouts) and skip heavy trace/video
+            # + raw-DOM capture except on the final attempt (#398).
+            is_final_attempt = attempt == max_attempts
+            _write_config(
+                spec_dir, 1, headless, base_url, storage_state,
+                test_timeout_ms=settings.heal_test_timeout_ms,
+                action_timeout_ms=settings.heal_action_timeout_ms,
+                heavy_evidence=is_final_attempt,
+            )
+            _apply_fixtures(spec_dir, session_file, replay_session, capture_raw=is_final_attempt)
 
             report: dict[str, Any] = {}
             run_error: str | None = None

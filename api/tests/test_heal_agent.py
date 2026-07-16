@@ -206,3 +206,22 @@ def test_finalize_blocked_sets_block_reason(db_session, monkeypatch):
     db_session.refresh(spec)
     assert spec.status == "blocked"
     assert spec.block_reason == "No KB grounding"
+
+
+def test_fixer_runs_on_the_fast_heal_model(db_session, monkeypatch):
+    """generate_fixed_spec_code forwards settings.heal_fix_model to the CLI (#398)."""
+    from app.config import settings
+    from app.services import spec_service
+
+    _run, case, _spec = _seed(db_session)
+    captured: dict = {}
+
+    def _fake_run_prompt(prompt, **kwargs):
+        captured.update(kwargs)
+        return "```typescript\nimport { test } from '@playwright/test';\n```"
+
+    monkeypatch.setattr(spec_service.claude_cli, "run_prompt", _fake_run_prompt)
+    spec_service.generate_fixed_spec_code(
+        case, "old code", "boom", "", {"projectKey": "P"}, [], None
+    )
+    assert captured.get("model") == settings.heal_fix_model

@@ -233,6 +233,10 @@ def claim_next_job(
         payload["heal"] = {
             "caseId": execution.heal_case_id,
             "maxAttempts": settings.heal_max_attempts,
+            # Shorter heal re-run timeouts (#398) — server-authoritative so the
+            # agent fails fast on a broken locator instead of stalling 30s/attempt.
+            "testTimeoutMs": settings.heal_test_timeout_ms,
+            "actionTimeoutMs": settings.heal_action_timeout_ms,
         }
     return payload
 

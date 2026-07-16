@@ -314,16 +314,19 @@ def run_prompt(
     timeout: int | None = None,
     label: str | None = None,
     cwd: str | Path | None = None,
+    model: str | None = None,
 ) -> str:
     """Run a single prompt through the Claude CLI and return its text result.
 
     If ``skill`` is given, that dedicated Q-Agent skill's SKILL.md is injected as
     the system prompt so the action follows the skill's methodology. If ``cwd`` is
     an existing directory, the CLI runs there so its file tools can traverse that
-    codebase (used by project-bootstrap against a local repo clone).
+    codebase (used by project-bootstrap against a local repo clone). An explicit
+    ``model`` overrides the skill/global resolution (#398 — the heal fixer forces
+    a fast model without changing the skill's default for fresh generation).
     """
     system = _compose_system(system, skill, include_template)
-    model = _resolve_model(skill)
+    model = model or _resolve_model(skill)
     cmd = [
         settings.claude_bin,
         "-p",

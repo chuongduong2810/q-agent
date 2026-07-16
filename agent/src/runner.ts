@@ -444,7 +444,7 @@ async function processCapture(cfg: AgentConfig, capture: api.CaptureJob): Promis
  * `heal.progress`, uploads the final attempt's result + evidence, then posts the
  * outcome to `/agent/heal/{caseId}/finalize`.
  */
-async function processHealJob(cfg: AgentConfig, job: api.Job, heal: { caseId: number; maxAttempts: number }): Promise<void> {
+async function processHealJob(cfg: AgentConfig, job: api.Job, heal: NonNullable<api.Job["heal"]>): Promise<void> {
   const spec = job.specs[0];
   const { ticket, caseCode } = identityFor(spec);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "qagent-heal-"));
@@ -476,11 +476,24 @@ async function processHealJob(cfg: AgentConfig, job: api.Job, heal: { caseId: nu
       const { storageState, sessionStoragePath } = auth;
       for (let attempt = 1; attempt <= heal.maxAttempts; attempt++) {
         fs.writeFileSync(path.join(workDir, spec.filename), currentCode, "utf-8");
-        writeConfig(workDir, 1, job.headless, job.baseUrl, storageState);
+        // Heal re-runs fail fast (shorter timeouts) and skip heavy trace/video +
+        // raw-DOM capture except on the final attempt (#398).
+        const isFinalAttempt = attempt === heal.maxAttempts;
+        writeConfig(workDir, 1, job.headless, job.baseUrl, storageState, {
+          testTimeoutMs: heal.testTimeoutMs,
+          actionTimeoutMs: heal.actionTimeoutMs,
+          heavyEvidence: isFinalAttempt,
+        });
         const replaySession = Boolean(
           job.manualAuth && storageState && sessionStoragePath && fs.statSync(sessionStoragePath).size > 0
         );
-        applyFixtures(workDir, [spec.filename], sessionStoragePath || path.join(workDir, "sessionStorage.json"), replaySession);
+        applyFixtures(
+          workDir,
+          [spec.filename],
+          sessionStoragePath || path.join(workDir, "sessionStorage.json"),
+          replaySession,
+          isFinalAttempt,
+        );
 
         await progress("running", attempt, `Running spec (attempt ${attempt}/${heal.maxAttempts})`);
         const started = Date.now();

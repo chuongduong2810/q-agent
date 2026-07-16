@@ -589,6 +589,42 @@ def test_fixtures_ts_contents(tmp_path):
     assert "addInitScript" not in no_replay
 
 
+def test_write_config_heal_mode_fails_fast_and_skips_heavy_evidence(tmp_path):
+    """Heal re-runs get a shorter timeout + action timeouts and no video/trace (#398)."""
+    from app.services import playwright_runner as runner
+
+    runner._write_config(
+        tmp_path, workers=1, headless=True,
+        test_timeout_ms=12000, action_timeout_ms=8000, heavy_evidence=False,
+    )
+    content = (tmp_path / "playwright.config.ts").read_text(encoding="utf-8")
+    assert "timeout: 12000" in content
+    assert "actionTimeout: 8000" in content
+    assert "navigationTimeout: 8000" in content
+    assert "video: 'off'" in content and "trace: 'off'" in content
+    # A normal run keeps the full timeout + retain-on-failure evidence.
+    runner._write_config(tmp_path, workers=1, headless=True)
+    normal = (tmp_path / "playwright.config.ts").read_text(encoding="utf-8")
+    assert "timeout: 30000" in normal
+    assert "video: 'retain-on-failure'" in normal
+    assert "actionTimeout" not in normal
+
+
+def test_fixtures_ts_capture_raw_toggle_and_robust_distill(tmp_path):
+    """capture_raw=False drops the raw-HTML attach but keeps the (retried) distilled one (#398)."""
+    from app.services import playwright_runner as runner
+
+    session_file = tmp_path / "sessionStorage.json"
+    with_raw = runner._fixtures_ts(session_file, replay_session=False, capture_raw=True)
+    assert "testInfo.attach('qagent-dom-raw'" in with_raw
+
+    no_raw = runner._fixtures_ts(session_file, replay_session=False, capture_raw=False)
+    assert "testInfo.attach('qagent-dom-raw'" not in no_raw
+    # Distilled capture is always present and now retries after a settle.
+    assert "testInfo.attach('qagent-dom-distilled'" in no_raw
+    assert "runDistill" in no_raw and "page.isClosed()" in no_raw
+
+
 def test_apply_fixtures_always_injects(tmp_path):
     """_apply_fixtures always rewrites imports to './fixtures' + writes fixtures.ts."""
     from app.services import playwright_runner as runner
