@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import App from "@/App";
 import { RunLayout } from "@/screens/RunLayout";
 import { RequireAuth } from "@/screens/RequireAuth";
+import { RedirectIfAuthed } from "@/screens/RedirectIfAuthed";
 
 import { Login } from "@/screens/auth/Login";
 import { ForgotPassword } from "@/screens/auth/ForgotPassword";
@@ -34,16 +35,25 @@ import { LocalAgent } from "@/screens/LocalAgent";
 /**
  * The route tree from ADR 0003 + auth (ADR 0007). PUBLIC auth screens
  * (`/login`, `/forgot`, `/signed-out`) are top-level siblings of `<App/>`, so
- * they render WITHOUT the app shell. The entire authenticated app is gated by
+ * they render WITHOUT the app shell. The sign-in screens (`/login`, `/forgot`)
+ * are wrapped in `RedirectIfAuthed` so an already-authenticated visitor is
+ * bounced to the app; `/signed-out` is intentionally left ungated (logout lands
+ * there while still authed). The entire authenticated app is gated by
  * `RequireAuth`, which restores the session (via the refresh cookie) before
  * mounting `<App/>` (providers + shell + <Outlet/>). Run-scoped routes nest
  * under `RunLayout`, which owns the single run WebSocket. Vite base is '/', so
  * no basename.
  */
 export const router = createBrowserRouter([
-  // Public (unauthenticated) — no app shell.
-  { path: "login", element: <Login /> },
-  { path: "forgot", element: <ForgotPassword /> },
+  // Public sign-in screens — no app shell; authed visitors get bounced to `/`.
+  {
+    element: <RedirectIfAuthed />,
+    children: [
+      { path: "login", element: <Login /> },
+      { path: "forgot", element: <ForgotPassword /> },
+    ],
+  },
+  // Post-logout confirmation — ungated (logout lands here while still authed).
   { path: "signed-out", element: <SignedOut /> },
 
   // Authenticated app subtree — RequireAuth gates every route below.
