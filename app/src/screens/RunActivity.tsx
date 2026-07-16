@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Radio, RefreshCw, ScrollText } from "lucide-react";
@@ -40,18 +40,18 @@ const STATUS_COLOR: Record<string, [string, string]> = {
   error: ["#fb7185", "rgba(244,63,94,.14)"],
 };
 
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
 function EventRow({
   event,
   expanded,
   onToggle,
-  statusLabel,
-  fieldLabels,
+  t,
 }: {
   event: AuditEventOut;
   expanded: boolean;
   onToggle: () => void;
-  statusLabel: string;
-  fieldLabels: { when: string; actor: string; category: string; details: string };
+  t: TFn;
 }) {
   const dot = CATEGORY_COLOR[event.category] ?? "#c3c3d0";
   const [stColor, stBg] = STATUS_COLOR[event.status] ?? STATUS_COLOR.success;
@@ -74,23 +74,26 @@ function EventRow({
               className="rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
               style={{ color: stColor, background: stBg }}
             >
-              {statusLabel}
+              {t(`statuses.${event.status}`)}
             </span>
           </div>
           {event.target && (
             <div className="mt-0.5 truncate text-[11.5px] text-ink-dim">{event.target}</div>
           )}
           {expanded && (
-            <div className="mt-2.5 grid grid-cols-1 gap-2 border-t border-white/[0.06] pt-2.5 text-[11px] sm:grid-cols-2">
-              <Field label={fieldLabels.when} value={new Date(event.ts).toLocaleString()} />
-              <Field label={fieldLabels.actor} value={`${event.actor} (${event.actorType})`} />
-              <Field label={fieldLabels.category} value={event.category} />
-              {event.meta && (
-                <div className="sm:col-span-2">
-                  <Field label={fieldLabels.details} value={event.meta} />
-                </div>
-              )}
-            </div>
+            <>
+              <div className="mt-2.5 grid grid-cols-1 gap-2 border-t border-white/[0.06] pt-2.5 text-[11px] sm:grid-cols-2">
+                <Field label={t("field.when")} value={new Date(event.ts).toLocaleString()} />
+                <Field label={t("field.actor")} value={`${event.actor} (${event.actorType})`} />
+                <Field label={t("field.category")} value={event.category} />
+                {event.meta && (
+                  <div className="sm:col-span-2">
+                    <Field label={t("field.details")} value={event.meta} />
+                  </div>
+                )}
+              </div>
+              {event.detail && <ExploreDetail detail={event.detail} t={t} />}
+            </>
           )}
         </div>
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[10.5px] text-ink-dim">
@@ -98,6 +101,99 @@ function EventRow({
         </span>
       </button>
     </li>
+  );
+}
+
+/** Colored badge per exploration action (goto/click/fill/expectVisible/done). */
+const ACTION_COLOR: Record<string, string> = {
+  goto: "#93c5fd",
+  click: "#a78bfa",
+  fill: "#fbbf24",
+  expectVisible: "#6ee7b7",
+  done: "#5eead4",
+};
+
+/** The exploration step trail + what it retrieved / wrote to the KB (#396). */
+function ExploreDetail({ detail, t }: { detail: NonNullable<AuditEventOut["detail"]>; t: TFn }) {
+  const steps = detail.steps ?? [];
+  const routes = detail.routes ?? [];
+  const selectors = detail.selectors ?? [];
+  const hasDiscovery = routes.length > 0 || selectors.length > 0;
+
+  return (
+    <div className="mt-2.5 flex flex-col gap-3 border-t border-white/[0.06] pt-2.5">
+      {steps.length > 0 && (
+        <div>
+          <SectionLabel>{t("detail.steps")}</SectionLabel>
+          <ol className="mt-1.5 flex flex-col gap-1">
+            {steps.map((s) => {
+              const color = ACTION_COLOR[s.action] ?? "#c3c3d0";
+              return (
+                <li
+                  key={s.n}
+                  className="flex items-start gap-2 rounded-[8px] bg-white/[0.03] px-2.5 py-1.5 text-[11px]"
+                >
+                  <span className="w-4 shrink-0 pt-px text-right font-mono text-[10px] text-[#5c5c6e]">
+                    {s.n}
+                  </span>
+                  <span
+                    className="mt-px shrink-0 rounded-[5px] px-1.5 py-px font-mono text-[9.5px] font-bold"
+                    style={{ color, background: `${color}22` }}
+                  >
+                    {s.action}
+                    {s.skipped ? " ⃠" : ""}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {s.target && <span className="break-all font-mono text-[10.5px] text-ink">{s.target}</span>}
+                    {s.reasoning && <div className="mt-0.5 text-[10.5px] text-ink-dim">{s.reasoning}</div>}
+                    {s.url && <div className="mt-0.5 truncate font-mono text-[10px] text-[#5c5c6e]">{s.url}</div>}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+
+      <div>
+        <SectionLabel>{t("detail.discovered")}</SectionLabel>
+        {hasDiscovery ? (
+          <div className="mt-1.5 flex flex-col gap-1 text-[11px]">
+            {routes.map((r) => (
+              <div key={`r-${r.path}`} className="flex items-center gap-2">
+                <span className="shrink-0 rounded-[5px] bg-[#93c5fd22] px-1.5 py-px text-[9px] font-bold text-[#93c5fd]">
+                  {t("detail.route")}
+                </span>
+                <span className="break-all font-mono text-[10.5px] text-ink">{r.path}</span>
+              </div>
+            ))}
+            {selectors.map((s) => (
+              <div key={`s-${s.selector}`} className="flex items-start gap-2">
+                <span className="mt-px shrink-0 rounded-[5px] bg-[#f0abfc22] px-1.5 py-px text-[9px] font-bold text-[#f0abfc]">
+                  {s.strategy || t("detail.selector")}
+                </span>
+                <div className="min-w-0">
+                  <span className="break-all font-mono text-[10.5px] text-ink">{s.selector}</span>
+                  {(s.screen || s.element) && (
+                    <span className="ml-1.5 text-[10px] text-ink-dim">
+                      {[s.screen, s.element].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-1 text-[11px] text-ink-dim">{t("detail.nothingWritten")}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#5c5c6e]">{children}</div>
   );
 }
 
@@ -162,13 +258,7 @@ export function RunActivity() {
               event={e}
               expanded={expanded === e.id}
               onToggle={() => setExpanded((cur) => (cur === e.id ? null : e.id))}
-              statusLabel={t(`statuses.${e.status}`)}
-              fieldLabels={{
-                when: t("field.when"),
-                actor: t("field.actor"),
-                category: t("field.category"),
-                details: t("field.details"),
-              }}
+              t={t}
             />
           ))}
         </ol>

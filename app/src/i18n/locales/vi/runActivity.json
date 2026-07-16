@@ -20,5 +20,12 @@
     "actor": "TÁC NHÂN",
     "category": "DANH MỤC",
     "details": "CHI TIẾT"
+  },
+  "detail": {
+    "steps": "Các bước đã thực hiện",
+    "discovered": "Đã phát hiện · ghi vào KB",
+    "route": "tuyến",
+    "selector": "bộ chọn",
+    "nothingWritten": "Không ghi gì vào Cơ sở tri thức — chưa tới được màn hình mục tiêu."
   }
 }

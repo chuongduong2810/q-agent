@@ -46,6 +46,7 @@ def record(
     meta: str = "",
     ts: datetime | None = None,
     run_code: str | None = None,
+    detail: dict | None = None,
 ) -> None:
     """Append one audit event. Best-effort — never raises.
 
@@ -64,6 +65,8 @@ def record(
             from the ambient run scope (:func:`run_context.get_run`) so
             background run workers (analyze/generate, execution, exploration,
             self-heal) attribute events without threading it through every call.
+        detail: Optional structured payload shown in the expanded row (#396),
+            e.g. an exploration's step trail + discovered routes/selectors.
     """
     default_actor, default_ip = _actor_fields(actor_type)
     # Prefer the authenticated request actor (ADR 0007, #79) over the legacy
@@ -87,6 +90,7 @@ def record(
                     ip=ip or default_ip,
                     meta=meta,
                     run_code=run_code,
+                    detail=detail,
                 )
             )
             db.commit()
@@ -284,6 +288,7 @@ def _row_out(row: AuditLog) -> dict[str, Any]:
         "status": row.status,
         "meta": row.meta,
         "runCode": row.run_code or "",
+        "detail": row.detail or None,
     }
 
 
