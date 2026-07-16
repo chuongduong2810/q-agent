@@ -47,7 +47,13 @@ export interface Job {
   specs: JobSpec[];
   /** Present when this job is an agent-executed self-heal (#260): run the heal
    * LOOP for this one case, calling /agent/heal/{caseId}/fix + /finalize. */
-  heal?: { caseId: number; maxAttempts: number };
+  heal?: {
+    caseId: number;
+    maxAttempts: number;
+    /** Shorter per-test / per-action Playwright timeouts for heal re-runs (#398). */
+    testTimeoutMs?: number;
+    actionTimeoutMs?: number;
+  };
 }
 
 function authHeaders(token: string): Record<string, string> {

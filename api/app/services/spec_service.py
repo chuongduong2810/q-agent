@@ -354,6 +354,9 @@ def generate_fixed_spec_code(
         system=_SYSTEM_PROMPT,
         skill=AUTOMATION_GENERATOR,
         label=label,
+        # The fixer is a targeted DOM-grounded edit — run it on the fast heal
+        # model (#398), not the heavy global model used for fresh generation.
+        model=settings.heal_fix_model,
     )
     code = _extract_code(raw)
     logger.info(

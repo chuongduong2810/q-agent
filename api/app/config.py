@@ -84,6 +84,16 @@ class Settings(BaseSettings):
     # Self-heal loop: max times to re-generate + re-run a single failing spec
     # (feeding the failure back to Claude) before giving up.
     heal_max_attempts: int = 3
+    # Heal re-runs use SHORTER Playwright timeouts than a normal run (#398): the
+    # spec already failed, so a broken locator should fail fast instead of
+    # stalling the full 30s per-test timeout on every attempt. Per-test timeout +
+    # per-action timeout (ms) for heal re-runs only.
+    heal_test_timeout_ms: int = 12000
+    heal_action_timeout_ms: int = 8000
+    # The heal fix call runs on a fast model (#398) — the fixer is a targeted,
+    # DOM-grounded edit, so Haiku is enough and ~4x faster than the heavy global
+    # model; fresh spec generation keeps the global model. Override via settings.
+    heal_fix_model: str = "claude-haiku-4-5-20251001"
     # DOM exploration agent (ADR 0010): max observe→decide→act steps per session
     # (hard-clamped to <=20 in the loop) and the per-session Claude cost ceiling in
     # USD — the loop halts when either is reached, so exploration can never run

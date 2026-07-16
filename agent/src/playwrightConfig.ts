@@ -13,17 +13,29 @@ const PLAYWRIGHT_CONFIG_TEMPLATE = `import { defineConfig } from '@playwright/te
 
 export default defineConfig({
   testDir: '.',
-  timeout: 30000,
+  timeout: __TIMEOUT__,
   workers: __WORKERS__,
   reporter: [['json', { outputFile: 'report.json' }]],
   use: {
     headless: __HEADLESS__,
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-    trace: 'retain-on-failure',
+    video: '__VIDEO__',
+    trace: '__TRACE__',
 __EXTRA_USE__  },
 });
 `;
+
+/** Optional heal-tuning knobs for {@link writeConfig} — port of the server's
+ * `_write_config` extras (#398). Omitted for normal runs. */
+export interface ConfigOptions {
+  /** Per-test timeout (ms). Default 30000; heal re-runs pass a shorter value. */
+  testTimeoutMs?: number;
+  /** When set, injected as `use.actionTimeout` / `use.navigationTimeout` so a
+   * broken action fails fast (heal re-runs only). */
+  actionTimeoutMs?: number;
+  /** When false, `video`/`trace` are `'off'` — intermediate heal attempts. */
+  heavyEvidence?: boolean;
+}
 
 /**
  * (Re)write `playwright.config.ts` into `specDir` — same shape as the
@@ -34,20 +46,31 @@ __EXTRA_USE__  },
  * @param headless Whether the browser runs headless.
  * @param baseUrl When non-empty, injected as `use.baseURL`.
  * @param storageState When non-empty, an absolute path injected as `use.storageState`.
+ * @param opts Heal-tuning knobs (timeouts + evidence); defaults match a normal run.
  */
 export function writeConfig(
   specDir: string,
   workers: number,
   headless: boolean,
   baseUrl = "",
-  storageState = ""
+  storageState = "",
+  opts: ConfigOptions = {}
 ): void {
+  const { testTimeoutMs = 30000, actionTimeoutMs, heavyEvidence = true } = opts;
   const extraLines: string[] = [];
   if (baseUrl) extraLines.push(`    baseURL: ${JSON.stringify(baseUrl)},`);
   if (storageState) extraLines.push(`    storageState: ${JSON.stringify(storageState)},`);
+  if (actionTimeoutMs != null) {
+    extraLines.push(`    actionTimeout: ${Math.trunc(actionTimeoutMs)},`);
+    extraLines.push(`    navigationTimeout: ${Math.trunc(actionTimeoutMs)},`);
+  }
   const extraUse = extraLines.length ? extraLines.join("\n") + "\n" : "";
-  const content = PLAYWRIGHT_CONFIG_TEMPLATE.replace("__WORKERS__", String(workers))
+  const retain = heavyEvidence ? "retain-on-failure" : "off";
+  const content = PLAYWRIGHT_CONFIG_TEMPLATE.replace("__TIMEOUT__", String(Math.trunc(testTimeoutMs)))
+    .replace("__WORKERS__", String(workers))
     .replace("__HEADLESS__", headless ? "true" : "false")
+    .replace("__VIDEO__", retain)
+    .replace("__TRACE__", retain)
     .replace("__EXTRA_USE__", extraUse);
   fs.writeFileSync(path.join(specDir, "playwright.config.ts"), content, "utf-8");
 }
@@ -72,7 +95,7 @@ export function writeConfig(
  * @param replaySession Whether to inject the sessionStorage-replay `context`
  *   override (DOM capture is always injected regardless).
  */
-export function fixturesTs(sessionFile: string, replaySession: boolean): string {
+export function fixturesTs(sessionFile: string, replaySession: boolean, captureRaw = true): string {
   const contextFixture = replaySession
     ? "  context: async ({ context }, use) => {\n" +
       "    await context.addInitScript((sessions: Record<string, Record<string, string>>) => {\n" +
@@ -83,6 +106,14 @@ export function fixturesTs(sessionFile: string, replaySession: boolean): string 
       "    }, SESSIONS);\n" +
       "    await use(context);\n" +
       "  },\n"
+    : "";
+  const rawBlock = captureRaw
+    ? "    try {\n" +
+      "      const raw = await page.content();\n" +
+      "      const rawPath = testInfo.outputPath('qagent-dom-raw.html');\n" +
+      "      fs.writeFileSync(rawPath, raw, 'utf-8');\n" +
+      "      await testInfo.attach('qagent-dom-raw', { path: rawPath, contentType: 'text/html' });\n" +
+      "    } catch {}\n"
     : "";
   return (
     "import { test as base, expect } from '@playwright/test';\n" +
@@ -98,35 +129,42 @@ export function fixturesTs(sessionFile: string, replaySession: boolean): string 
     "  // runner (evidence) and self-heal loop (real selectors) can use it.\n" +
     "  _domCapture: [async ({ page }, use, testInfo) => {\n" +
     "    await use();\n" +
-    "    try {\n" +
-    "      const raw = await page.content();\n" +
-    "      const rawPath = testInfo.outputPath('qagent-dom-raw.html');\n" +
-    "      fs.writeFileSync(rawPath, raw, 'utf-8');\n" +
-    "      await testInfo.attach('qagent-dom-raw', { path: rawPath, contentType: 'text/html' });\n" +
-    "    } catch {}\n" +
-    "    try {\n" +
-    "      const snapshot = await page.evaluate(() => {\n" +
-    "        const SEL = 'a,button,input,select,textarea,[role],[data-testid],[data-test],[id]';\n" +
-    "        const elements = Array.from(document.querySelectorAll(SEL)).slice(0, 400).map((node) => {\n" +
-    "          const el = node as HTMLElement;\n" +
-    "          const text = (el.innerText || '').trim().slice(0, 80);\n" +
-    "          return {\n" +
-    "            tag: el.tagName.toLowerCase(),\n" +
-    "            role: el.getAttribute('role') || undefined,\n" +
-    "            testId: el.getAttribute('data-testid') || el.getAttribute('data-test') || undefined,\n" +
-    "            id: el.id || undefined,\n" +
-    "            name: el.getAttribute('name') || undefined,\n" +
-    "            text: text || undefined,\n" +
-    "            placeholder: el.getAttribute('placeholder') || undefined,\n" +
-    "            type: el.getAttribute('type') || undefined,\n" +
-    "          };\n" +
-    "        });\n" +
-    "        return { path: location.pathname, url: location.href, elements };\n" +
+    "    // Distilled inventory FIRST (what self-heal needs) — retry once after a\n" +
+    "    // short settle so a transiently-busy failure page still yields real\n" +
+    "    // elements instead of leaving the fixer with no DOM (#398).\n" +
+    "    const runDistill = () => page.evaluate(() => {\n" +
+    "      const SEL = 'a,button,input,select,textarea,[role],[data-testid],[data-test],[id]';\n" +
+    "      const elements = Array.from(document.querySelectorAll(SEL)).slice(0, 400).map((node) => {\n" +
+    "        const el = node as HTMLElement;\n" +
+    "        const text = (el.innerText || '').trim().slice(0, 80);\n" +
+    "        return {\n" +
+    "          tag: el.tagName.toLowerCase(),\n" +
+    "          role: el.getAttribute('role') || undefined,\n" +
+    "          testId: el.getAttribute('data-testid') || el.getAttribute('data-test') || undefined,\n" +
+    "          id: el.id || undefined,\n" +
+    "          name: el.getAttribute('name') || undefined,\n" +
+    "          text: text || undefined,\n" +
+    "          placeholder: el.getAttribute('placeholder') || undefined,\n" +
+    "          type: el.getAttribute('type') || undefined,\n" +
+    "        };\n" +
     "      });\n" +
-    "      const distilledPath = testInfo.outputPath('qagent-dom-distilled.json');\n" +
-    "      fs.writeFileSync(distilledPath, JSON.stringify(snapshot), 'utf-8');\n" +
-    "      await testInfo.attach('qagent-dom-distilled', { path: distilledPath, contentType: 'application/json' });\n" +
-    "    } catch {}\n" +
+    "      return { path: location.pathname, url: location.href, elements };\n" +
+    "    });\n" +
+    "    let snapshot: { path: string; url: string; elements: unknown[] } | null = null;\n" +
+    "    for (let i = 0; i < 2; i++) {\n" +
+    "      if (page.isClosed()) break;\n" +
+    "      try { snapshot = await runDistill(); } catch { snapshot = null; }\n" +
+    "      if (snapshot && Array.isArray(snapshot.elements) && snapshot.elements.length > 0) break;\n" +
+    "      try { await page.waitForTimeout(400); } catch { break; }\n" +
+    "    }\n" +
+    "    if (snapshot) {\n" +
+    "      try {\n" +
+    "        const distilledPath = testInfo.outputPath('qagent-dom-distilled.json');\n" +
+    "        fs.writeFileSync(distilledPath, JSON.stringify(snapshot), 'utf-8');\n" +
+    "        await testInfo.attach('qagent-dom-distilled', { path: distilledPath, contentType: 'application/json' });\n" +
+    "      } catch {}\n" +
+    "    }\n" +
+    rawBlock +
     "  }, { auto: true }],\n" +
     "});\n" +
     "\n" +
@@ -153,12 +191,15 @@ export function fixturesTs(sessionFile: string, replaySession: boolean): string 
  * @param sessionFile Absolute path to the `sessionStorage.json` snapshot embedded
  *   in the generated `fixtures.ts`.
  * @param replaySession Whether sessionStorage replay is active for this run.
+ * @param captureRaw Whether to also capture the raw-HTML DOM attachment (off for
+ *   intermediate heal attempts — #398).
  */
 export function applyFixtures(
   specDir: string,
   specFilenames: string[],
   sessionFile: string,
-  replaySession: boolean
+  replaySession: boolean,
+  captureRaw = true
 ): void {
   const replacements: [string, string][] = [
     ["'@playwright/test'", "'./fixtures'"],
@@ -180,5 +221,9 @@ export function applyFixtures(
       fs.writeFileSync(specPath, newText, "utf-8");
     }
   }
-  fs.writeFileSync(path.join(specDir, "fixtures.ts"), fixturesTs(sessionFile, replaySession), "utf-8");
+  fs.writeFileSync(
+    path.join(specDir, "fixtures.ts"),
+    fixturesTs(sessionFile, replaySession, captureRaw),
+    "utf-8"
+  );
 }
