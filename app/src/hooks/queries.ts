@@ -888,10 +888,20 @@ export const useReports = () =>
   useQuery({ queryKey: queryKeys.reports, queryFn: api.listReports });
 
 // -------------------------------------------------------------- audit log
-export const useAuditEvents = (filters: { category?: string; actor?: string; q?: string }) =>
+export const useAuditEvents = (filters: { category?: string; actor?: string; q?: string; run?: string }) =>
   useQuery({
     queryKey: queryKeys.auditEvents(filters),
     queryFn: () => api.auditEvents(filters),
+  });
+
+/** Per-run activity timeline (#394): the run's audit events, newest first.
+ * `live` enables ~2s polling so an in-progress run's events stream in. */
+export const useRunActivity = (runCode: string | undefined, live = false) =>
+  useQuery({
+    queryKey: queryKeys.auditEvents({ run: runCode ?? "" }),
+    queryFn: () => api.auditEvents({ run: runCode! }),
+    enabled: !!runCode,
+    refetchInterval: live ? 2000 : false,
   });
 
 export const useAuditStats = () =>

@@ -45,6 +45,7 @@ def record(
     ip: str | None = None,
     meta: str = "",
     ts: datetime | None = None,
+    run_code: str | None = None,
 ) -> None:
     """Append one audit event. Best-effort — never raises.
 
@@ -58,12 +59,19 @@ def record(
         ip: Override the source ip (defaults from actor_type).
         meta: Extra detail line shown in the expanded row.
         ts: Override the timestamp (defaults to now; used by backfill).
+        run_code: The run this event belongs to (e.g. "RUN-205"), powering the
+            per-run activity timeline (#394). When omitted it is auto-resolved
+            from the ambient run scope (:func:`run_context.get_run`) so
+            background run workers (analyze/generate, execution, exploration,
+            self-heal) attribute events without threading it through every call.
     """
     default_actor, default_ip = _actor_fields(actor_type)
     # Prefer the authenticated request actor (ADR 0007, #79) over the legacy
     # "You" default when the caller didn't pass one explicitly.
     if actor is None and actor_type == "user":
         actor = audit_context.get_actor()
+    if run_code is None:
+        run_code = _ambient_run_code()
     try:
         db = db_module.SessionLocal()
         try:
@@ -78,6 +86,7 @@ def record(
                     status=status,
                     ip=ip or default_ip,
                     meta=meta,
+                    run_code=run_code,
                 )
             )
             db.commit()
@@ -85,6 +94,29 @@ def record(
             db.close()
     except Exception as exc:  # noqa: BLE001 - auditing must never break the caller
         logger.warning("audit record failed ({} / {}): {}", category, action, exc)
+
+
+def _ambient_run_code() -> str | None:
+    """Resolve the current ambient run's code from :mod:`run_context`, or None.
+
+    Background run workers set ``run_context.set_run(run_id)`` at their top; this
+    maps that id back to ``Run.code`` on a short-lived session so a recorded event
+    is attributed to the run without the caller passing it. Best-effort — any
+    failure (no scope, lookup error) yields ``None`` (an unscoped event)."""
+    from app.services import run_context
+
+    run_id = run_context.get_run()
+    if not run_id:
+        return None
+    try:
+        db = db_module.SessionLocal()
+        try:
+            run = db.query(Run).filter(Run.id == run_id).first()
+            return run.code if run is not None else None
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001 - never break the caller on attribution
+        return None
 
 
 def _aware(dt: datetime | None) -> datetime:
@@ -251,16 +283,25 @@ def _row_out(row: AuditLog) -> dict[str, Any]:
         "ip": row.ip,
         "status": row.status,
         "meta": row.meta,
+        "runCode": row.run_code or "",
     }
 
 
-def list_events(db: Session, category: str = "all", actor: str = "all", q: str = "") -> list[dict[str, Any]]:
-    """Filtered audit events from the audit_logs table, newest first."""
+def list_events(
+    db: Session, category: str = "all", actor: str = "all", q: str = "", run: str = ""
+) -> list[dict[str, Any]]:
+    """Filtered audit events from the audit_logs table, newest first.
+
+    ``run`` scopes to a single run's code (e.g. "RUN-205") for the per-run
+    activity timeline (#394); empty means all runs.
+    """
     query = db.query(AuditLog)
     if category and category != "all":
         query = query.filter(AuditLog.category == category)
     if actor and actor != "all":
         query = query.filter(AuditLog.actor_type == actor)
+    if run:
+        query = query.filter(AuditLog.run_code == run)
     rows = query.order_by(AuditLog.ts.desc(), AuditLog.id.desc()).all()
 
     ql = (q or "").strip().lower()

@@ -144,6 +144,89 @@ def test_audit_log_stats_shape(client):
     assert stats["logVolume"] >= 1
 
 
+def test_record_stamps_and_filters_by_run_code(client, db_session):
+    """Events carry runCode; /audit/events?run= scopes to one run (#394)."""
+    from app.services import audit_service
+
+    audit_service.record(category="run", action="A", target="t", run_code="RUN-901")
+    audit_service.record(category="run", action="B", target="t", run_code="RUN-902")
+    audit_service.record(category="run", action="C", target="t")  # unscoped
+
+    scoped = client.get("/audit/events?run=RUN-901").json()
+    assert scoped and all(e["runCode"] == "RUN-901" for e in scoped)
+    assert {e["action"] for e in scoped} == {"A"}
+
+    other = client.get("/audit/events?run=RUN-902").json()
+    assert {e["action"] for e in other} == {"B"}
+
+    # The wire shape carries runCode ("" when unscoped).
+    allev = client.get("/audit/events").json()
+    assert "runCode" in allev[0]
+    assert any(e["action"] == "C" and e["runCode"] == "" for e in allev)
+
+
+def test_record_auto_stamps_ambient_run(client, db_session):
+    """A background worker's run scope auto-attributes events without passing it."""
+    from app.models.run import Run
+    from app.services import audit_service, run_context
+
+    run = Run(code="RUN-777", name="ambient", status="processing", framework="Playwright", env="Staging", workers=4)
+    db_session.add(run)
+    db_session.commit()
+
+    run_context.set_run(run.id)
+    try:
+        audit_service.record(category="ai", actor_type="ai", action="Ambient event", target="x")
+    finally:
+        run_context.clear()
+
+    scoped = client.get("/audit/events?run=RUN-777").json()
+    assert scoped and scoped[0]["action"] == "Ambient event"
+
+
+def test_audit_exploration_result_status_mapping(client, db_session):
+    """Exploration outcome → event status: KB write=success, dry run=warning, hard fail=error."""
+    from app.services import exploration_agent
+
+    target = {"ticket": "1153", "screen": "Employees"}
+    exploration_agent.audit_exploration_result(
+        target=target, stop_reason="done", steps_taken=5,
+        discovered_routes=1, discovered_selectors=3, wrote_kb=True, run_code="RUN-800",
+    )
+    exploration_agent.audit_exploration_result(
+        target=target, stop_reason="unreachable", steps_taken=2,
+        discovered_routes=0, discovered_selectors=0, wrote_kb=False, run_code="RUN-800",
+    )
+    exploration_agent.audit_exploration_result(
+        target=target, stop_reason="decide-error", steps_taken=0,
+        discovered_routes=0, discovered_selectors=0, wrote_kb=False, run_code="RUN-800",
+    )
+
+    events = client.get("/audit/events?run=RUN-800").json()
+    by_status = {e["status"] for e in events}
+    assert by_status == {"success", "warning", "error"}
+    assert all(e["action"] == "Explored to unblock" for e in events)
+    err = next(e for e in events if e["status"] == "error")
+    assert "decide-error" in err["meta"]
+
+
+def test_log_buffer_drops_polling_noise_but_keeps_errors(client):
+    """High-frequency poll access lines are dropped at INFO but kept at ERROR (#394)."""
+    from app.logging import logger, setup_logging
+    from app.services.log_buffer import install_sink
+
+    setup_logging()
+    install_sink()
+
+    logger.info('127.0.0.1 - "POST /agent/explore/next HTTP/1.1" 204 noise-info-marker')
+    logger.error('127.0.0.1 - "POST /agent/explore/next HTTP/1.1" 500 noise-error-marker')
+
+    logs = client.get("/audit/logs").json()
+    messages = [line["message"] for line in logs]
+    assert not any("noise-info-marker" in m for m in messages), "info poll line should be dropped"
+    assert any("noise-error-marker" in m for m in messages), "error poll line must be kept"
+
+
 def test_stdlib_logging_bridged_into_buffer(client):
     """Standard-library logging (e.g. uvicorn's access log) is mirrored into the
     Backend Logs buffer, not just our loguru records."""

@@ -39,6 +39,7 @@ from app.models.agent_device import AgentDevice
 from app.services import (
     agent_capture_service,
     agent_explore_service,
+    audit_service,
     connection_service,
     exploration_agent,
     knowledge_service,
@@ -496,6 +497,16 @@ def _resolve_repo_or_404(db: Session, key: str, repo: str, user: User | None) ->
         )
 
 
+def _run_code_for(db: Session, run_id: int | None) -> str | None:
+    """Resolve a run's code (e.g. "RUN-202") from its id, or None. Best-effort."""
+    if not run_id:
+        return None
+    from app.models.run import Run
+
+    run = db.query(Run).filter(Run.id == run_id).first()
+    return run.code if run is not None else None
+
+
 def _run_exploration(
     session_id: str,
     key: str,
@@ -535,12 +546,29 @@ def _run_exploration(
             _explore_results[(key, repo)] = {
                 "sessionId": session_id, "status": "done", "result": result
             }
+        # Durable per-run record of the outcome for the run's activity timeline (#394).
+        run_code = _run_code_for(db, run_id)
+        exploration_agent.audit_exploration_result(
+            target=target,
+            stop_reason=result.stop_reason,
+            steps_taken=result.steps_taken,
+            discovered_routes=len(result.discovered.get("routes", [])),
+            discovered_selectors=len(result.discovered.get("selectors", [])),
+            wrote_kb=result.wrote_kb,
+            run_code=run_code,
+        )
     except Exception as exc:  # noqa: BLE001 - surface via status, never crash the thread
         logger.error("Exploration session {} failed: {}", session_id, exc)
         with _explore_lock:
             _explore_results[(key, repo)] = {
                 "sessionId": session_id, "status": "error", "error": str(exc)
             }
+        audit_service.record(
+            category="automation", actor_type="ai", action="Explored to unblock",
+            target=f"Explore {(target or {}).get('screen') or 'target screen'}",
+            status="error", meta=f"session crashed: {exc}"[:400],
+            run_code=_run_code_for(db, run_id),
+        )
     finally:
         with _explore_lock:
             if _exploring.get((key, repo)) == session_id:

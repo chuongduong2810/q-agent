@@ -403,6 +403,67 @@ def normalize_discovered(discovered: dict[str, Any], *, screen: str = "") -> dic
     return {"routes": routes_out, "selectors": selectors_out}
 
 
+# Stop reasons that mean the session errored out (vs. merely found nothing).
+_EXPLORE_ERROR_REASONS = frozenset({"decide-error", "driver-error", "malformed"})
+
+
+def audit_exploration_result(
+    *,
+    target: dict[str, Any] | None,
+    stop_reason: str | None,
+    steps_taken: int,
+    discovered_routes: int,
+    discovered_selectors: int,
+    wrote_kb: bool,
+    run_code: str | None = None,
+) -> None:
+    """Record the terminal outcome of an exploration session as an audit event (#394).
+
+    Gives the run's activity timeline a durable record of what an "Explore to
+    unblock" actually did — including the common "ran but discovered nothing"
+    (``warning``) and hard-failure (``error``, e.g. a Claude ``decide-error``)
+    cases that were previously only visible in transient logs. Best-effort:
+    delegates to :func:`audit_service.record`, which never raises.
+
+    Args:
+        target: The exploration target ``{ticket?, screen?, goal?}``.
+        stop_reason: Why the loop halted (``done``/``unreachable``/``step_cap``/
+            ``repeat``/``budget``/``decide-error``/``driver-error``/``malformed``).
+        steps_taken: Actions executed.
+        discovered_routes: Count of routes written to the KB.
+        discovered_selectors: Count of selectors written to the KB.
+        wrote_kb: Whether anything was merged into the Knowledge Base.
+        run_code: The run to attribute the event to (falls back to the ambient
+            run scope inside :func:`audit_service.record` when None).
+    """
+    from app.services import audit_service
+
+    tgt = target or {}
+    screen = str(tgt.get("screen") or "")
+    ticket = str(tgt.get("ticket") or "")
+    if wrote_kb:
+        status = "success"
+    elif stop_reason in _EXPLORE_ERROR_REASONS:
+        status = "error"
+    else:
+        status = "warning"
+    label = " · ".join(p for p in (ticket, screen) if p) or "target screen"
+    meta = (
+        f"{stop_reason or 'stopped'} · {steps_taken} step(s) · "
+        f"{discovered_routes} route(s), {discovered_selectors} selector(s) · "
+        f"KB {'updated' if wrote_kb else 'unchanged'}"
+    )
+    audit_service.record(
+        category="automation",
+        actor_type="ai",
+        action="Explored to unblock",
+        target=f"Explore {label}",
+        status=status,
+        meta=meta,
+        run_code=run_code,
+    )
+
+
 def _session_spend(db, run_id: int | None) -> dict[str, float]:
     """Read this run's cumulative Claude spend (USD + tokens) via ``ai_usage_service``.
 

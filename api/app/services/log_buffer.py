@@ -12,9 +12,22 @@ from collections import deque
 from datetime import datetime
 from typing import Any
 
-_BUFFER: deque[dict[str, Any]] = deque(maxlen=1000)
+_BUFFER: deque[dict[str, Any]] = deque(maxlen=2000)
 _installed = False
 _bridge_installed = False
+
+# High-frequency polling endpoints whose uvicorn access lines are pure noise:
+# the paired agent hits these every ~1s, so at INFO they evict real errors from
+# the ring buffer within minutes. Dropped from the buffer unless the line is a
+# warning/error (a failing poll still surfaces). Matched as substrings of the
+# access message (#394).
+_NOISE_PATHS = (
+    "/agent/explore/next",
+    "/agent/jobs/next",
+    "/heartbeat",
+    "/healthz",
+    "/ai/activity",
+)
 
 _LEVEL_MAP = {
     "WARNING": "warn",
@@ -46,7 +59,13 @@ def _service_for(name: str) -> str:
 
 
 def _append(ts: str, level: str, service: str, message: str) -> None:
-    """Append one normalized line to the ring buffer (parses `Nms` duration)."""
+    """Append one normalized line to the ring buffer (parses `Nms` duration).
+
+    Info-level access lines for high-frequency polling endpoints are dropped so
+    they don't crowd real signal out of the buffer; warnings/errors are always
+    kept (a failing poll still shows)."""
+    if level in ("info", "debug") and any(p in message for p in _NOISE_PATHS):
+        return
     m = _MS_RE.search(message)
     duration = int(m.group(1)) if m else None
     trace = hashlib.md5(f"{message}{ts}".encode()).hexdigest()[:6]

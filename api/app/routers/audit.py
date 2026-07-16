@@ -1,7 +1,7 @@
 """Audit Log router — read-only.
 
 Endpoints:
-  GET    /audit/events?category=&actor=&q=  -> list[AuditEventOut]   (newest first)
+  GET    /audit/events?category=&actor=&q=&run=  -> list[AuditEventOut]  (newest first)
   DELETE /audit/events                       -> {deleted: int}        (clear all)
   GET    /audit/stats                        -> {eventsToday, aiActions, userActions, failures}
   GET    /audit/logs?level=&service=&q=      -> list[BackendLogOut]  (in-memory buffer, newest first)
@@ -26,10 +26,11 @@ def audit_events(
     category: str = "all",
     actor: str = "all",
     q: str = "",
+    run: str = "",
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    """Filtered activity events derived from existing rows, newest first."""
-    return audit_service.list_events(db, category=category, actor=actor, q=q)
+    """Filtered activity events, newest first. ``run`` scopes to one run's code."""
+    return audit_service.list_events(db, category=category, actor=actor, q=q, run=run)
 
 
 @router.delete("/audit/events")

@@ -512,7 +512,7 @@ export const api = {
   retryComments: (runId: number | string) => post<TicketCommentOut[]>(`/runs/${runId}/comments/retry`),
 
   // audit log
-  auditEvents: (params: { category?: string; actor?: string; q?: string } = {}) =>
+  auditEvents: (params: { category?: string; actor?: string; q?: string; run?: string } = {}) =>
     get<AuditEventOut[]>("/audit/events" + qs(params)),
   auditStats: () => get<AuditStats>("/audit/stats"),
   clearAuditEvents: () => del<{ deleted: number }>("/audit/events"),

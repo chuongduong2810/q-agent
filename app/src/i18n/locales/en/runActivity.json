@@ -1,0 +1,24 @@
+{
+  "title": "Activity",
+  "subtitle": "Everything that happened in this run · generation, automation, exploration, execution",
+  "live": "Live",
+  "refresh": "Refresh",
+  "count_one": "{{count}} event",
+  "count_other": "{{count}} events",
+  "loading": "Loading activity…",
+  "empty": {
+    "title": "No activity yet",
+    "hint": "Events appear here as the run generates, automates, explores, and executes."
+  },
+  "statuses": {
+    "success": "OK",
+    "warning": "Warning",
+    "error": "Error"
+  },
+  "field": {
+    "when": "WHEN",
+    "actor": "ACTOR",
+    "category": "CATEGORY",
+    "details": "DETAILS"
+  }
+}

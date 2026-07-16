@@ -22,6 +22,7 @@ const CAT: Record<string, [string, string, string]> = {
   knowledge: ["categories.knowledge", "#c4b5fd", "rgba(196,181,253,.14)"],
   integration: ["categories.integration", "#93c5fd", "rgba(147,197,253,.14)"],
   run: ["categories.run", "#fca5a5", "rgba(252,165,165,.13)"],
+  automation: ["categories.automation", "#f0abfc", "rgba(240,171,252,.14)"],
   comment: ["categories.comment", "#5eead4", "rgba(94,234,212,.13)"],
   settings: ["categories.settings", "#d4d4d8", "rgba(212,212,216,.12)"],
 };
