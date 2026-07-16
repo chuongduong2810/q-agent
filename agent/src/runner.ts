@@ -893,11 +893,18 @@ export async function processExplorationJob(cfg: AgentConfig, session: api.Explo
     }
   }
   const storageState = origin && hasValidSession(origin) ? sessionPathsForOrigin(origin).storageStatePath : "";
+  // Pair the sessionStorage snapshot (MSAL/SPA auth tokens) with the saved
+  // session so the explore browser authenticates the same way a run does — the
+  // run path replays it via fixtures (see `replaySession`). Without it an
+  // MSAL/SPA app boots unauthenticated and bounces to login.
+  const sessionStoragePath =
+    storageState && origin && hasSessionStorage(origin) ? sessionPathsForOrigin(origin).sessionStoragePath : "";
 
   const script = vendorExploreScript();
   const nm = agentNodeModules();
   const args = [script, session.baseUrl];
   if (storageState) args.push(storageState);
+  if (storageState && sessionStoragePath) args.push(sessionStoragePath);
   // Run the explore browser HEADED on the paired device: the user watches the
   // session, and a headed browser dodges WAF/bot-protection that blocks headless.
   const child = spawn(nodeBin(), args, {

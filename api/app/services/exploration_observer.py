@@ -152,8 +152,13 @@ class ExplorationObserver:
         storage_state: Optional absolute path to a saved Playwright session for
             auth reuse. When omitted and ``project_key`` is given, it is resolved
             via :func:`project_config_service.auth_path` (used only if it exists).
-        project_key: Optional project key, used to resolve ``storage_state`` from
-            the project's saved auth session.
+        session_state: Optional absolute path to the sibling ``sessionStorage.json``
+            snapshot (MSAL/SPA tokens Playwright's ``storageState`` cannot persist),
+            replayed into the browser for auth reuse. When omitted and
+            ``project_key`` resolved a ``storage_state``, it is resolved via
+            :func:`project_config_service.session_path` (used only if it exists).
+        project_key: Optional project key, used to resolve ``storage_state`` /
+            ``session_state`` from the project's saved auth session.
         owner_id: Optional workspace owner scope for the auth-path resolution.
     """
 
@@ -162,6 +167,7 @@ class ExplorationObserver:
         base_url: str,
         storage_state: str | Path | None = None,
         *,
+        session_state: str | Path | None = None,
         project_key: str | None = None,
         owner_id: int | None = None,
     ) -> None:
@@ -169,7 +175,14 @@ class ExplorationObserver:
         if storage_state is None and project_key is not None:
             resolved = project_config_service.auth_path(project_key, owner_id)
             storage_state = resolved if resolved.exists() else None
+            # Pair the sessionStorage snapshot with the saved session so the
+            # explore browser authenticates the same way a run does (the run path
+            # replays it via fixtures — playwright_runner._apply_fixtures).
+            if storage_state is not None and session_state is None:
+                sess = project_config_service.session_path(project_key, owner_id)
+                session_state = sess if sess.exists() else None
         self.storage_state = str(storage_state) if storage_state else None
+        self.session_state = str(session_state) if session_state else None
         self._proc: subprocess.Popen[str] | None = None
 
     # ---------------------------------------------------------------- transport
@@ -193,6 +206,10 @@ class ExplorationObserver:
         cmd = ["node", str(_EXPLORE_SCRIPT), self.base_url]
         if self.storage_state:
             cmd.append(self.storage_state)
+            # sessionStorage replay is positional after storageState (it only
+            # makes sense paired with the saved session), matching the run path.
+            if self.session_state:
+                cmd.append(self.session_state)
         logger.info("Exploration driver: {} (cwd={})", " ".join(cmd), nm)
         self._proc = subprocess.Popen(  # noqa: S603
             cmd,

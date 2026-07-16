@@ -7,8 +7,11 @@
 // whole session, reading newline-delimited JSON commands on stdin and writing
 // newline-delimited JSON responses on stdout.
 //
-// Args: baseURL, [storageState]  (storageState = absolute path to a saved
-// Playwright session for auth reuse, per ADR 0002).
+// Args: baseURL, [storageState], [sessionState]  (storageState = absolute path
+// to a saved Playwright session for auth reuse, per ADR 0002; sessionState =
+// absolute path to the sibling sessionStorage.json snapshot, replayed for auth
+// reuse on MSAL/SPA apps whose token lives in sessionStorage — which Playwright's
+// storageState cannot persist).
 //
 // Protocol (one JSON object per line, each way):
 //   {"cmd":"observe"}
@@ -23,8 +26,9 @@
 // self-heal loop's tolerance for stale actions).
 const { chromium } = require('playwright');
 const readline = require('readline');
+const fs = require('fs');
 
-const [, , baseURL, storageState] = process.argv;
+const [, , baseURL, storageState, sessionState] = process.argv;
 
 process.on('unhandledRejection', (e) => console.error('explore unhandledRejection:', e && (e.message || e)));
 process.on('uncaughtException', (e) => console.error('explore uncaughtException:', e && (e.message || e)));
@@ -160,6 +164,21 @@ async function handle(line) {
   const contextOpts = { baseURL };
   if (storageState) contextOpts.storageState = storageState;
   const context = await browser.newContext(contextOpts);
+  // Replay the captured sessionStorage (MSAL/SPA auth tokens) for the matching
+  // origin BEFORE any app code runs — mirrors playwright_runner._fixtures_ts.
+  // storageState persists cookies + localStorage but NOT sessionStorage, so
+  // without this an MSAL/SPA app boots unauthenticated and bounces to login even
+  // with a valid saved session. The snapshot is {origin: {key: value}}.
+  if (sessionState) {
+    let sessions = {};
+    try { sessions = JSON.parse(fs.readFileSync(sessionState, 'utf-8')); } catch {}
+    await context.addInitScript((byOrigin) => {
+      try {
+        const entries = byOrigin[location.origin];
+        if (entries) for (const k in entries) window.sessionStorage.setItem(k, entries[k]);
+      } catch {}
+    }, sessions);
+  }
   page = await context.newPage();
 
   // Land on the app before the first observe so step 1 sees the real page,

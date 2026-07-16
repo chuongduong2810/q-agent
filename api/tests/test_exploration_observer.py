@@ -122,6 +122,46 @@ def test_observe_sends_observe_command(monkeypatch):
     assert _last_command(proc) == {"cmd": "observe"}
 
 
+# ------------------------------------------------------------- session replay
+def test_driver_gets_storage_and_session_state(monkeypatch):
+    """The driver is launched with BOTH storageState and the sessionStorage arg.
+
+    Regression for #392: exploration must replay the captured sessionStorage
+    (MSAL/SPA auth tokens) — passed as the 3rd argv after storageState — the same
+    way a run does, or the saved session boots unauthenticated.
+    """
+    captured: dict = {}
+
+    def _fake_popen(cmd, *a, **k):
+        captured["cmd"] = cmd
+        return FakeProc([{"ok": True, "elements": [], "a11y": None}])
+
+    monkeypatch.setattr(exploration_observer.subprocess, "Popen", _fake_popen)
+    obs = ExplorationObserver(
+        "https://app.example.test",
+        storage_state="/auth/storageState.json",
+        session_state="/auth/sessionStorage.json",
+    )
+    obs.observe()
+
+    assert captured["cmd"][-2:] == ["/auth/storageState.json", "/auth/sessionStorage.json"]
+
+
+def test_driver_omits_session_state_without_storage(monkeypatch):
+    """No storageState → the sessionStorage arg is not appended (positional after it)."""
+    captured: dict = {}
+
+    def _fake_popen(cmd, *a, **k):
+        captured["cmd"] = cmd
+        return FakeProc([{"ok": True, "elements": [], "a11y": None}])
+
+    monkeypatch.setattr(exploration_observer.subprocess, "Popen", _fake_popen)
+    obs = ExplorationObserver("https://app.example.test", session_state="/auth/sessionStorage.json")
+    obs.observe()
+
+    assert "/auth/sessionStorage.json" not in captured["cmd"]
+
+
 # -------------------------------------------------------- action normalization
 @pytest.mark.parametrize(
     "action,expected",
