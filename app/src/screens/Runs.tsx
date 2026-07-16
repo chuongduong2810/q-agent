@@ -222,8 +222,18 @@ function RunRow({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: Math.min(index * 0.03, 0.25), ease: "easeOut" }}
+      // Lift the row and expand its shadow on hover for a smooth, tactile raise.
+      // (List rows don't use the top-pivot tilt of GlassCard — a plain lift reads
+      // better for a flat list.) zIndex keeps the raised row above its neighbors.
+      whileHover={{
+        y: -4,
+        zIndex: 10,
+        boxShadow:
+          "0 22px 48px -22px rgba(139,92,246,.5), 0 0 26px -12px rgba(34,211,238,.3)",
+        transition: { duration: 0.25, ease: [0.2, 0.8, 0.2, 1] },
+      }}
       onClick={onOpen}
-      className="glass flex cursor-pointer items-center gap-[14px] rounded-2xl px-[16px] py-[14px] transition-colors hover:border-[rgba(139,92,246,.28)]"
+      className="glass relative flex cursor-pointer items-center gap-[14px] rounded-2xl px-[16px] py-[14px] transition-colors hover:border-[rgba(139,92,246,.28)]"
       style={borderStyle}
     >
       {/* Select checkbox */}
