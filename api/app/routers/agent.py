@@ -725,6 +725,9 @@ def agent_explore_finalize(
         discovered_selectors=len(selectors),
         wrote_kb=wrote_kb,
         run_code=run.code if run is not None else None,
+        log=body.log,
+        routes=routes,
+        selectors=selectors,
     )
     logger.info(
         "Exploration finalize (session={} run={}): stopReason={} steps={} routes={} selectors={} wroteKb={} | log={}",

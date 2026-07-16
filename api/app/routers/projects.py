@@ -556,6 +556,9 @@ def _run_exploration(
             discovered_selectors=len(result.discovered.get("selectors", [])),
             wrote_kb=result.wrote_kb,
             run_code=run_code,
+            log=result.log,
+            routes=result.discovered.get("routes", []),
+            selectors=result.discovered.get("selectors", []),
         )
     except Exception as exc:  # noqa: BLE001 - surface via status, never crash the thread
         logger.error("Exploration session {} failed: {}", session_id, exc)

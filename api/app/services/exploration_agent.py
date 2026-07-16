@@ -407,6 +407,49 @@ def normalize_discovered(discovered: dict[str, Any], *, screen: str = "") -> dic
 _EXPLORE_ERROR_REASONS = frozenset({"decide-error", "driver-error", "malformed"})
 
 
+def _describe_step_target(action: str, args: dict[str, Any]) -> str:
+    """Human-readable target an exploration step acted on (URL / role+name / selector)."""
+    if not isinstance(args, dict):
+        return ""
+    if args.get("url"):
+        return str(args["url"])
+    if args.get("testId"):
+        return f'[data-testid="{args["testId"]}"]'
+    if args.get("role"):
+        name = args.get("name")
+        return f'{args["role"]}' + (f' "{name}"' if name else "")
+    if args.get("selector"):
+        return str(args["selector"])
+    if args.get("label"):
+        return str(args["label"])
+    return ""
+
+
+def _summarize_steps(log: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Normalize the two step-log shapes (server loop / Local Agent) for display.
+
+    Both producers use ``{action, args, reasoning}``; the server loop also stamps
+    ``step``/``observedUrl`` and the agent may stamp ``ok``/``skipped``. Uses
+    ``.get`` throughout so a missing key never raises."""
+    out: list[dict[str, Any]] = []
+    for i, e in enumerate(log or []):
+        if not isinstance(e, dict):
+            continue
+        action = str(e.get("action") or "")
+        out.append(
+            {
+                "n": e.get("step") or (i + 1),
+                "action": action,
+                "target": _describe_step_target(action, e.get("args") or {}),
+                "reasoning": (str(e.get("reasoning") or ""))[:400],
+                "url": e.get("observedUrl") or e.get("url") or "",
+                "ok": e.get("ok"),
+                "skipped": bool(e.get("skipped")),
+            }
+        )
+    return out
+
+
 def audit_exploration_result(
     *,
     target: dict[str, Any] | None,
@@ -416,6 +459,9 @@ def audit_exploration_result(
     discovered_selectors: int,
     wrote_kb: bool,
     run_code: str | None = None,
+    log: list[dict[str, Any]] | None = None,
+    routes: list[dict[str, Any]] | None = None,
+    selectors: list[dict[str, Any]] | None = None,
 ) -> None:
     """Record the terminal outcome of an exploration session as an audit event (#394).
 
@@ -435,6 +481,14 @@ def audit_exploration_result(
         wrote_kb: Whether anything was merged into the Knowledge Base.
         run_code: The run to attribute the event to (falls back to the ambient
             run scope inside :func:`audit_service.record` when None).
+        log: The ordered observe→decide→act step log (either producer's shape),
+            summarized into the event's ``detail.steps`` so the Activity view can
+            show what the exploration actually did.
+        routes: The concrete discovered routes ``[{path, …}]`` (what it retrieved
+            / wrote to the KB), surfaced in ``detail.routes``.
+        selectors: The concrete discovered selectors
+            ``[{screen, element, selector, strategy}]``, surfaced in
+            ``detail.selectors``.
     """
     from app.services import audit_service
 
@@ -453,6 +507,21 @@ def audit_exploration_result(
         f"{discovered_routes} route(s), {discovered_selectors} selector(s) · "
         f"KB {'updated' if wrote_kb else 'unchanged'}"
     )
+    detail = {
+        "stopReason": stop_reason or "",
+        "wroteKb": wrote_kb,
+        "steps": _summarize_steps(log),
+        "routes": [
+            {"path": r.get("path"), "description": r.get("description") or ""}
+            for r in (routes or [])
+            if isinstance(r, dict) and r.get("path")
+        ],
+        "selectors": [
+            {k: (s.get(k) or "") for k in ("screen", "element", "selector", "strategy")}
+            for s in (selectors or [])
+            if isinstance(s, dict) and s.get("selector")
+        ],
+    }
     audit_service.record(
         category="automation",
         actor_type="ai",
@@ -461,6 +530,7 @@ def audit_exploration_result(
         status=status,
         meta=meta,
         run_code=run_code,
+        detail=detail,
     )
 
 

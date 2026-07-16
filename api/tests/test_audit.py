@@ -210,6 +210,36 @@ def test_audit_exploration_result_status_mapping(client, db_session):
     assert "decide-error" in err["meta"]
 
 
+def test_audit_exploration_result_persists_step_trail_and_discovery(client, db_session):
+    """The exploration event carries a detail payload: step trail + discovered (#396)."""
+    from app.services import exploration_agent
+
+    exploration_agent.audit_exploration_result(
+        target={"ticket": "1153", "screen": "Employees"},
+        stop_reason="done", steps_taken=2, discovered_routes=1, discovered_selectors=1,
+        wrote_kb=True, run_code="RUN-DET",
+        log=[
+            {"step": 1, "action": "goto", "args": {"url": "/employees"}, "reasoning": "open list", "observedUrl": "/employees"},
+            {"step": 2, "action": "click", "args": {"role": "tab", "name": "Divisions"}, "reasoning": "open tab", "ok": True},
+        ],
+        routes=[{"path": "/employees", "description": "discovered"}],
+        selectors=[{"screen": "Employees", "element": "Divisions", "selector": 'role=tab[name="Divisions"]', "strategy": "role"}],
+    )
+
+    event = client.get("/audit/events?run=RUN-DET").json()[0]
+    detail = event["detail"]
+    assert detail is not None
+    assert detail["wroteKb"] is True and detail["stopReason"] == "done"
+    # Step trail — normalized, with a human-readable target per action.
+    assert [s["action"] for s in detail["steps"]] == ["goto", "click"]
+    assert detail["steps"][0]["target"] == "/employees"
+    assert 'tab "Divisions"' in detail["steps"][1]["target"]
+    # What it retrieved / wrote to the KB.
+    assert detail["routes"][0]["path"] == "/employees"
+    assert detail["selectors"][0]["strategy"] == "role"
+    assert detail["selectors"][0]["screen"] == "Employees"
+
+
 def test_log_buffer_drops_polling_noise_but_keeps_errors(client):
     """High-frequency poll access lines are dropped at INFO but kept at ERROR (#394)."""
     from app.logging import logger, setup_logging

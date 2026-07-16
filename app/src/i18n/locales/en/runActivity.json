@@ -20,5 +20,12 @@
     "actor": "ACTOR",
     "category": "CATEGORY",
     "details": "DETAILS"
+  },
+  "detail": {
+    "steps": "Steps taken",
+    "discovered": "Discovered · written to KB",
+    "route": "route",
+    "selector": "selector",
+    "nothingWritten": "Nothing written to the Knowledge Base — the target was not reached."
   }
 }

@@ -696,6 +696,28 @@ export interface AuditEventOut {
   meta: string;
   /** Run this event belongs to (e.g. "RUN-202"); "" when not run-scoped (#394). */
   runCode: string;
+  /** Structured extra detail for the expanded row (#396); null when none. */
+  detail: AuditEventDetail | null;
+}
+
+/** Exploration step in an event's detail trail (#396). */
+export interface AuditEventStep {
+  n: number;
+  action: string;
+  target: string;
+  reasoning: string;
+  url: string;
+  ok?: boolean | null;
+  skipped?: boolean;
+}
+
+/** Structured extra detail carried by an audit event (currently exploration). */
+export interface AuditEventDetail {
+  stopReason?: string;
+  wroteKb?: boolean;
+  steps?: AuditEventStep[];
+  routes?: { path: string; description?: string }[];
+  selectors?: { screen: string; element: string; selector: string; strategy: string }[];
 }
 
 export interface AuditStats {

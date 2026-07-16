@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import String, Text
+from sqlalchemy import JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, timestamp_column
@@ -39,3 +39,7 @@ class AuditLog(Base):
     # The run this event belongs to (e.g. "RUN-202"), for the per-run activity
     # timeline (#394). NULL for events not scoped to a run (auth, settings, …).
     run_code: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # Structured extra detail shown in the expanded row (#396) — e.g. an
+    # exploration's step trail + discovered routes/selectors. NULL for events
+    # with no richer payload than their meta line.
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
