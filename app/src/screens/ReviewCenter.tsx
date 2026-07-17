@@ -266,7 +266,7 @@ function TicketAccordion({
   const title = cases[0]?.title ?? ticketExternalId;
 
   return (
-    <GlassCard className="overflow-hidden">
+    <GlassCard className="overflow-hidden" tilt={false}>
       <div
         className="flex cursor-pointer items-center gap-3 px-4 py-3.5 md:gap-3.5 md:px-[18px] md:py-4"
         onClick={onToggle}
