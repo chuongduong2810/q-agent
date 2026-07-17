@@ -34,6 +34,7 @@ from app.models.user import User
 from app.schemas import AutomationSpecRegenerate, AutomationSpecUpdate, SpecChatRequest
 from app.services import (
     audit_service,
+    live_authoring_service,
     placeholder_gate,
     playwright_runner,
     project_config_service,
@@ -232,10 +233,27 @@ def _generate_one(
         The created or updated AutomationSpec row (not yet committed).
     """
     context = spec_service.build_case_context(db, case, env=run.env)
-    examples = _select_examples_for_case(db, case)
-    code = spec_service.generate_spec_code(
-        case, context, examples=examples, reviewer_comment=reviewer_comment
-    )
+    # Authoring mode (#400): "live-harness" drives the real app via browser-harness
+    # to author from live-verified selectors; "blind" (default) generates from the
+    # KB and relies on the heal loop. The two paths differ only in where `code`
+    # comes from — the gate/write/persist below is shared.
+    mode = settings_store.load_settings().get("authoringMode", "blind")
+    live_discovered: dict | None = None
+    if mode == "live-harness":
+        result = live_authoring_service.author_case(
+            db, case, run, owner_id=run.owner_id, run_id=run.id
+        )
+        code = result.code
+        # Merge the runtime-verified routes/selectors into the KB, and fold them
+        # into the gate's `known` set below so the real (just-discovered) selectors
+        # the spec uses are never flagged as "invented".
+        live_authoring_service.merge_discovery_to_kb(result)
+        live_discovered = result.discovered
+    else:
+        examples = _select_examples_for_case(db, case)
+        code = spec_service.generate_spec_code(
+            case, context, examples=examples, reviewer_comment=reviewer_comment
+        )
     filename = spec_service.spec_filename(case.ticket_external_id, case.code)
 
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
@@ -255,9 +273,11 @@ def _generate_one(
     spec.framework = "Playwright"
 
     # Build the KB view the gate compares against (accepts raw KB shapes directly).
+    # In live-harness mode, add the runtime-verified routes/selectors just
+    # discovered so the gate doesn't reject the real selectors as invented.
     known = {
-        "routes": context.get("routes", []),
-        "selectors": context.get("selectors", []),
+        "routes": list(context.get("routes", [])) + (live_discovered or {}).get("routes", []),
+        "selectors": list(context.get("selectors", [])) + (live_discovered or {}).get("selectors", []),
         "base_url": context.get("baseUrl", ""),
     }
     gate, outcome = _gate_spec_or_bypass(

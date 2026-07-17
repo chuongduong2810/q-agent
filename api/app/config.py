@@ -100,6 +100,17 @@ class Settings(BaseSettings):
     # unbounded or burn unlimited spend.
     explore_max_steps: int = 15
     explore_cost_budget_usd: float = 0.50
+    # Live spec-authoring mode (#400): a Bash-enabled agentic Claude drives the
+    # `browser-harness` CLI to perform the test case live (discovering real
+    # selectors on the real DOM) and then emit a Playwright spec. The run is
+    # bounded on two axes so an autonomous tool-using session can never burn
+    # unlimited spend or hang: a per-session Claude cost ceiling (USD, enforced
+    # both by a pre-start check and natively via the CLI's --max-budget-usd), and
+    # a wall-clock timeout (seconds). Authoring is pricier than a one-shot
+    # generation (many browser-harness turns), hence a higher ceiling than
+    # explore's $0.50. Both overridable via settings/env.
+    authoring_cost_budget_usd: float = 2.00
+    authoring_timeout_s: int = 900
     # Max seconds to wait for the operator to complete a manual login (headed
     # browser) before the capture is abandoned and the run fails cleanly.
     auth_capture_timeout_s: int = 300

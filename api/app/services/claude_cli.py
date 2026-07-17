@@ -315,6 +315,11 @@ def run_prompt(
     label: str | None = None,
     cwd: str | Path | None = None,
     model: str | None = None,
+    allowed_tools: list[str] | None = None,
+    add_dir: str | Path | None = None,
+    max_budget_usd: float | None = None,
+    skip_permissions: bool = False,
+    extra_env: dict[str, str] | None = None,
 ) -> str:
     """Run a single prompt through the Claude CLI and return its text result.
 
@@ -324,6 +329,19 @@ def run_prompt(
     codebase (used by project-bootstrap against a local repo clone). An explicit
     ``model`` overrides the skill/global resolution (#398 — the heal fixer forces
     a fast model without changing the skill's default for fresh generation).
+
+    Agentic tool use (#400): the default call is a pure, non-agentic completion —
+    ``allowed_tools`` is ``None`` and no tool/permission flags are added, so every
+    existing caller is byte-for-byte unchanged. When ``allowed_tools`` is given the
+    CLI runs as a Bash/file-capable agent (``--allowedTools`` allowlist), and
+    ``skip_permissions`` adds ``--dangerously-skip-permissions`` so tool calls
+    execute without hanging on a prompt in headless mode (there is no TTY). This
+    single exec path is reused (not duplicated) by :func:`run_agentic`. Even with
+    tools, ``--output-format json`` still blocks until the whole agentic loop
+    finishes and emits one envelope with ``result``/``usage``/``total_cost_usd``,
+    so the parser and :func:`_record_usage` below are unchanged. ``add_dir`` scopes
+    file tools to a workspace dir; ``max_budget_usd`` sets the CLI's native hard
+    dollar ceiling for the whole agentic run (``--max-budget-usd``).
     """
     system = _compose_system(system, skill, include_template)
     model = model or _resolve_model(skill)
@@ -338,8 +356,24 @@ def run_prompt(
     ]
     if system:
         cmd += ["--append-system-prompt", system]
+    if allowed_tools:
+        # --allowedTools takes a variadic <tools...> list (space-separated), so
+        # pass each tool as its own arg; commander stops collecting at the next flag.
+        cmd += ["--allowedTools", *allowed_tools]
+    if skip_permissions:
+        cmd += ["--dangerously-skip-permissions"]
+    add_dir_resolved = _resolve_cwd(add_dir)
+    if add_dir_resolved:
+        cmd += ["--add-dir", add_dir_resolved]
+    if max_budget_usd:
+        cmd += ["--max-budget-usd", str(max_budget_usd)]
     resolved_cwd = _resolve_cwd(cwd)
     env, owner_id = _resolve_claude_env()
+    # Extra env for the child (e.g. BU_CDP_URL so an agentic run's browser-harness
+    # attaches to our pre-authenticated Chrome — #400). Merged last so it can't
+    # clobber CLAUDE_CONFIG_DIR unless a caller explicitly intends to.
+    if extra_env:
+        env = {**env, **extra_env}
 
     # Register the call so operators can observe it live (logs + /ai/activity + WS).
     from app.services import activity, run_context, run_control
@@ -488,6 +522,84 @@ def run_json(
         cwd=cwd,
     )
     return _extract_json(text)
+
+
+# Tools the live-authoring agent (#400) is allowed to use: Bash to drive the
+# `browser-harness` CLI, and the file tools to write the emitted spec + sidecar
+# into the confined authoring workspace. Deliberately excludes Edit (writes are
+# fresh files, not edits to existing ones) and any web tools.
+_AUTHORING_TOOLS = ["Bash", "Read", "Write", "Glob", "Grep"]
+
+
+def run_agentic(
+    prompt: str,
+    *,
+    workspace_dir: str | Path,
+    system: str | None = None,
+    skill: str | None = None,
+    include_template: bool = False,
+    timeout: int | None = None,
+    label: str | None = None,
+    model: str | None = None,
+    allowed_tools: list[str] | None = None,
+    max_budget_usd: float | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> str:
+    """Run Claude as a Bash/file-capable agent and return its final text result (#400).
+
+    This is the one path where a Q-Agent-invoked Claude may run shell commands —
+    used by live spec-authoring to let Claude drive the ``browser-harness`` CLI
+    against a real browser, then write the emitted Playwright spec + a verified-
+    selectors sidecar into ``workspace_dir``. The run is confined to that dir
+    (``cwd`` + ``--add-dir``) and bounded by ``max_turns`` and ``timeout``
+    (defaults from :attr:`settings.authoring_max_turns` /
+    :attr:`settings.authoring_timeout_s`). Permission prompts are skipped
+    (``--dangerously-skip-permissions``) because headless ``-p`` has no TTY to
+    approve them; the tight tool allowlist + confined workspace + mode-gating are
+    the safety boundary (see ADR 0012). A native hard dollar ceiling
+    (``--max-budget-usd``, default :attr:`settings.authoring_cost_budget_usd`)
+    bounds spend inside the CLI, and usage/cost is still recorded like a normal call.
+    """
+    return run_prompt(
+        prompt,
+        system=system,
+        skill=skill,
+        include_template=include_template,
+        timeout=timeout or settings.authoring_timeout_s,
+        label=label,
+        cwd=workspace_dir,
+        model=model,
+        allowed_tools=allowed_tools or _AUTHORING_TOOLS,
+        add_dir=workspace_dir,
+        max_budget_usd=max_budget_usd or settings.authoring_cost_budget_usd,
+        skip_permissions=True,
+        extra_env=extra_env,
+    )
+
+
+def browser_harness_available() -> bool:
+    """Best-effort preflight: is the ``browser-harness`` CLI on PATH? (#400)
+
+    Live-authoring requires the CLI to be installed on the API host (the "treat
+    the host as a server" prerequisite). Returns True only if the executable
+    resolves and ``--version`` exits cleanly; used to fail fast with a clear
+    message before launching a browser + agentic run that would otherwise error
+    deep inside the loop. Never raises.
+    """
+    from shutil import which
+
+    if which("browser-harness") is None:
+        return False
+    try:
+        proc = subprocess.run(  # noqa: S603
+            ["browser-harness", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return proc.returncode == 0
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return False
 
 
 def verify_credentials(config_dir: str | Path) -> tuple[str, str]:
