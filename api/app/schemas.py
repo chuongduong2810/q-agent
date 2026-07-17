@@ -407,6 +407,13 @@ class AuthoringClaimOut(ApiModel):
     task_prompt: str
     model: str
     max_budget_usd: float
+    # The run owner's effective Claude credential (.credentials.json content), so
+    # the agent's local `claude` authenticates with the app's saved credential
+    # instead of a separate `claude login` on the agent machine. Empty ⇒ the agent
+    # falls back to its own local login. Sensitive — sent only to the owner's paired
+    # device over the authenticated channel; the agent writes it locked-down and
+    # deletes it with the job workspace.
+    claude_credentials: str = ""
 
 
 class AuthoringEventRequest(ApiModel):

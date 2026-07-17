@@ -439,6 +439,10 @@ export interface AuthoringJob {
   taskPrompt: string;
   model: string;
   maxBudgetUsd: number;
+  /** The run owner's saved Claude credential (.credentials.json content) so the
+   * local `claude` uses the app's Settings credential instead of a separate
+   * `claude login`. Empty ⇒ fall back to the agent's own local login. */
+  claudeCredentials?: string;
 }
 
 /** Claim the next queued authoring session, or null (204) if none. */
