@@ -457,7 +457,12 @@ def build_context(
         kn_row = db.query(ProjectKnowledge).filter(ProjectKnowledge.key == key).first()
     if kn_row:
         kn = kn_row.knowledge or {}
-        context.setdefault("baseUrl", kn.get("base_url", ""))
+        # Fall back to the KB's base_url when the ProjectConfig didn't supply one.
+        # NOTE: must be an emptiness check, not setdefault — the cfg block above
+        # always sets context["baseUrl"] (to "" when the top-level field is blank),
+        # so setdefault would never fire and the KB value would be masked.
+        if not context.get("baseUrl"):
+            context["baseUrl"] = kn.get("base_url", "")
         context["domain"] = kn.get("domain", "")
         context["architecture"] = kn.get("architecture", "")
         context["locator"] = kn.get("locator", "")
