@@ -99,7 +99,17 @@ untouched and remains the safe default.
   production.
 - **Host prerequisite** — the API host must have `browser-harness` on PATH and a
   launchable Chrome/Edge with network to the app under test (surfaced by a
-  preflight). If the API is containerized, provision these in the image.
+  preflight). The API **Docker image bakes these in** (`api/Dockerfile`: apt
+  `chromium` + `uv tool install browser-harness`, `QAGENT_CHROME_BIN=/usr/bin/chromium`);
+  the launcher runs chromium headless with `--no-sandbox --disable-dev-shm-usage`
+  in the container and headed on a desktop host. The launcher uses only Node
+  built-ins (no Playwright), so it runs in the API image even though that image
+  ships no Playwright test-runner.
+- **Auth profile in the container** — the reused `browser-profile` must exist
+  inside the API container's `qagent-workspace` volume under the project's auth
+  dir. Since headed interactive login can't run in a headless container, seed it
+  by capturing on a desktop and copying the authenticated `browser-profile` into
+  the volume (a headless-auth flow is a follow-up).
 - **Auth prerequisite** — requires a pre-authenticated dedicated `browser-profile`
   (established once via manual-login capture). `sessionStorage`-only auth is not
   yet replayed into the CDP Chrome; most apps re-hydrate it from the profile's
