@@ -97,20 +97,20 @@ def _wait_cdp(port: int, timeout_s: float) -> bool:
 def _launch_browser(base_url: str, port: int, profile_dir: Path) -> subprocess.Popen[str]:
     """Start the long-lived pre-authenticated Chrome launcher (Node subprocess).
 
-    Mirrors :func:`playwright_runner._capture_once`'s NODE_PATH/cwd env so the
-    launcher resolves the bundled Playwright/Node. stdin is a pipe: closing it
-    (in :func:`_teardown`) tells the launcher to kill Chrome — cross-platform
-    cleanup that works on Windows where ``terminate()`` won't run signal handlers.
+    The launcher (``authoring_browser.cjs``) uses only Node built-ins — no
+    Playwright/node_modules — so it runs from its own dir and needs no NODE_PATH
+    (the API image ships chromium + node but no Playwright). It finds Chrome via
+    ``QAGENT_CHROME_BIN`` (set in the image) or platform defaults. stdin is a
+    pipe: closing it (in :func:`_teardown`) tells the launcher to kill Chrome —
+    cross-platform cleanup that works on Windows where ``terminate()`` won't run
+    signal handlers.
     """
-    nm_str = str(settings.playwright_node_modules)
-    env = os.environ.copy()
-    env["NODE_PATH"] = nm_str + (os.pathsep + env["NODE_PATH"] if env.get("NODE_PATH") else "")
     cmd = ["node", str(_LAUNCHER), base_url, str(port), str(profile_dir)]
     logger.info("Live authoring: launching browser {}", " ".join(cmd))
     return subprocess.Popen(  # noqa: S603
         cmd,
-        cwd=nm_str,
-        env=env,
+        cwd=str(_LAUNCHER.parent),
+        env=os.environ.copy(),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

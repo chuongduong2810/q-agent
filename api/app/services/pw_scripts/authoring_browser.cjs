@@ -23,7 +23,15 @@ process.on('unhandledRejection', (e) => console.error('authoring_browser unhandl
 process.on('uncaughtException', (e) => console.error('authoring_browser uncaughtException:', e && (e.message || e)));
 
 function findBrowser() {
+  // Explicit override wins (the Docker image sets QAGENT_CHROME_BIN=/usr/bin/chromium).
   const c = [
+    process.env.QAGENT_CHROME_BIN,
+    // Linux / container (Debian chromium package + common Chrome paths).
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    // Windows host (native dev).
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
     (process.env.LOCALAPPDATA || '') + '/Google/Chrome/Application/chrome.exe',
@@ -32,6 +40,18 @@ function findBrowser() {
   ];
   for (const p of c) { try { if (p && fs.existsSync(p)) return p; } catch {} }
   return null;
+}
+
+// Headless container flags: a Linux host with no X display can't run headed
+// Chrome, and Chrome-as-root in a container needs --no-sandbox; the small
+// default /dev/shm makes --disable-dev-shm-usage necessary. On a real desktop
+// (Windows, or Linux with DISPLAY) we launch headed so the operator can watch
+// and MSAL/federated auth behaves like a normal browser.
+function containerFlags() {
+  const headless = process.platform !== 'win32' && !process.env.DISPLAY;
+  return headless
+    ? ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+    : [];
 }
 
 async function waitForCDP(port, timeoutMs) {
@@ -67,6 +87,7 @@ async function waitForCDP(port, timeoutMs) {
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${profileDir}`,
     '--no-first-run', '--no-default-browser-check', '--new-window',
+    ...containerFlags(),
     baseUrl,
   ], { detached: false, stdio: 'ignore' });
   console.error('authoring_browser launched:', exe, 'port', PORT);

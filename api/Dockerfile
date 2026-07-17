@@ -4,9 +4,10 @@
 #
 # Bakes in Python 3.13 + uv, the Node 20 runtime + the Claude Code CLI (AI runs
 # server-side; auth comes from in-app uploaded credentials, not the host), and
-# git (project-bootstrap clones application repos). It deliberately ships NO
-# Playwright/chromium — test execution is offloaded to the paired Local Agent
-# (set Execution target = Local Agent in the app).
+# git (project-bootstrap clones application repos). It also ships chromium + the
+# browser-harness CLI so live spec-authoring (#400) can drive a real browser
+# server-side. It still ships NO Playwright test-runner — test *execution* is
+# offloaded to the paired Local Agent (set Execution target = Local Agent).
 #
 # Build context is the REPO ROOT (see docker-compose.yml) so it can also copy
 # the dedicated `skills/` the backend injects as Claude system prompts.
@@ -23,10 +24,16 @@ COPY --from=node:20-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/nod
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
  && apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends git ca-certificates chromium \
  && rm -rf /var/lib/apt/lists/* \
  && npm install -g @anthropic-ai/claude-code \
  && npm cache clean --force
+
+# browser-harness CLI (#400 live-authoring): Claude drives it against a real
+# browser to author specs. Installed to /usr/local/bin so it is on PATH; the
+# server launches a headless chromium (QAGENT_CHROME_BIN) for it to attach to
+# over CDP via BU_CDP_URL. Isolated venv via uv tool — no clash with app deps.
+RUN UV_TOOL_BIN_DIR=/usr/local/bin uv tool install browser-harness
 
 ENV UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/api/.venv \
@@ -48,7 +55,8 @@ COPY skills/ /app/skills/
 # Bind on all interfaces so the web (nginx) container can reach the API. Secrets,
 # auth flags and the admin seed are supplied via the environment (compose).
 ENV QAGENT_HOST=0.0.0.0 \
-    QAGENT_PORT=8787
+    QAGENT_PORT=8787 \
+    QAGENT_CHROME_BIN=/usr/bin/chromium
 
 EXPOSE 8787
 # `python -m uvicorn` puts the working dir on sys.path so `app.main` imports.
