@@ -201,8 +201,115 @@ def _gate_spec_or_bypass(
     return gate, outcome
 
 
+def _merge_authored_discovery(context: dict, run: Run, discovered: dict) -> None:
+    """Merge an agent-authored run's runtime-verified discovery into the KB (#403).
+
+    Reuses :func:`live_authoring_service.merge_discovery_to_kb` (source
+    ``live-authoring``, no-clobber) by wrapping the discovery + resolved
+    project/repo/owner in an ``AuthoringResult``.
+    """
+    from app.services.live_authoring_service import AuthoringResult, merge_discovery_to_kb
+
+    merge_discovery_to_kb(
+        AuthoringResult(
+            ok=True,
+            code="",
+            discovered=discovered,
+            project_key=context.get("projectKey"),
+            repo=context.get("repo", "") or "",
+            owner_id=run.owner_id,
+        )
+    )
+
+
+def _enqueue_agent_authoring(db: Session, run: Run, case: TestCase, context: dict) -> AutomationSpec:
+    """Queue a live-authoring session for the paired agent and return a pending spec (#403).
+
+    Composes the skill system prompt + task prompt server-side (the agent has no
+    ``skills/`` dir), enqueues via :mod:`agent_authoring_service`, and marks the
+    spec ``running``; the agent claims it, authors locally, and the finalize
+    endpoint fills in the real spec via :func:`finalize_authored_spec`.
+    """
+    from app.services import agent_authoring_service, agent_capture_service, skills
+
+    base_url = (context.get("baseUrl") or "").strip()
+    if not base_url:
+        raise ValueError("No base URL in the project context — configure it before live authoring.")
+    has_device = (
+        db.query(AgentDevice)
+        .filter(AgentDevice.owner_id == run.owner_id, AgentDevice.revoked_at.is_(None))
+        .first()
+        is not None
+    )
+    if not has_device:
+        raise ValueError("No local agent paired — start your local agent to author live.")
+
+    spec_filename = spec_service.spec_filename(case.ticket_external_id, case.code)
+    system_prompt = skills.load_skill("live-authoring", include_template=True) or ""
+    task_prompt = live_authoring_service._build_prompt(
+        case, context, spec_filename, "discovered.json", base_url
+    )
+    model = settings_store.load_settings().get("claudeModel") or settings.claude_model
+    agent_authoring_service.request_authoring(
+        uuid4().hex,
+        owner_id=run.owner_id,
+        project_key=context.get("projectKey") or "",
+        repo=context.get("repo", "") or "",
+        base_url=base_url,
+        origin=agent_capture_service.origin_of(base_url),
+        case_id=case.id,
+        run_id=run.id,
+        spec_filename=spec_filename,
+        system_prompt=system_prompt,
+        task_prompt=task_prompt,
+        model=model,
+        max_budget_usd=float(settings.authoring_cost_budget_usd),
+    )
+
+    spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()
+    if spec is None:
+        spec = AutomationSpec(test_case_id=case.id)
+        db.add(spec)
+    spec.filename = spec_filename
+    spec.language = "TypeScript"
+    spec.framework = "Playwright"
+    spec.status = "running"
+    spec.block_reason = ""
+    return spec
+
+
+def finalize_authored_spec(
+    db: Session, run_id: int, case_id: int, code: str, discovered: dict
+) -> AutomationSpec | None:
+    """Persist an agent-authored spec via the shared gate/write path (#403).
+
+    Called from the ``/agent/authoring/{id}/finalize`` endpoint. Runs the same
+    gate → write → persist tail as blind/server-live generation by feeding the
+    authored code + discovery through :func:`_generate_one`, then streams the
+    result to the run WebSocket. Returns the persisted spec (or None if the run/
+    case vanished).
+    """
+    run = db.get(Run, run_id)
+    case = db.get(TestCase, case_id)
+    if run is None or case is None:
+        return None
+    run_context.set_run(run_id)
+    try:
+        spec = _generate_one(db, run, case, authored={"code": code, "discovered": discovered})
+        db.commit()
+        db.refresh(spec)
+    finally:
+        run_context.clear()
+    hub.publish(str(run_id), "spec.regenerated", {"caseId": case_id, "spec": _spec_out(spec)})
+    return spec
+
+
 def _generate_one(
-    db: Session, run: Run, case: TestCase, reviewer_comment: str | None = None
+    db: Session,
+    run: Run,
+    case: TestCase,
+    reviewer_comment: str | None = None,
+    authored: dict | None = None,
 ) -> AutomationSpec:
     """Generate (or regenerate) and persist the AutomationSpec for one case.
 
@@ -235,18 +342,30 @@ def _generate_one(
     context = spec_service.build_case_context(db, case, env=run.env)
     # Authoring mode (#400): "live-harness" drives the real app via browser-harness
     # to author from live-verified selectors; "blind" (default) generates from the
-    # KB and relies on the heal loop. The two paths differ only in where `code`
-    # comes from — the gate/write/persist below is shared.
-    mode = settings_store.load_settings().get("authoringMode", "blind")
+    # KB and relies on the heal loop. The paths differ only in where `code` comes
+    # from — the gate/write/persist below is shared.
+    stored = settings_store.load_settings()
+    mode = stored.get("authoringMode", "blind")
+    exec_target = stored.get("executionTarget", "server")
     live_discovered: dict | None = None
-    if mode == "live-harness":
+    if authored is not None:
+        # (#403) A paired agent authored this spec live and posted it back; the
+        # code + runtime-verified discovery are already produced. Merge discovery
+        # into the KB and fold it into the gate's `known` set below.
+        code = authored.get("code") or ""
+        live_discovered = authored.get("discovered") or {"routes": [], "selectors": []}
+        _merge_authored_discovery(context, run, live_discovered)
+    elif mode == "live-harness" and exec_target == "local-agent":
+        # (#403) browser-harness must run where Claude runs. On local-agent the
+        # agent machine owns both, so enqueue an authoring session for it to claim;
+        # the spec is persisted later at /agent/authoring/{id}/finalize. Return a
+        # pending spec row now (no code yet).
+        return _enqueue_agent_authoring(db, run, case, context)
+    elif mode == "live-harness":
         result = live_authoring_service.author_case(
             db, case, run, owner_id=run.owner_id, run_id=run.id
         )
         code = result.code
-        # Merge the runtime-verified routes/selectors into the KB, and fold them
-        # into the gate's `known` set below so the real (just-discovered) selectors
-        # the spec uses are never flagged as "invented".
         live_authoring_service.merge_discovery_to_kb(result)
         live_discovered = result.discovered
     else:

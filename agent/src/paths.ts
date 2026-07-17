@@ -122,3 +122,16 @@ export function vendorExploreScript(): string {
   if (!found) throw new Error("explore_session.cjs not found — the agent package is missing vendor/");
   return found;
 }
+
+/** The vendored live-authoring Chrome launcher (`authoring_browser.cjs`, #403).
+ * Uses only Node built-ins (no Playwright), so it runs with a bare `node`. */
+export function vendorAuthoringScript(): string {
+  const root = packagedRoot();
+  const found = firstExisting([
+    ...(root ? [path.join(root, "vendor", "authoring_browser.cjs")] : []),
+    path.join(__dirname, "..", "..", "vendor", "authoring_browser.cjs"),
+    path.join(__dirname, "..", "vendor", "authoring_browser.cjs"),
+  ]);
+  if (!found) throw new Error("authoring_browser.cjs not found — the agent package is missing vendor/");
+  return found;
+}

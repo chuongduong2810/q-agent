@@ -44,6 +44,10 @@ from app.models.run import Run
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.user import User
 from app.schemas import (
+    AuthoringClaimOut,
+    AuthoringEventRequest,
+    AuthoringFinalizeOut,
+    AuthoringFinalizeRequest,
     ExploreClaimOut,
     ExploreDecideRequest,
     ExploreDecideStartOut,
@@ -53,7 +57,7 @@ from app.schemas import (
     ExploreFinalizeRequest,
     ExploreTarget,
 )
-from app.services import agent_capture_service, agent_device_service, agent_explore_service, evidence_service, execution_service, exploration_agent, heal_service, knowledge_service, project_config_service, run_context, settings_store, spec_service
+from app.services import agent_authoring_service, agent_capture_service, agent_device_service, agent_explore_service, evidence_service, execution_service, exploration_agent, heal_service, knowledge_service, project_config_service, run_context, settings_store, spec_service
 from app.services.auth_service import AuthError
 from app.services.ownership import get_owned_or_404
 from app.services.playwright_runner import _resolve_project_for_run
@@ -745,3 +749,92 @@ def agent_explore_finalize(
         (body.log or [])[:6],
     )
     return ExploreFinalizeOut(ok=True, wrote_kb=wrote_kb)
+
+
+# ------------------------------------------ Agent-driven live authoring (#400/403)
+@router.post("/authoring/next")
+def agent_authoring_next(
+    response: Response, user: User = Depends(require_agent), db: Session = Depends(get_db)
+) -> dict | None:
+    """Claim the next queued live-authoring session for this device's owner.
+
+    Returns everything the agent needs to author locally (prompts composed
+    server-side), or 204 when nothing is queued.
+    """
+    claim = agent_authoring_service.claim_next(user.id)
+    if claim is None:
+        response.status_code = 204
+        return None
+    return AuthoringClaimOut(
+        session_id=claim["session_id"],
+        base_url=claim["base_url"],
+        origin=claim["origin"],
+        project_key=claim["project_key"],
+        repo=claim["repo"],
+        case_id=claim["case_id"],
+        run_id=claim.get("run_id"),
+        spec_filename=claim["spec_filename"],
+        system_prompt=claim["system_prompt"],
+        task_prompt=claim["task_prompt"],
+        model=claim["model"],
+        max_budget_usd=claim["max_budget_usd"],
+    ).model_dump(by_alias=True)
+
+
+@router.post("/authoring/{session_id}/events")
+def agent_authoring_events(
+    session_id: str,
+    body: AuthoringEventRequest,
+    user: User = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Relay an authoring progress event onto the run's WebSocket."""
+    session = agent_authoring_service.get_session(session_id, user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Authoring session not found")
+    run_id = session.get("run_id")
+    if run_id is not None:
+        hub.publish(str(run_id), body.event, body.payload or {})
+    return {"ok": True}
+
+
+@router.post("/authoring/{session_id}/finalize", response_model=AuthoringFinalizeOut)
+def agent_authoring_finalize(
+    session_id: str,
+    body: AuthoringFinalizeRequest,
+    user: User = Depends(require_agent),
+    db: Session = Depends(get_db),
+) -> AuthoringFinalizeOut:
+    """Persist the agent-authored spec + KB-merge its runtime-verified discovery (#403).
+
+    Runs the authored code through the shared gate/write/persist path
+    (:func:`automation.finalize_authored_spec`), so a live-authored spec is
+    gated and stored exactly like a blind/server-live one. Local import avoids a
+    router import cycle.
+    """
+    session = agent_authoring_service.get_session(session_id, user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Authoring session not found")
+    from app.routers.automation import finalize_authored_spec
+
+    spec = finalize_authored_spec(
+        db,
+        session["run_id"],
+        session["case_id"],
+        body.code or "",
+        body.discovered or {},
+    )
+    ok = spec is not None and (spec.code or "").strip() != ""
+    agent_authoring_service.set_result(
+        session_id,
+        {"status": "done" if ok else "failed", "summary": (body.summary or "")[:800]},
+    )
+    logger.info(
+        "Authoring finalize (session={} run={} case={}): ok={} status={}",
+        session_id,
+        session.get("run_id"),
+        session.get("case_id"),
+        ok,
+        spec.status if spec is not None else "no-spec",
+    )
+    return AuthoringFinalizeOut(ok=ok)

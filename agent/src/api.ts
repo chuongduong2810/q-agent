@@ -419,3 +419,69 @@ export async function postComplete(
   });
   await throwIfNotOk(res);
 }
+
+// ---------------------------------------- Agent-driven live authoring (#400/403)
+
+/** Claim payload for a live-authoring session — everything the agent needs to
+ * author a spec locally. Prompts are composed server-side (the agent has no
+ * skills/ dir); the agent runs its local `claude` + `browser-harness`. */
+export interface AuthoringJob {
+  sessionId: string;
+  baseUrl: string;
+  origin: string;
+  projectKey: string;
+  repo: string;
+  caseId: number;
+  runId?: number;
+  specFilename: string;
+  sidecarFilename: string;
+  systemPrompt: string;
+  taskPrompt: string;
+  model: string;
+  maxBudgetUsd: number;
+}
+
+/** Claim the next queued authoring session, or null (204) if none. */
+export async function claimNextAuthoring(cfg: AgentConfig): Promise<AuthoringJob | null> {
+  const res = await fetch(`${cfg.serverUrl}/agent/authoring/next`, {
+    method: "POST",
+    headers: authHeaders(cfg.deviceToken),
+  });
+  if (res.status === 204) return null;
+  await throwIfNotOk(res);
+  return (await res.json()) as AuthoringJob;
+}
+
+/** Relay an authoring progress event onto the run's WebSocket (server-side). */
+export async function postAuthoringEvent(
+  cfg: AgentConfig,
+  sessionId: string,
+  event: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(`${cfg.serverUrl}/agent/authoring/${sessionId}/events`, {
+    method: "POST",
+    headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+    body: JSON.stringify({ event, payload }),
+  });
+  await throwIfNotOk(res);
+}
+
+/** Finalize an authoring session: the server gates + persists the authored spec
+ * and KB-merges the runtime-verified discovery. */
+export async function postAuthoringFinalize(
+  cfg: AgentConfig,
+  sessionId: string,
+  body: { code: string; discovered: Record<string, unknown>; summary: string; ok: boolean }
+): Promise<void> {
+  const res = await fetchWithTimeout(
+    `${cfg.serverUrl}/agent/authoring/${sessionId}/finalize`,
+    {
+      method: "POST",
+      headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    HEAL_FIX_REQUEST_TIMEOUT_MS
+  );
+  await throwIfNotOk(res);
+}
