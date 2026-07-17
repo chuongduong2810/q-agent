@@ -35,6 +35,13 @@
       "server": "Server",
       "localAgent": "My machine"
     },
+    "authoring": {
+      "title": "Authoring mode",
+      "description": "How approved cases become Playwright specs — generate blind then heal, or drive the app live via browser-harness to capture real selectors",
+      "placeholder": "Select mode",
+      "blind": "Generate + heal",
+      "liveHarness": "Live (browser-harness)"
+    },
     "parallel": {
       "title": "Parallel workers",
       "description": "Default up to {{n}} cases at once per Run"

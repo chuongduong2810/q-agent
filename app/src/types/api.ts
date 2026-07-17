@@ -783,6 +783,11 @@ export interface ExecutionResultOut {
  * device on the user's own machine. */
 export type ExecutionTarget = "server" | "local-agent";
 
+/** How approved cases become Playwright specs (#400) — generate blind from the
+ * KB then heal, or drive the real app live via browser-harness and emit from
+ * the verified DOM. */
+export type AuthoringMode = "blind" | "live-harness";
+
 export interface ExecutionOut {
   id: number;
   runId: number;
@@ -875,6 +880,10 @@ export interface SettingsOut {
   /** Default execution target for new runs — the server, or a paired Local
    * Agent on the user's machine. Configured on the Settings screen. */
   executionTarget: ExecutionTarget;
+  /** Spec authoring mode (#400). "blind" = generate from the KB then heal
+   * failures; "live-harness" = drive the real app via browser-harness to
+   * discover real selectors, then emit the spec. Configured on Settings. */
+  authoringMode: AuthoringMode;
   /** Global spec quality-gate toggle. When false, spec generation/edit/heal skip
    * the placeholder/invented-reference gate, the AI reviewer and the parse check,
    * accepting every generated spec as runnable. */

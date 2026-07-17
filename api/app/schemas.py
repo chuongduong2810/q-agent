@@ -894,6 +894,9 @@ class SettingsOut(ApiModel):
     # EXEC_TARGETS): "server" (legacy in-process runner) or "local-agent"
     # (queued for a paired device to claim).
     execution_target: str = "server"
+    # Spec authoring mode (#400): "blind" (generate from KB + heal) or
+    # "live-harness" (drive the real app via browser-harness, emit from live DOM).
+    authoring_mode: str = "blind"
     # Global spec quality-gate toggle. When False, spec generation/edit/heal skip
     # the placeholder/invented-reference gate, the AI automation-reviewer and the
     # playwright --list parse check, accepting every spec as runnable (#gate-toggle).
@@ -914,6 +917,7 @@ class SettingsUpdate(ApiModel):
     ai_pipeline_workers: int | None = None
     weekly_token_budget: int | None = None
     execution_target: str | None = None
+    authoring_mode: str | None = None
     gate_enabled: bool | None = None
 
 

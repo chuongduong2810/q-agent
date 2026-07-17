@@ -12,6 +12,9 @@ interface GlassCardProps {
   index?: number;
   onClick?: () => void;
   style?: React.CSSProperties;
+  /** Set false to opt a specific card out of the cursor-tracked 3D tilt (the
+   *  hover brighten + shine sweep still apply). Defaults to true. */
+  tilt?: boolean;
 }
 
 /**
@@ -23,7 +26,15 @@ interface GlassCardProps {
  * the richer border-highlight + cyan glow and a pointer cursor on top of the
  * tilt.
  */
-export function GlassCard({ children, className, hover, index = 0, onClick, style }: GlassCardProps) {
+export function GlassCard({
+  children,
+  className,
+  hover,
+  index = 0,
+  onClick,
+  style,
+  tilt: tiltEnabled = true,
+}: GlassCardProps) {
   const interactive = hover || Boolean(onClick);
   const tilt = useTilt();
   // Bumped on each hover-enter to remount (and thus replay) the shine sweep.
@@ -48,11 +59,11 @@ export function GlassCard({ children, className, hover, index = 0, onClick, styl
       }}
       onClick={onClick}
       onPointerEnter={replaySweep}
-      onPointerMove={tilt.onPointerMove}
-      onPointerLeave={tilt.onPointerLeave}
+      onPointerMove={tiltEnabled ? tilt.onPointerMove : undefined}
+      onPointerLeave={tiltEnabled ? tilt.onPointerLeave : undefined}
       // tilt.style provides the perspective + rotate/scale motion values; the
       // caller's `style` may override cosmetics but never the transform keys.
-      style={{ ...tilt.style, ...style }}
+      style={{ ...(tiltEnabled ? tilt.style : undefined), ...style }}
       className={cn(
         "glass relative rounded-[20px]",
         hover && "cursor-pointer",

@@ -11,7 +11,7 @@ import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMet
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
 import { AI_MODEL_OPTIONS } from "@/lib/models";
-import type { ExecutionTarget, ProviderGroupOut, ProviderKind, SettingsOut } from "@/types/api";
+import type { AuthoringMode, ExecutionTarget, ProviderGroupOut, ProviderKind, SettingsOut } from "@/types/api";
 
 /** A never-configured provider: the backend catalog omits it (fresh machine),
  * so synthesize an empty group the user can add a first connection under. */
@@ -143,6 +143,26 @@ export function Settings() {
                   options={[
                     { value: "server", label: t("execution.target.server") },
                     { value: "local-agent", label: t("execution.target.localAgent") },
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2.5 border-b border-white/[0.06] py-[13px] md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-[14px] font-semibold">{t("execution.authoring.title")}</div>
+                <div className="text-[12px] text-muted">
+                  {t("execution.authoring.description")}
+                </div>
+              </div>
+              <div className="w-full md:w-[170px]">
+                <Select
+                  value={draft.authoringMode}
+                  onChange={(v) => v && set({ authoringMode: v as AuthoringMode })}
+                  placeholder={t("execution.authoring.placeholder")}
+                  allowClear={false}
+                  options={[
+                    { value: "blind", label: t("execution.authoring.blind") },
+                    { value: "live-harness", label: t("execution.authoring.liveHarness") },
                   ]}
                 />
               </div>

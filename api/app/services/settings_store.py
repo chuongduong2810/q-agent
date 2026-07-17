@@ -33,6 +33,12 @@ DEFAULTS: dict[str, Any] = {
     # runner) or "local-agent" (queued for a paired device to claim). Fresh
     # installs default to the user's machine ("My machine").
     "executionTarget": "local-agent",
+    # How approved cases are turned into Playwright specs (#400). "blind"
+    # (default) = generate from the KB then heal failures (automation-generator);
+    # "live-harness" = drive the real app live via browser-harness to discover
+    # real selectors, then emit the spec (live_authoring_service). Orthogonal to
+    # executionTarget — live-harness always authors server-side.
+    "authoringMode": "blind",
     # Global spec quality-gate toggle (#gate-toggle). True = gate specs on
     # generation/edit/heal (default); False = bypass gating and accept every
     # spec as runnable. See placeholder_gate + automation._gate_spec_or_bypass.

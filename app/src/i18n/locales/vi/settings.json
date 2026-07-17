@@ -35,6 +35,13 @@
       "server": "Máy chủ",
       "localAgent": "Máy của tôi"
     },
+    "authoring": {
+      "title": "Chế độ tạo script",
+      "description": "Cách các case đã duyệt trở thành script Playwright — tạo mù rồi tự chữa, hoặc điều khiển ứng dụng trực tiếp qua browser-harness để bắt selector thật",
+      "placeholder": "Chọn chế độ",
+      "blind": "Tạo + tự chữa",
+      "liveHarness": "Trực tiếp (browser-harness)"
+    },
     "parallel": {
       "title": "Số luồng song song",
       "description": "Mặc định tối đa {{n}} ca cùng lúc mỗi lần chạy"
