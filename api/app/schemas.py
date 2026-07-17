@@ -385,6 +385,54 @@ class ExploreFinalizeOut(ApiModel):
     wrote_kb: bool = False
 
 
+# ------------------------------------------ Agent-driven live authoring (#400/403)
+class AuthoringClaimOut(ApiModel):
+    """Claim payload for ``POST /agent/authoring/next`` — everything the paired
+    agent needs to drive live spec-authoring locally: it launches a headed,
+    pre-authenticated Chrome, points its local ``browser-harness`` at it, and
+    runs its local ``claude`` agentically with ``system_prompt`` +``task_prompt``
+    (composed server-side, since the agent has no ``skills/`` dir), writing the
+    spec + a ``discovered.json`` sidecar into a temp workspace."""
+
+    session_id: str
+    base_url: str
+    origin: str
+    project_key: str
+    repo: str
+    case_id: int
+    run_id: int | None = None
+    spec_filename: str
+    sidecar_filename: str = "discovered.json"
+    system_prompt: str
+    task_prompt: str
+    model: str
+    max_budget_usd: float
+
+
+class AuthoringEventRequest(ApiModel):
+    """Body for ``POST /agent/authoring/{id}/events`` — a progress event relayed
+    onto the run WebSocket (when the session has a run)."""
+
+    event: str
+    payload: dict = Field(default_factory=dict)
+
+
+class AuthoringFinalizeRequest(ApiModel):
+    """Body for ``POST /agent/authoring/{id}/finalize`` — the authored spec code,
+    the runtime-verified ``discovered`` routes/selectors, and a short summary."""
+
+    code: str = ""
+    discovered: dict = Field(default_factory=dict)
+    summary: str = ""
+    ok: bool = True
+
+
+class AuthoringFinalizeOut(ApiModel):
+    """Finalize response — whether a runnable spec was persisted."""
+
+    ok: bool = True
+
+
 # ------------------------------------------------------- Shared namespace (#120)
 class SharedProjectKnowledgeOut(ApiModel):
     """One repo's (or the bare project's, when ``repo`` is blank) knowledge status

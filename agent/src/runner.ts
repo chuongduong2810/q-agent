@@ -8,6 +8,7 @@
 
 import { ChildProcess, spawn } from "child_process";
 import * as fs from "fs";
+import * as net from "net";
 import * as os from "os";
 import * as path from "path";
 import * as readline from "readline";
@@ -15,7 +16,7 @@ import * as api from "./api";
 import { emit } from "./bus";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
-import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorCaptureScript, vendorExploreScript } from "./paths";
+import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorAuthoringScript, vendorCaptureScript, vendorExploreScript } from "./paths";
 import { applyFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedAttachment, ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
@@ -968,6 +969,175 @@ export async function processExplorationJob(cfg: AgentConfig, session: api.Explo
  * Long-poll loop: claim → process → repeat, backing off `IDLE_POLL_MS`
  * between empty claims. Runs until `signal.aborted`.
  */
+// --- Live authoring (#403) — drive `claude` + browser-harness locally ----------
+
+const AUTHORING_CDP_READY_TIMEOUT_MS = 30_000;
+
+/** Grab a free localhost TCP port for the dedicated Chrome's CDP endpoint. */
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      srv.close(() => (port ? resolve(port) : reject(new Error("no free port"))));
+    });
+  });
+}
+
+/** Poll Chrome's /json/version until it responds (CDP is up) or we time out. */
+async function waitForCdp(port: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/json/version`);
+      if (r.ok) return true;
+    } catch {
+      /* endpoint not up yet */
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+}
+
+/**
+ * Author one spec live on this machine (#403): launch the dedicated,
+ * pre-authenticated Chrome (vendored launcher), point the local `browser-harness`
+ * at it via BU_CDP_URL, and run the local `claude` agentically (prompts composed
+ * server-side) to perform the case and write `<specFilename>` + `discovered.json`
+ * into a temp workspace. Posts the result back for the server to gate + persist.
+ * Requires `claude` + `browser-harness` on the agent machine's PATH and a
+ * pre-authenticated `browser-profile` for the origin (from manual-login capture).
+ */
+export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJob): Promise<void> {
+  let origin = job.origin;
+  if (!origin && job.baseUrl) {
+    try { origin = new URL(job.baseUrl).origin; } catch { origin = ""; }
+  }
+  const sess = origin ? sessionPathsForOrigin(origin) : null;
+  const profileDir = sess ? path.join(sess.dir, "browser-profile") : "";
+
+  const finalize = async (code: string, discovered: unknown, summary: string, ok: boolean) => {
+    await api
+      .postAuthoringFinalize(cfg, job.sessionId, {
+        code,
+        discovered: (discovered as Record<string, unknown>) || {},
+        summary,
+        ok,
+      })
+      .catch((err) => console.error("postAuthoringFinalize failed:", err));
+  };
+
+  if (!profileDir || !fs.existsSync(profileDir)) {
+    await finalize(
+      "",
+      { routes: [], selectors: [] },
+      "No authenticated browser profile for this origin — capture a manual login first.",
+      false
+    );
+    return;
+  }
+
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "qagent-authoring-"));
+  const port = await getFreePort();
+  let launcher: ChildProcess | null = null;
+  let claude: ChildProcess | null = null;
+  try {
+    await api
+      .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
+        case: job.caseId, phase: "launching", message: "Starting authenticated browser",
+      })
+      .catch(() => {});
+
+    // 1) Dedicated pre-auth Chrome (vendored launcher — Node built-ins only).
+    launcher = spawn(nodeBin(), [vendorAuthoringScript(), job.baseUrl, String(port), profileDir], {
+      env: { ...process.env, ...childNodeEnv() },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    activeChild = launcher;
+    let launcherErr = "";
+    launcher.stderr?.on("data", (d) => { launcherErr += String(d); });
+
+    if (!(await waitForCdp(port, AUTHORING_CDP_READY_TIMEOUT_MS))) {
+      await finalize(
+        "", { routes: [], selectors: [] },
+        `Chrome CDP did not come up on port ${port}. ${launcherErr.trim()}`.trim(), false
+      );
+      return;
+    }
+
+    await api
+      .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
+        case: job.caseId, phase: "driving", message: "Driving the app live with browser-harness",
+      })
+      .catch(() => {});
+
+    // 2) Local agentic Claude drives browser-harness (BU_CDP_URL → our Chrome),
+    //    writing the spec + discovered.json into workDir. System prompt via a
+    //    file (avoids a huge argv); task prompt via stdin.
+    const systemFile = path.join(workDir, "system-prompt.txt");
+    fs.writeFileSync(systemFile, job.systemPrompt, "utf-8");
+    // On Windows `claude` is a .cmd shim, which Node can only launch via a shell;
+    // quote the path-bearing args there. On POSIX we spawn without a shell.
+    const useShell = process.platform === "win32";
+    const q = (s: string) => (useShell ? `"${s}"` : s);
+    const claudeArgs = [
+      "-p",
+      "--output-format", "json",
+      "--model", job.model,
+      "--append-system-prompt-file", q(systemFile),
+      "--allowedTools", "Bash", "Read", "Write", "Glob", "Grep",
+      "--dangerously-skip-permissions",
+      "--add-dir", q(workDir),
+      "--max-budget-usd", String(job.maxBudgetUsd),
+    ];
+    claude = spawn("claude", claudeArgs, {
+      cwd: workDir,
+      env: { ...process.env, BU_CDP_URL: `http://127.0.0.1:${port}` },
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: useShell,
+    });
+    activeChild = claude;
+    let cout = "";
+    let cerr = "";
+    claude.stdout?.on("data", (d) => { cout += String(d); });
+    claude.stderr?.on("data", (d) => { cerr += String(d); });
+    try { claude.stdin?.write(job.taskPrompt); claude.stdin?.end(); } catch {}
+    await new Promise<void>((resolve) => {
+      claude!.on("close", () => resolve());
+      claude!.on("error", (e) => { cerr += `\nclaude spawn error: ${(e as Error).message}`; resolve(); });
+    });
+
+    // 3) Read emitted artifacts.
+    const specPath = path.join(workDir, job.specFilename);
+    const sidecarPath = path.join(workDir, job.sidecarFilename || "discovered.json");
+    const code = fs.existsSync(specPath) ? fs.readFileSync(specPath, "utf-8") : "";
+    let discovered: unknown = { routes: [], selectors: [] };
+    if (fs.existsSync(sidecarPath)) {
+      try { discovered = JSON.parse(fs.readFileSync(sidecarPath, "utf-8")); } catch { /* keep default */ }
+    }
+    let summary = "";
+    try { summary = (JSON.parse(cout) as { result?: string }).result || ""; }
+    catch { summary = (cout || cerr).slice(0, 800); }
+    if (!code.trim() && !summary) summary = "Live authoring produced no spec.";
+    const ok = code.trim().length > 0;
+    await api
+      .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
+        case: job.caseId, phase: ok ? "done" : "failed", message: summary.slice(0, 400),
+      })
+      .catch(() => {});
+    await finalize(code, discovered, summary, ok);
+  } finally {
+    try { claude?.kill(); } catch {}
+    // Closing the launcher's stdin tells it to kill Chrome (cross-platform).
+    try { launcher?.stdin?.end(); } catch {}
+    try { launcher?.kill(); } catch {}
+    if (activeChild === launcher || activeChild === claude) activeChild = null;
+    try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
 export async function runAgentLoop(cfg: AgentConfig, signal: { aborted: boolean }): Promise<void> {
   if (!(await ensureChromium())) {
     console.error("Chromium is required to run tests — aborting.");
@@ -1011,6 +1181,26 @@ export async function runAgentLoop(cfg: AgentConfig, signal: { aborted: boolean 
         } catch (err) {
           console.error(`Exploration ${explore.sessionId} crashed:`, err);
           emit("error", { message: `Exploration ${explore.sessionId} crashed: ${(err as Error).message}` });
+        }
+        continue;
+      }
+      // No exploration either — check for a queued live-authoring session (#403):
+      // drive `claude` + browser-harness locally to author a spec from the real app.
+      let authoring: api.AuthoringJob | null = null;
+      try {
+        authoring = await api.claimNextAuthoring(cfg);
+      } catch (err) {
+        console.error("Authoring claim failed:", (err as Error).message);
+      }
+      if (authoring) {
+        console.log(`Claimed authoring ${authoring.sessionId} (case ${authoring.caseId}, ${authoring.baseUrl})`);
+        emit("authoring-claimed", { sessionId: authoring.sessionId, caseId: authoring.caseId });
+        try {
+          await processAuthoringJob(cfg, authoring);
+          console.log(`Authoring ${authoring.sessionId} complete`);
+        } catch (err) {
+          console.error(`Authoring ${authoring.sessionId} crashed:`, err);
+          emit("error", { message: `Authoring ${authoring.sessionId} crashed: ${(err as Error).message}` });
         }
         continue;
       }
