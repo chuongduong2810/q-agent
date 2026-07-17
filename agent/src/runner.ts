@@ -1078,6 +1078,18 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
     //    file (avoids a huge argv); task prompt via stdin.
     const systemFile = path.join(workDir, "system-prompt.txt");
     fs.writeFileSync(systemFile, job.systemPrompt, "utf-8");
+    // Use the app's saved Claude credential (shipped in the claim) so we don't
+    // need a separate `claude login` on this machine. Write it locked-down into
+    // the temp workspace (removed with workDir); empty ⇒ fall back to the agent's
+    // own login (no CLAUDE_CONFIG_DIR override).
+    let claudeConfigDir = "";
+    if (job.claudeCredentials) {
+      claudeConfigDir = path.join(workDir, ".claude-config");
+      fs.mkdirSync(claudeConfigDir, { recursive: true });
+      const credFile = path.join(claudeConfigDir, ".credentials.json");
+      fs.writeFileSync(credFile, job.claudeCredentials, "utf-8");
+      try { fs.chmodSync(credFile, 0o600); } catch { /* best-effort on Windows */ }
+    }
     // On Windows `claude` is a .cmd shim, which Node can only launch via a shell;
     // quote the path-bearing args there. On POSIX we spawn without a shell.
     const useShell = process.platform === "win32";
@@ -1092,9 +1104,11 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
       "--add-dir", q(workDir),
       "--max-budget-usd", String(job.maxBudgetUsd),
     ];
+    const claudeEnv: NodeJS.ProcessEnv = { ...process.env, BU_CDP_URL: `http://127.0.0.1:${port}` };
+    if (claudeConfigDir) claudeEnv.CLAUDE_CONFIG_DIR = claudeConfigDir;
     claude = spawn("claude", claudeArgs, {
       cwd: workDir,
-      env: { ...process.env, BU_CDP_URL: `http://127.0.0.1:${port}` },
+      env: claudeEnv,
       stdio: ["pipe", "pipe", "pipe"],
       shell: useShell,
     });

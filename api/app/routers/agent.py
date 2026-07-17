@@ -765,6 +765,21 @@ def agent_authoring_next(
     if claim is None:
         response.status_code = 204
         return None
+    # Hand the agent the owner's effective saved Claude credential (own → shared),
+    # so its local `claude` authenticates with the app's Settings credential rather
+    # than a separate `claude login`. Best-effort: on any resolution error the
+    # agent falls back to its own local login.
+    creds = ""
+    try:
+        from app.services import claude_credentials
+
+        config_dir = claude_credentials.resolve_effective_config_dir(db, user.id)
+        if config_dir is not None:
+            creds_file = config_dir / ".credentials.json"
+            if creds_file.exists():
+                creds = creds_file.read_text(encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 - creds are optional; log and continue
+        logger.warning("Authoring claim: could not resolve Claude credential: {}", exc)
     return AuthoringClaimOut(
         session_id=claim["session_id"],
         base_url=claim["base_url"],
@@ -778,6 +793,7 @@ def agent_authoring_next(
         task_prompt=claim["task_prompt"],
         model=claim["model"],
         max_budget_usd=claim["max_budget_usd"],
+        claude_credentials=creds,
     ).model_dump(by_alias=True)
 
 
