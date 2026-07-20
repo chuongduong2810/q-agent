@@ -548,6 +548,19 @@ export const useCancelRun = () => {
   });
 };
 
+export const useStopRun = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: number | string) => api.stopRun(runId),
+    onSuccess: (run) => {
+      qc.invalidateQueries({ queryKey: queryKeys.runs });
+      qc.invalidateQueries({ queryKey: queryKeys.run(run.id) });
+      qc.invalidateQueries({ queryKey: queryKeys.specs(run.id) });
+      qc.invalidateQueries({ queryKey: queryKeys.execution(run.id) });
+    },
+  });
+};
+
 export const useRetryRun = () => {
   const qc = useQueryClient();
   return useMutation({
