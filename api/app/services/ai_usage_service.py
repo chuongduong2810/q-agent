@@ -41,6 +41,7 @@ _PROCESS_MAP: dict[str, tuple[str, str]] = {
     "requirement-analyst": ("analyze", "Analyze"),
     "test-case-generator": ("generate", "Generate cases"),
     "automation-generator": ("automation", "Automation"),
+    "live-authoring": ("authoring", "Live authoring"),
     "execution-analyzer": ("analysis", "Failure analysis"),
     "ticket-comment-generator": ("publish", "Publish"),
     "screenshot-annotator": ("evidence", "Evidence analysis"),
