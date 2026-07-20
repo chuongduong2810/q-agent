@@ -100,7 +100,10 @@ export function activeNavPath(items: NavItem[], pathname: string): string | null
  * marker). Sync & Select are pre-run setup (Tickets + Create-Run flow), so they
  * are not stages here. Keep in sync with PipelineRail.STAGES + MobileStepperRail. */
 export const PIPELINE: { label: string; key: string; stage: number; seg: string | null }[] = [
-  { label: "Analyze", key: "analyze", stage: 1, seg: null },
+  // Analyze (stage 1 = status "processing") is intentionally omitted here: it has
+  // no sub-route to navigate to (the run index is the overview), so it would be a
+  // dead, non-clickable entry in the sidebar nav. The top rail still shows it as a
+  // progress stage. `stage` stays aligned with runStatusToStage for done/current.
   { label: "Review", key: "review", stage: 2, seg: "review" },
   { label: "Link", key: "link", stage: 3, seg: "sync" },
   { label: "Automation", key: "automation", stage: 4, seg: "automation" },
