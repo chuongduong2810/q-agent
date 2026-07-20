@@ -476,7 +476,7 @@ export async function postAuthoringEvent(
 export async function postAuthoringFinalize(
   cfg: AgentConfig,
   sessionId: string,
-  body: { code: string; discovered: Record<string, unknown>; summary: string; ok: boolean }
+  body: { code: string; discovered: Record<string, unknown>; summary: string; ok: boolean; costUsd?: number }
 ): Promise<void> {
   const res = await fetchWithTimeout(
     `${cfg.serverUrl}/agent/authoring/${sessionId}/finalize`,

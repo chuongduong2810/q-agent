@@ -841,9 +841,30 @@ def agent_authoring_finalize(
         body.discovered or {},
     )
     ok = spec is not None and (spec.code or "").strip() != ""
+    # Record the agent's agentic Claude spend against the run (it runs on the
+    # paired device, so the server never saw it) — rolls into the run cost
+    # breakdown + AI stats and the authoring budget pre-check. Best-effort.
+    if body.cost_usd and body.cost_usd > 0:
+        try:
+            from app.services import ai_usage_service
+
+            ai_usage_service.record(
+                model=session.get("model") or "",
+                input_tokens=0,
+                output_tokens=0,
+                cache_read=0,
+                cache_write=0,
+                cost_usd=float(body.cost_usd),
+                duration_ms=0,
+                action="live-authoring",
+                run_id=session.get("run_id"),
+                owner_id=user.id,
+            )
+        except Exception as exc:  # noqa: BLE001 - cost recording is additive
+            logger.warning("Authoring cost record skipped: {}", exc)
     agent_authoring_service.set_result(
         session_id,
-        {"status": "done" if ok else "failed", "summary": (body.summary or "")[:800]},
+        {"status": "done" if ok else "failed", "summary": (body.summary or "")[:800], "costUsd": body.cost_usd},
     )
     logger.info(
         "Authoring finalize (session={} run={} case={}): ok={} status={}",

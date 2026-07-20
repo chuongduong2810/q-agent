@@ -5,6 +5,7 @@ import type { AutomationSpecOut } from "@/types/api";
 import { Pill } from "@/components/ui/badges";
 import { GateRejectedNote } from "./banners";
 import { CodeHighlight, type FoldRange } from "./CodeViewer";
+import { AuthoringTrail } from "./ProgressBanners";
 import { RegenerateWithNote } from "./RegenerateWithNote";
 
 /**
@@ -34,6 +35,9 @@ export function SpecCodePanel({
   isProductDefect,
   gateRejected,
   gateReport,
+  authoringActive,
+  authoringLines,
+  authoringDone,
   updateSpecPending,
   startExecutionPending,
   copyLabel,
@@ -74,6 +78,11 @@ export function SpecCodePanel({
   isProductDefect: boolean;
   gateRejected: boolean;
   gateReport: { outcome?: string; reason?: string } | null;
+  /** While true, the spec is being authored live — show the streamed trail in
+   * place of the (empty) code editor and suppress the code actions (#400). */
+  authoringActive: boolean;
+  authoringLines: string[];
+  authoringDone: boolean;
   updateSpecPending: boolean;
   startExecutionPending: boolean;
   copyLabel: string;
@@ -115,8 +124,16 @@ export function SpecCodePanel({
         <span className="rounded-md px-2 py-0.5 text-[10px] font-bold" style={{ background: "rgba(34,211,238,.13)", color: "#67e8f9" }}>
           TypeScript
         </span>
-        <div className="flex w-full flex-wrap gap-1.5 md:ml-auto md:w-auto">
-          {editing ? (
+        <div className="flex w-full flex-wrap items-center gap-1.5 md:ml-auto md:w-auto">
+          {authoringActive ? (
+            <span className="flex items-center gap-1.5 rounded-full bg-violet-400/15 px-2.5 py-1 text-[11px] font-semibold text-violet-300">
+              <span
+                className="h-[11px] w-[11px] rounded-full border-2"
+                style={{ borderColor: "rgba(167,139,250,.35)", borderTopColor: "#a78bfa", animation: "spin .8s linear infinite" }}
+              />
+              authoring…
+            </span>
+          ) : editing ? (
             <>
               <button
                 onClick={onSaveEdit}
@@ -272,6 +289,10 @@ export function SpecCodePanel({
           className="block w-full resize-y overflow-auto whitespace-pre px-4 py-[18px] font-mono text-[12.5px] leading-[1.75] text-ink outline-none"
           style={{ minHeight: 380, background: "rgba(8,8,13,.6)", tabSize: 2 }}
         />
+      ) : authoringActive ? (
+        <div className="px-4 py-[18px]" style={{ minHeight: 380, background: "rgba(8,8,13,.6)" }}>
+          <AuthoringTrail lines={authoringLines} done={authoringDone} />
+        </div>
       ) : selectedSpec ? (
         <div className="relative">
           <div

@@ -1004,13 +1004,14 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
   const sess = origin ? sessionPathsForOrigin(origin) : null;
   const profileDir = sess ? path.join(sess.dir, "browser-profile") : "";
 
-  const finalize = async (code: string, discovered: unknown, summary: string, ok: boolean) => {
+  const finalize = async (code: string, discovered: unknown, summary: string, ok: boolean, costUsd = 0) => {
     await api
       .postAuthoringFinalize(cfg, job.sessionId, {
         code,
         discovered: (discovered as Record<string, unknown>) || {},
         summary,
         ok,
+        costUsd,
       })
       .catch((err) => console.error("postAuthoringFinalize failed:", err));
   };
@@ -1144,8 +1145,14 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
     };
     let cerr = "";
     let finalResult = "";
+    let costUsd = 0;
     let buf = "";
-    const handleEvent = (ev: { type?: string; message?: { content?: Array<Record<string, unknown>> }; result?: unknown }): void => {
+    const handleEvent = (ev: {
+      type?: string;
+      message?: { content?: Array<Record<string, unknown>> };
+      result?: unknown;
+      total_cost_usd?: unknown;
+    }): void => {
       if (ev.type === "assistant" && ev.message?.content) {
         for (const c of ev.message.content) {
           if (c.type === "text" && typeof c.text === "string" && c.text.trim()) {
@@ -1156,8 +1163,9 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
             emitStep(`▷ ${String(c.name)}: ${String(detail).replace(/\s+/g, " ").trim()}`);
           }
         }
-      } else if (ev.type === "result" && typeof ev.result === "string") {
-        finalResult = ev.result;
+      } else if (ev.type === "result") {
+        if (typeof ev.result === "string") finalResult = ev.result;
+        if (typeof ev.total_cost_usd === "number") costUsd = ev.total_cost_usd;
       }
     };
     claude.stdout?.on("data", (d) => {
@@ -1192,14 +1200,14 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
       summary = `${summary || "Live authoring produced no spec."} (claude exit ${exitCode})` +
         (errTail ? `\n[claude stderr] ${errTail}` : "");
     }
-    emitStep(ok ? "✓ spec authored" : `✗ no spec (claude exit ${exitCode})`);
-    // Terminal event so the UI can close the live authoring trail.
+    emitStep(ok ? `✓ spec authored · $${costUsd.toFixed(2)}` : `✗ no spec (claude exit ${exitCode})`);
+    // Terminal event (carries the run cost) so the UI can close the trail + show $.
     await api
       .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
-        case: job.caseId, phase: ok ? "done" : "failed", message: (summary || "").slice(0, 300),
+        case: job.caseId, phase: ok ? "done" : "failed", message: (summary || "").slice(0, 300), costUsd,
       })
       .catch(() => {});
-    await finalize(code, discovered, summary, ok);
+    await finalize(code, discovered, summary, ok, costUsd);
   } finally {
     try { claude?.kill(); } catch {}
     // Closing the launcher's stdin tells it to kill Chrome (cross-platform).

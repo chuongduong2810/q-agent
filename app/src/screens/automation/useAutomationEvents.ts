@@ -57,6 +57,8 @@ export type AuthoringProgress = {
   lines: string[];
   /** True once the agent emitted a terminal `done`/`failed` phase. */
   done: boolean;
+  /** Claude $ the agentic authoring run spent (set on the terminal event). */
+  costUsd?: number;
 };
 
 /**
@@ -153,7 +155,13 @@ export function useAutomationEvents(runId: number, generating: boolean) {
       }
     }
     if (evt.event === "authoring.progress") {
-      const p = evt.payload as { case?: number; caseId?: number; phase?: string; message?: string };
+      const p = evt.payload as {
+        case?: number;
+        caseId?: number;
+        phase?: string;
+        message?: string;
+        costUsd?: number;
+      };
       const caseId = p.case ?? p.caseId ?? 0;
       const message = (p.message ?? "").trim();
       const terminal = p.phase === "done" || p.phase === "failed";
@@ -162,7 +170,8 @@ export function useAutomationEvents(runId: number, generating: boolean) {
         const sameCase = prev != null && prev.caseId === caseId && !prev.done;
         const lines = sameCase ? [...prev.lines] : [];
         if (message) lines.push(message);
-        return { caseId, lines: lines.slice(-40), done: terminal };
+        const costUsd = typeof p.costUsd === "number" ? p.costUsd : sameCase ? prev?.costUsd : undefined;
+        return { caseId, lines: lines.slice(-40), done: terminal, costUsd };
       });
       if (terminal) {
         // The spec + cases changed on the server — refresh so the row reflects it.
