@@ -183,7 +183,7 @@ export function Execution() {
       )}
 
       <div className="mb-3.5 hidden md:block">
-        <PipelineRail stage={7} />
+        <PipelineRail stage={5} />
       </div>
 
       <div className="mb-3.5 grid grid-cols-[1.1fr_1fr] gap-2.5 md:gap-3.5">

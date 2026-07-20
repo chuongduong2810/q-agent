@@ -6,28 +6,27 @@ import { cn } from "@/lib/cn";
  * The QA pipeline visualization shown on every run-scoped screen. `stage` is the
  * 1-based index of the currently-active step; earlier steps render as complete.
  */
-const STAGES = [
-  "Sync",
-  "Select",
-  "Analyze",
-  "Review",
-  "Link",
-  "Automate",
-  "Execute",
-  "Evidence",
-  "Publish",
-] as const;
+// The 7 per-run pipeline stages — each maps to a real Run.status (see
+// runStatusToStage). Sync & Select are pre-run setup (global Tickets + Create-Run
+// flow), so they are deliberately NOT stages here. Keep this list, the sidebar's
+// navConfig.PIPELINE, and MobileStepperRail in sync.
+const STAGES = ["Analyze", "Review", "Link", "Automate", "Execute", "Evidence", "Publish"] as const;
 
-// Run.status → active stage index (1-based). Mirrors the design's runStageMap.
+/** Total number of per-run pipeline stages (for "stage N of {total}"). */
+export const RUN_STAGE_COUNT = STAGES.length;
+
+// Run.status → active stage index (1-based). Every status maps to a real stage;
+// NOTE: the status value `sync` is the "Link" stage (create + link cases), not a
+// "Sync" stage — Sync/Select happen before a run exists.
 export const runStatusToStage: Record<string, number> = {
-  processing: 3,
-  review: 4,
-  sync: 5,
-  automation: 6,
-  executing: 7,
-  evidence: 8,
-  comment: 9,
-  done: 9,
+  processing: 1, // Analyze
+  review: 2,
+  sync: 3, // Link
+  automation: 4,
+  executing: 5,
+  evidence: 6,
+  comment: 7, // Publish
+  done: 7,
 };
 
 export function PipelineRail({ stage }: { stage: number }) {

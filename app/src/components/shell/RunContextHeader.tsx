@@ -6,7 +6,7 @@ import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
 import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
-import { runStatusToStage } from "@/components/ui/PipelineRail";
+import { RUN_STAGE_COUNT, runStatusToStage } from "@/components/ui/PipelineRail";
 import { runEffectiveStatus, runRateLabel } from "@/components/dashboard/runStatus";
 import { useRun } from "@/hooks/queries";
 
@@ -27,7 +27,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
   // Stage number for the pill. Terminal statuses (failed/cancelled) don't map to
   // a pipeline stage, so fall back to the stage the run failed AT (`failedStage`)
   // rather than defaulting to 1 — otherwise a run that failed at, say, Evidence
-  // would misleadingly read "stage 1 of 9".
+  // would misleadingly read "stage 1 of 7".
   const stage = run
     ? (runStatusToStage[run.status] ??
         (run.failedStage ? runStatusToStage[run.failedStage] : undefined) ??
@@ -62,7 +62,8 @@ export function RunContextHeader({ runId }: { runId: number }) {
             }}
           >
             <CheckSquare size={12} strokeWidth={2} />
-            {runRateLabel(runEffectiveStatus(run))} &#183; {t("topbar.stageOfNine", { stage })}
+            {runRateLabel(runEffectiveStatus(run))} &#183;{" "}
+            {t("topbar.stageOfTotal", { stage, total: RUN_STAGE_COUNT })}
           </span>
         </>
       )}

@@ -69,7 +69,7 @@ export function CommentPublish() {
       </div>
 
       <div className="mb-4 hidden md:block">
-        <PipelineRail stage={9} />
+        <PipelineRail stage={7} />
       </div>
 
       {isLoading ? (

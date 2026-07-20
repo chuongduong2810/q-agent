@@ -11,14 +11,17 @@ import { useRun } from "@/hooks/queries";
  * navigation. Shown only inside a run, below the mobile top bar. See
  * MOBILE_SPEC §1c.
  */
+// The per-run pipeline as pills. Stage numbers match runStatusToStage +
+// navConfig.PIPELINE (7 stages; Sync/Select are pre-run, not shown). "Overview"
+// is the run index = the Analyze stage (1).
 const STEPPER: { label: string; seg: string; stage: number }[] = [
   { label: "Overview", seg: "", stage: 1 },
-  { label: "Review", seg: "review", stage: 4 },
-  { label: "Sync", seg: "sync", stage: 5 },
-  { label: "Automation", seg: "automation", stage: 6 },
-  { label: "Execution", seg: "execution", stage: 7 },
-  { label: "Evidence", seg: "evidence", stage: 8 },
-  { label: "Publish", seg: "comment", stage: 9 },
+  { label: "Review", seg: "review", stage: 2 },
+  { label: "Link", seg: "sync", stage: 3 },
+  { label: "Automation", seg: "automation", stage: 4 },
+  { label: "Execution", seg: "execution", stage: 5 },
+  { label: "Evidence", seg: "evidence", stage: 6 },
+  { label: "Publish", seg: "comment", stage: 7 },
 ];
 
 export function MobileStepperRail({ runId }: { runId: number }) {

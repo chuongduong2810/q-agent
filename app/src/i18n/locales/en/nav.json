@@ -34,7 +34,7 @@
     "searchPlaceholder": "Search or ask Q‑Agent anything…",
     "newRun": "New Run",
     "switchRun": "Switch run",
-    "stageOfNine": "stage {{stage}} of 9"
+    "stageOfTotal": "stage {{stage}} of {{total}}"
   },
   "run": {
     "back": "All of Q‑Agent",
