@@ -1100,9 +1100,12 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
       fs.writeFileSync(credFile, job.claudeCredentials, "utf-8");
       try { fs.chmodSync(credFile, 0o600); } catch { /* best-effort on Windows */ }
     }
+    // Prompt goes as the -p ARGUMENT (not stdin — headless `claude -p` reads the
+    // prompt from argv). stream-json + verbose lets us surface every step live.
     const claudeArgs = [
-      "-p",
-      "--output-format", "json",
+      "-p", job.taskPrompt,
+      "--output-format", "stream-json",
+      "--verbose",
       "--model", job.model,
       "--append-system-prompt-file", systemFile,
       "--allowedTools", "Bash", "Read", "Write", "Glob", "Grep",
@@ -1123,17 +1126,54 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
     claude = spawn(claudeCli(), claudeArgs, {
       cwd: workDir,
       env: claudeEnv,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     activeChild = claude;
-    let cout = "";
+
+    // Surface each step to the agent console + the run WebSocket so the operator
+    // can watch Claude drive browser-harness live.
+    const emitStep = (line: string): void => {
+      const trimmed = line.length > 300 ? line.slice(0, 300) + "…" : line;
+      console.log(`[authoring ${job.caseId}] ${trimmed}`);
+      emit("authoring-step", { caseId: job.caseId, line: trimmed });
+      void api
+        .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
+          case: job.caseId, phase: "step", message: trimmed,
+        })
+        .catch(() => {});
+    };
     let cerr = "";
-    claude.stdout?.on("data", (d) => { cout += String(d); });
+    let finalResult = "";
+    let buf = "";
+    const handleEvent = (ev: { type?: string; message?: { content?: Array<Record<string, unknown>> }; result?: unknown }): void => {
+      if (ev.type === "assistant" && ev.message?.content) {
+        for (const c of ev.message.content) {
+          if (c.type === "text" && typeof c.text === "string" && c.text.trim()) {
+            emitStep(`Claude: ${c.text.trim()}`);
+          } else if (c.type === "tool_use") {
+            const inp = (c.input as Record<string, unknown>) || {};
+            const detail = inp.command ?? inp.file_path ?? inp.path ?? inp.pattern ?? JSON.stringify(inp).slice(0, 200);
+            emitStep(`▷ ${String(c.name)}: ${String(detail).replace(/\s+/g, " ").trim()}`);
+          }
+        }
+      } else if (ev.type === "result" && typeof ev.result === "string") {
+        finalResult = ev.result;
+      }
+    };
+    claude.stdout?.on("data", (d) => {
+      buf += String(d);
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        try { handleEvent(JSON.parse(line)); } catch { /* ignore non-JSON noise */ }
+      }
+    });
     claude.stderr?.on("data", (d) => { cerr += String(d); });
-    try { claude.stdin?.write(job.taskPrompt); claude.stdin?.end(); } catch {}
-    await new Promise<void>((resolve) => {
-      claude!.on("close", () => resolve());
-      claude!.on("error", (e) => { cerr += `\nclaude spawn error: ${(e as Error).message}`; resolve(); });
+    const exitCode: number = await new Promise((resolve) => {
+      claude!.on("close", (c) => resolve(c ?? 0));
+      claude!.on("error", (e) => { cerr += `\nclaude spawn error: ${(e as Error).message}`; resolve(-1); });
     });
 
     // 3) Read emitted artifacts.
@@ -1144,16 +1184,15 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
     if (fs.existsSync(sidecarPath)) {
       try { discovered = JSON.parse(fs.readFileSync(sidecarPath, "utf-8")); } catch { /* keep default */ }
     }
-    let summary = "";
-    try { summary = (JSON.parse(cout) as { result?: string }).result || ""; }
-    catch { summary = (cout || cerr).slice(0, 800); }
-    if (!code.trim() && !summary) summary = "Live authoring produced no spec.";
     const ok = code.trim().length > 0;
-    await api
-      .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
-        case: job.caseId, phase: ok ? "done" : "failed", message: summary.slice(0, 400),
-      })
-      .catch(() => {});
+    let summary = finalResult || "";
+    if (!ok) {
+      // Make failures diagnosable: include claude's exit + stderr tail.
+      const errTail = cerr.trim().slice(-500);
+      summary = `${summary || "Live authoring produced no spec."} (claude exit ${exitCode})` +
+        (errTail ? `\n[claude stderr] ${errTail}` : "");
+    }
+    emitStep(ok ? "✓ spec authored" : `✗ no spec (claude exit ${exitCode})`);
     await finalize(code, discovered, summary, ok);
   } finally {
     try { claude?.kill(); } catch {}
