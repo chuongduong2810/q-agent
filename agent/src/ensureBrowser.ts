@@ -41,6 +41,7 @@ export async function ensureChromium(): Promise<boolean> {
   const code = await new Promise<number | null>((resolve) => {
     const child = spawn(nodeBin(), [playwrightCli(), "install", "chromium"], {
       stdio: "inherit",
+      windowsHide: true,
       env: { ...process.env, ...childNodeEnv() },
     });
     child.on("close", resolve);
