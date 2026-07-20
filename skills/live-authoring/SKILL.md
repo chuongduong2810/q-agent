@@ -30,7 +30,7 @@ print(page_info())
 PY
 ```
 
-- Helpers are pre-imported. First navigation is `new_tab(url)` (not `goto_url`). After navigation call `wait_for_load()`; if the tab is stale/internal call `ensure_real_tab()`.
+- A tab is **already open and signed in** to the app under test (its session was pre-restored). **Attach to it with `ensure_real_tab()` first** and continue from there — do **not** open a fresh `new_tab(url)` for the app's own origin (a new tab may not carry the restored session). Use `new_tab(url)` only for a genuinely different site. After any navigation call `wait_for_load()`.
 - **Find elements via the accessibility tree, then verify** — do not guess. `cdp("Accessibility.getFullAXTree")["nodes"]` has every element's `role`, `name`, and `backendDOMNodeId` (filter in Python before printing — it is large). To click: resolve the box center and `click_at_xy(x, y)`, then confirm with a targeted `js(...)` / `page_info()` check. Use `js(...)` for DOM inspection/extraction (e.g. read a `data-testid`, an input's label, the visible text of a result).
 - The Chrome is already signed in via its persistent profile. If you unexpectedly hit a login wall, use available SSO if Chrome is already signed in; **never** type passwords/MFA yourself, and **never** run against a production environment.
 

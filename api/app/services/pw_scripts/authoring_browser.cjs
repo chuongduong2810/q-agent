@@ -75,36 +75,44 @@ async function waitForCDP(port, timeoutMs) {
   return false;
 }
 
-// Replay saved sessionStorage into the running Chrome so MSAL/SPA apps that keep
-// their token in sessionStorage are authenticated. Playwright is OPTIONAL: if it
-// can't be required (the API container ships none) or no path was given, this is
-// a no-op. Returns the connected Playwright browser (kept alive so the init-script
-// registration survives) or null.
-async function replaySessionStorage(port) {
+// Load the saved sessionStorage map ({origin: {k:v}}), or null if unusable.
+function loadSessionStorage() {
   if (!sessionStoragePath) return null;
-  let byOrigin;
-  try { byOrigin = JSON.parse(fs.readFileSync(sessionStoragePath, 'utf-8')); }
-  catch { return null; }
-  if (!byOrigin || typeof byOrigin !== 'object' || !Object.keys(byOrigin).length) return null;
-  let chromium;
-  try { ({ chromium } = require('playwright')); } catch { return null; }
   try {
-    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-    const ctx = browser.contexts()[0];
-    if (ctx) {
-      await ctx.addInitScript((data) => {
-        try {
-          const o = data && data[location.origin];
-          if (o) for (const k of Object.keys(o)) window.sessionStorage.setItem(k, o[k]);
-        } catch (e) {}
-      }, byOrigin);
-      console.error('authoring_browser: sessionStorage replay armed for', Object.keys(byOrigin).join(','));
-    }
-    return browser;
+    const m = JSON.parse(fs.readFileSync(sessionStoragePath, 'utf-8'));
+    return m && typeof m === 'object' && Object.keys(m).length ? m : null;
+  } catch { return null; }
+}
+
+// Require Playwright if available (agent side); null in the API container.
+function tryPlaywright() {
+  try { return require('playwright').chromium; } catch { return null; }
+}
+
+// Arm sessionStorage replay and navigate the VISIBLE tab to baseUrl WITH the
+// token restored, so MSAL/SPA apps load authenticated. Critical ordering: the
+// init script must be registered BEFORE the first navigation to the app (that's
+// why Chrome is launched at about:blank, not baseUrl). Returns the connected
+// Playwright browser (kept alive so the init-script registration + tab survive).
+async function armAuthAndNavigate(chromium, port, byOrigin) {
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+  const ctx = browser.contexts()[0];
+  if (!ctx) return browser;
+  await ctx.addInitScript((data) => {
+    try {
+      const o = data && data[location.origin];
+      if (o) for (const k of Object.keys(o)) window.sessionStorage.setItem(k, o[k]);
+    } catch (e) {}
+  }, byOrigin);
+  const page = ctx.pages()[0] || (await ctx.newPage());
+  try {
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   } catch (e) {
-    console.error('authoring_browser: sessionStorage replay failed:', e && e.message);
-    return null;
+    console.error('authoring_browser: navigate after replay failed:', e && e.message);
   }
+  console.error('authoring_browser: sessionStorage replay armed for', Object.keys(byOrigin).join(','));
+  return browser;
 }
 
 (async () => {
@@ -127,14 +135,22 @@ async function replaySessionStorage(port) {
     }
   } catch (e) { console.error('pref seed failed:', e && e.message); }
 
+  // If we can replay sessionStorage (agent side: Playwright resolvable + a saved
+  // map), launch to about:blank and let Playwright navigate AFTER arming the init
+  // script — so the app never loads before the token is restored. Otherwise launch
+  // straight to baseUrl (profile-only / API container).
+  const byOrigin = loadSessionStorage();
+  const chromium = byOrigin ? tryPlaywright() : null;
+  const launchUrl = chromium ? 'about:blank' : baseUrl;
+
   const child = spawn(exe, [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${profileDir}`,
     '--no-first-run', '--no-default-browser-check', '--new-window',
     ...containerFlags(),
-    baseUrl,
+    launchUrl,
   ], { detached: false, stdio: 'ignore' });
-  console.error('authoring_browser launched:', exe, 'port', PORT);
+  console.error('authoring_browser launched:', exe, 'port', PORT, 'replay:', Boolean(chromium));
 
   if (!(await waitForCDP(PORT, 20000))) {
     console.error('authoring_browser: CDP endpoint never came up on port', PORT);
@@ -142,9 +158,13 @@ async function replaySessionStorage(port) {
     process.exit(1);
   }
 
-  // Arm sessionStorage replay (best-effort) BEFORE signalling readiness, so the
-  // token is restored before browser-harness navigates.
-  const pw = await replaySessionStorage(PORT);
+  // Arm sessionStorage replay + navigate the visible tab authenticated, BEFORE
+  // signalling readiness so browser-harness attaches to a logged-in tab.
+  let pw = null;
+  if (chromium) {
+    try { pw = await armAuthAndNavigate(chromium, PORT, byOrigin); }
+    catch (e) { console.error('authoring_browser: replay failed:', e && e.message); }
+  }
 
   // Signal readiness on stdout so the parent proceeds. The daemon resolves
   // BU_CDP_URL to the WS.
