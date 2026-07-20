@@ -88,6 +88,10 @@
       "regenerating": "Đang tạo lại…",
       "updating": "Đang cập nhật…"
     },
+    "empty": {
+      "title": "Chưa được tạo",
+      "hint": "Spec này chưa được tạo. Dùng Tạo lại để sinh nó."
+    },
     "footer": {
       "description": "Thực thi bộ kiểm thử đã duyệt song song trên toàn bộ lần Chạy"
     },
