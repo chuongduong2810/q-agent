@@ -986,21 +986,6 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-/** Poll Chrome's /json/version until it responds (CDP is up) or we time out. */
-async function waitForCdp(port: number, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`http://127.0.0.1:${port}/json/version`);
-      if (r.ok) return true;
-    } catch {
-      /* endpoint not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  return false;
-}
-
 /**
  * Author one spec live on this machine (#403): launch the dedicated,
  * pre-authenticated Chrome (vendored launcher), point the local `browser-harness`
@@ -1050,19 +1035,32 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
       })
       .catch(() => {});
 
-    // 1) Dedicated pre-auth Chrome (vendored launcher — Node built-ins only).
-    launcher = spawn(nodeBin(), [vendorAuthoringScript(), job.baseUrl, String(port), profileDir], {
-      env: { ...process.env, ...childNodeEnv() },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    // 1) Dedicated pre-auth Chrome (vendored launcher). Pass the saved
+    //    sessionStorage path so the launcher replays MSAL/SPA tokens into the
+    //    Chrome browser-harness attaches to; NODE_PATH lets the launcher resolve
+    //    the bundled Playwright it uses for that replay. Wait for its READY line
+    //    (emitted AFTER the replay is armed) so browser-harness never navigates
+    //    before the session is restored.
+    const nm = agentNodeModules();
+    launcher = spawn(
+      nodeBin(),
+      [vendorAuthoringScript(), job.baseUrl, String(port), profileDir, sess ? sess.sessionStoragePath : ""],
+      { env: nodePathEnv(nm), stdio: ["pipe", "pipe", "pipe"] }
+    );
     activeChild = launcher;
     let launcherErr = "";
     launcher.stderr?.on("data", (d) => { launcherErr += String(d); });
-
-    if (!(await waitForCdp(port, AUTHORING_CDP_READY_TIMEOUT_MS))) {
+    const ready = await new Promise<boolean>((resolve) => {
+      const to = setTimeout(() => resolve(false), AUTHORING_CDP_READY_TIMEOUT_MS);
+      launcher!.stdout?.on("data", (d) => {
+        if (String(d).includes("AUTHORING_BROWSER_READY")) { clearTimeout(to); resolve(true); }
+      });
+      launcher!.on("exit", () => { clearTimeout(to); resolve(false); });
+    });
+    if (!ready) {
       await finalize(
         "", { routes: [], selectors: [] },
-        `Chrome CDP did not come up on port ${port}. ${launcherErr.trim()}`.trim(), false
+        `Authoring browser did not become ready on port ${port}. ${launcherErr.trim()}`.trim(), false
       );
       return;
     }
