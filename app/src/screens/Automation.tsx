@@ -634,7 +634,7 @@ export function Automation() {
         )}
       </div>
       <div className="mb-4 hidden md:block">
-        <PipelineRail stage={4} />
+        <PipelineRail stage={3} />
       </div>
 
       {showRepoPanel && (

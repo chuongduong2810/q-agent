@@ -27,7 +27,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
   // Stage number for the pill. Terminal statuses (failed/cancelled) don't map to
   // a pipeline stage, so fall back to the stage the run failed AT (`failedStage`)
   // rather than defaulting to 1 — otherwise a run that failed at, say, Evidence
-  // would misleadingly read "stage 1 of 7".
+  // would misleadingly read "stage 1 of 6".
   const stage = run
     ? (runStatusToStage[run.status] ??
         (run.failedStage ? runStatusToStage[run.failedStage] : undefined) ??

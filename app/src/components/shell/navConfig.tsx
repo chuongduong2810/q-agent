@@ -94,22 +94,20 @@ export function activeNavPath(items: NavItem[], pathname: string): string | null
   ).path;
 }
 
-/** The 7 per-run pipeline stages as the run's navigation. `stage` is the 1-based
- * index (see `runStatusToStage`, one per real Run.status) used for done/current
- * styling; `seg` is the run sub-route this step opens (null = non-navigable phase
- * marker). Sync & Select are pre-run setup (Tickets + Create-Run flow), so they
- * are not stages here. Keep in sync with PipelineRail.STAGES + MobileStepperRail. */
+/** The 6 user-facing per-run pipeline stages as the run's navigation. `stage` is
+ * the 1-based index (see `runStatusToStage`) used for done/current styling; `seg`
+ * is the run sub-route this step opens. Analyze (status "processing") is the
+ * automatic lead-in to Review and has no sub-route, so it is not a stage/nav entry
+ * here — the top rail folds it into stage 1 (Review). Sync & Select are pre-run
+ * setup (Tickets + Create-Run flow). Keep in sync with PipelineRail.STAGES +
+ * MobileStepperRail. */
 export const PIPELINE: { label: string; key: string; stage: number; seg: string | null }[] = [
-  // Analyze (stage 1 = status "processing") is intentionally omitted here: it has
-  // no sub-route to navigate to (the run index is the overview), so it would be a
-  // dead, non-clickable entry in the sidebar nav. The top rail still shows it as a
-  // progress stage. `stage` stays aligned with runStatusToStage for done/current.
-  { label: "Review", key: "review", stage: 2, seg: "review" },
-  { label: "Link", key: "link", stage: 3, seg: "sync" },
-  { label: "Automation", key: "automation", stage: 4, seg: "automation" },
-  { label: "Execution", key: "execution", stage: 5, seg: "execution" },
-  { label: "Evidence", key: "evidence", stage: 6, seg: "evidence" },
-  { label: "Publish", key: "publish", stage: 7, seg: "comment" },
+  { label: "Review", key: "review", stage: 1, seg: "review" },
+  { label: "Link", key: "link", stage: 2, seg: "sync" },
+  { label: "Automation", key: "automation", stage: 3, seg: "automation" },
+  { label: "Execution", key: "execution", stage: 4, seg: "execution" },
+  { label: "Evidence", key: "evidence", stage: 5, seg: "evidence" },
+  { label: "Publish", key: "publish", stage: 6, seg: "comment" },
 ];
 
 /** Pinned global mini-row shown at the foot of the run workspace nav. */
