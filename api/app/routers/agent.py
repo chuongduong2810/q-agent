@@ -848,6 +848,7 @@ def agent_authoring_finalize(
         try:
             from app.services import ai_usage_service
 
+            case = db.get(TestCase, session["case_id"])
             ai_usage_service.record(
                 model=session.get("model") or "",
                 input_tokens=0,
@@ -859,6 +860,7 @@ def agent_authoring_finalize(
                 action="live-authoring",
                 run_id=session.get("run_id"),
                 owner_id=user.id,
+                ticket_external_id=case.ticket_external_id if case else None,
             )
         except Exception as exc:  # noqa: BLE001 - cost recording is additive
             logger.warning("Authoring cost record skipped: {}", exc)

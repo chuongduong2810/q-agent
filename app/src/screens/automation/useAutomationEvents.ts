@@ -179,6 +179,11 @@ export function useAutomationEvents(runId: number, generating: boolean) {
         return { caseId, lines: lines.slice(-40), done: terminal, costUsd };
       });
       if (terminal) {
+        // Persistent completion feedback incl. the Claude $ the authoring run spent
+        // (the in-panel trail vanishes once the code replaces it).
+        const cost = typeof p.costUsd === "number" ? ` · $${p.costUsd.toFixed(2)}` : "";
+        if (p.phase === "done") toast.success(`${t("progress.authoring.authored")}${cost}`);
+        else toast.error(`${t("progress.authoring.failed")}${cost}`);
         // The spec + cases changed on the server — refresh so the row reflects it.
         qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
         qc.invalidateQueries({ queryKey: queryKeys.runCases(runId) });

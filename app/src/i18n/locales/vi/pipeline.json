@@ -149,6 +149,10 @@
     "generating": {
       "title": "Đang tạo tự động hóa…"
     },
+    "authoring": {
+      "authored": "Đã tạo spec",
+      "failed": "Live authoring không tạo được spec"
+    },
     "heal": {
       "progressTitle": "Đang tự khắc phục {{caseCode}} — lần thử {{attempt}}/{{maxAttempts}}",
       "fixing": "Đang sửa với Claude — {{detail}}",

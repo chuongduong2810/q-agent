@@ -149,6 +149,10 @@
     "generating": {
       "title": "Generating automation…"
     },
+    "authoring": {
+      "authored": "Spec authored",
+      "failed": "Live authoring produced no spec"
+    },
     "heal": {
       "progressTitle": "Self-healing {{caseCode}} — attempt {{attempt}}/{{maxAttempts}}",
       "fixing": "Fixing with Claude — {{detail}}",
