@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, ChevronsUpDown, ScrollText } from "lucide-react";
+import { ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -25,8 +25,14 @@ export function RunSidebar({ runId }: { runId: number }) {
 
   // Current URL sub-segment (`review` | `sync` | … ), null on the run index.
   const urlSeg = pathname.match(/^\/runs\/\d+(?:\/(\w+))?/)?.[1] ?? null;
-  // 1-based pipeline stage the run is currently at, from its status.
-  const currentStage = run ? runStatusToStage[run.status] ?? 0 : 0;
+  // 1-based pipeline stage the run is currently at. Terminal statuses
+  // (failed/cancelled) don't map to a stage, so fall back to the stage the run
+  // failed AT (`failedStage`) — otherwise nothing is highlighted for a failed run.
+  const currentStage = run
+    ? (runStatusToStage[run.status] ??
+        (run.failedStage ? runStatusToStage[run.failedStage] : undefined) ??
+        0)
+    : 0;
   const effectiveStatus = run ? runEffectiveStatus(run) : null;
   const accent = effectiveStatus ? runColor(effectiveStatus) : "#a0a0b2";
 
@@ -99,7 +105,7 @@ export function RunSidebar({ runId }: { runId: number }) {
       <nav className="relative flex flex-col gap-px overflow-y-auto py-1.5">
         {/* connector rail behind the nodes (node center ≈ 18px from the left) */}
         <div className="absolute bottom-5 left-[18px] top-5 w-0.5 bg-white/[0.09]" />
-        {PIPELINE.map((step, i) => {
+        {PIPELINE.map((step) => {
           const done = currentStage > 0 && step.stage < currentStage;
           const isCurrent = step.stage === currentStage;
           const activeUrl = step.seg != null && step.seg === urlSeg;
@@ -120,7 +126,7 @@ export function RunSidebar({ runId }: { runId: number }) {
                 boxShadow: emphasized ? "0 0 0 4px rgba(139,92,246,.2)" : undefined,
               }}
             >
-              {done ? <Check size={11} strokeWidth={3} /> : i + 1}
+              {done ? <Check size={11} strokeWidth={3} /> : step.stage}
             </span>
           );
 
@@ -138,18 +144,6 @@ export function RunSidebar({ runId }: { runId: number }) {
               }}
             >
               {t(`pipeline.${step.key}`)}
-            </span>
-          );
-
-          const tag = clickable && (
-            <span
-              className="rounded-[5px] border px-1.5 py-px text-[8.5px] font-semibold tracking-[0.05em]"
-              style={{
-                color: emphasized ? "#c4b5fd" : "#6c6c7e",
-                borderColor: emphasized ? "rgba(139,92,246,.4)" : "rgba(255,255,255,.1)",
-              }}
-            >
-              {t("run.screenTag")}
             </span>
           );
 
@@ -175,7 +169,6 @@ export function RunSidebar({ runId }: { runId: number }) {
             >
               {node}
               {label}
-              {tag}
             </button>
           ) : (
             <div key={step.label} className={stepClass} style={stepStyle}>
@@ -185,33 +178,6 @@ export function RunSidebar({ runId }: { runId: number }) {
           );
         })}
       </nav>
-
-      {(() => {
-        const activeUrl = urlSeg === "activity";
-        return (
-          <button
-            data-tour="stage-activity"
-            onClick={() => navigate(`/runs/${runId}/activity`)}
-            className={cn(
-              "mt-1.5 flex items-center gap-[11px] rounded-[9px] px-2 py-[7px] text-left text-[12px] font-semibold",
-              !activeUrl && "text-[#c7c7d4] hover:bg-white/[0.05]",
-            )}
-            style={
-              activeUrl
-                ? {
-                    background:
-                      "linear-gradient(135deg,rgba(139,92,246,.2),rgba(99,102,241,.1))",
-                    boxShadow: "inset 0 0 0 1px rgba(139,92,246,.28)",
-                    color: "#fff",
-                  }
-                : undefined
-            }
-          >
-            <ScrollText size={15} strokeWidth={2} className="shrink-0" />
-            {t("run.activity")}
-          </button>
-        );
-      })()}
 
       <div className="mt-auto border-t border-white/[0.06] pt-2.5">
         <div className="px-2 pb-1.5 text-[10px] font-semibold tracking-[0.11em] text-[#5c5c6e]">
