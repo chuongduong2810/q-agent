@@ -35,7 +35,13 @@ export function browserHarnessBinDir(): string {
  * Inherits stdio so first-run downloads/installs are visible in the agent log. */
 function run(cmd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<number | null> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: "inherit", env: { ...process.env, ...env } });
+    // windowsHide: don't pop a console window for the uv/tar/browser-harness probe
+    // when the agent runs as a GUI (Electron) process with no console of its own.
+    const child = spawn(cmd, args, {
+      stdio: "inherit",
+      windowsHide: true,
+      env: { ...process.env, ...env },
+    });
     child.on("close", resolve);
     child.on("error", () => resolve(null));
   });
