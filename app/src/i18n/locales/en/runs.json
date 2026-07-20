@@ -33,7 +33,8 @@
     "pass": "Pass {{pct}}",
     "runExecution": "Run execution",
     "openRun": "Open run",
-    "stopRun": "Stop run — cancel all in-flight work"
+    "stopRun": "Stop run — cancel all in-flight work",
+    "cleanupRun": "Clean up stuck processes for this run"
   },
   "actions": {
     "menu": "Run actions",
@@ -46,6 +47,11 @@
       "message": "\"{{name}}\" will stop where it is. You can retry it afterward.",
       "confirm": "Cancel run"
     },
+    "confirmCleanup": {
+      "title": "Clean up this run?",
+      "message": "Reset any stuck or orphaned processes and rows for \"{{name}}\" (leftover authoring/self-heal/execution state). Completed results are kept; the run's status is unchanged.",
+      "confirm": "Clean up"
+    },
     "confirmDelete": {
       "title": "Delete this run?",
       "message": "\"{{name}}\" and all of its test cases, executions, and evidence will be permanently deleted.",
@@ -53,6 +59,7 @@
     },
     "toast": {
       "cancelled": "Run cancelled",
+      "cleaned": "Cleaned up stuck processes",
       "cancelFailed": "Failed to cancel run",
       "retrying": "Retrying run",
       "retryFailed": "Failed to retry run",

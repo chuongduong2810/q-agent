@@ -33,7 +33,8 @@
     "pass": "Đạt {{pct}}",
     "runExecution": "Chạy thực thi",
     "openRun": "Mở lượt chạy",
-    "stopRun": "Dừng lượt chạy — huỷ mọi tiến trình đang chạy"
+    "stopRun": "Dừng lượt chạy — huỷ mọi tiến trình đang chạy",
+    "cleanupRun": "Dọn dẹp các tiến trình còn kẹt của lượt chạy này"
   },
   "actions": {
     "menu": "Thao tác lượt chạy",
@@ -46,6 +47,11 @@
       "message": "\"{{name}}\" sẽ dừng lại ở vị trí hiện tại. Bạn có thể thử lại sau.",
       "confirm": "Hủy lượt chạy"
     },
+    "confirmCleanup": {
+      "title": "Dọn dẹp lượt chạy này?",
+      "message": "Đặt lại mọi tiến trình và bản ghi còn kẹt hoặc mồ côi của \"{{name}}\" (trạng thái soạn thảo/tự sửa lỗi/thực thi còn sót). Kết quả đã hoàn tất được giữ nguyên; trạng thái lượt chạy không đổi.",
+      "confirm": "Dọn dẹp"
+    },
     "confirmDelete": {
       "title": "Xóa lượt chạy này?",
       "message": "\"{{name}}\" cùng toàn bộ trường hợp kiểm thử, lần thực thi và bằng chứng của nó sẽ bị xóa vĩnh viễn.",
@@ -53,6 +59,7 @@
     },
     "toast": {
       "cancelled": "Đã hủy lượt chạy",
+      "cleaned": "Đã dọn dẹp các tiến trình còn kẹt",
       "cancelFailed": "Hủy lượt chạy thất bại",
       "retrying": "Đang thử lại lượt chạy",
       "retryFailed": "Thử lại lượt chạy thất bại",

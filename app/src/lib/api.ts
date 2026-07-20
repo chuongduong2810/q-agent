@@ -398,6 +398,9 @@ export const api = {
   getRun: (runId: number | string) => get<RunDetailOut>(`/runs/${runId}`),
   regenerateRun: (runId: number | string) => post<RunDetailOut>(`/runs/${runId}/regenerate`),
   cancelRun: (runId: number | string) => post<RunOut>(`/runs/${runId}/cancel`),
+  // Stop + clean up a run in ANY status (in-progress → cancel; terminal → force
+  // clean up orphaned in-flight rows/queues). See #420.
+  stopRun: (runId: number | string) => post<RunOut>(`/runs/${runId}/stop`),
   retryRun: (runId: number | string) => post<RunOut>(`/runs/${runId}/retry`),
   deleteRun: (runId: number | string) => del<void>(`/runs/${runId}`),
   runRepos: (runId: number | string) => get<RunRepoOption[]>(`/runs/${runId}/repos`),

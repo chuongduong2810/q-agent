@@ -484,6 +484,45 @@ def cancel_run(
     return run
 
 
+@router.post("/{run_id}/stop", response_model=RunOut)
+def stop_run(
+    run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
+) -> Run:
+    """Stop a run's work and clean up stuck state (#420) — valid in ANY status.
+
+    Unlike :func:`cancel_run` (which 409s on a terminal run), this always runs the
+    cleanup, so it doubles as a "force clean up" for a run whose earlier pass
+    crashed and left orphaned in-flight rows / stale agent-queue entries:
+
+    - **In-progress run:** request cancel, kill tracked subprocesses, transition to
+      ``cancelled``, then clean up.
+    - **Terminal run:** leave the lifecycle status untouched (retry still keys on
+      ``failed_stage``), but kill any stray tracked process and run the cleanup so
+      orphaned ``running`` specs/executions + stale authoring/explore/heal queue
+      entries are cleared.
+    """
+    run = get_owned_or_404(db, Run, run_id, user)
+    terminal = run.status in TERMINAL_RUN_STATUSES
+
+    if not terminal:
+        run.cancel_requested = True
+        run.cancelled_at = utcnow()
+        db.add(run)
+        db.commit()
+        set_run_status(db, run, "cancelled")
+
+    run_control.request_cancel(run.id)
+    run_control.kill_processes(run.id)
+    _stop_run_work(db, run)
+
+    audit_service.record(
+        category="run", actor_type="user",
+        action="Cleaned up run" if terminal else "Cancelled run", target=run.code,
+    )
+    db.refresh(run)
+    return run
+
+
 @router.post("/{run_id}/retry", response_model=RunOut)
 def retry_run(
     run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
