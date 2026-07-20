@@ -165,6 +165,11 @@ export function useAutomationEvents(runId: number, generating: boolean) {
       const caseId = p.case ?? p.caseId ?? 0;
       const message = (p.message ?? "").trim();
       const terminal = p.phase === "done" || p.phase === "failed";
+      // On session start, refetch specs so the newly-running row appears (a fresh
+      // Generate returns before the background thread creates the row).
+      if (p.phase === "launching") {
+        qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+      }
       setAuthoringProgress((prev) => {
         // Same case still running ⇒ keep appending; otherwise start a fresh trail.
         const sameCase = prev != null && prev.caseId === caseId && !prev.done;

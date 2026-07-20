@@ -254,7 +254,8 @@ def author_case(db, case, run, *, owner_id: int | None, run_id: int | None) -> A
         try:
             from app.ws import hub
 
-            hub.publish(str(run_id), "authoring.progress", {"case": case.code, "phase": phase, **payload})
+            # Key by the numeric test-case id (what the UI matches on), not case.code.
+            hub.publish(str(run_id), "authoring.progress", {"case": case.id, "phase": phase, **payload})
         except Exception as exc:  # noqa: BLE001 - progress is best-effort
             logger.warning("authoring.progress publish skipped: {}", exc)
 

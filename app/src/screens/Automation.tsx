@@ -232,6 +232,15 @@ export function Automation() {
   useRunEvents((evt) => {
     if (evt.event !== "spec.regenerated") return;
     const p = evt.payload as { caseId: number; spec?: AutomationSpecOut; error?: string };
+    // Live-authoring (#400) publishes a PENDING (status="running") spec.regenerated
+    // when the job is merely ENQUEUED — the real authored spec arrives on a later
+    // terminal event. Refresh so the running row + live trail appear, but keep the
+    // case in-flight and show NO completion feedback yet (that was the premature
+    // "Regeneration finished" toast).
+    if (p.spec != null && p.spec.status === "running") {
+      qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+      return;
+    }
     setRegeneratingCases((prev) => {
       const next = new Set(prev);
       next.delete(p.caseId);
@@ -405,9 +414,14 @@ export function Automation() {
   // active trail for this case, or a running+empty spec waiting on the first event.
   const authoringForSelected =
     authoringProgress && authoringProgress.caseId === selectedSpec?.testCaseId ? authoringProgress : null;
+  // Show the live trail (not the empty/stale editor) whenever the selected spec is
+  // being authored: an active trail for it, OR a "running" spec that isn't being
+  // healed/executed (status "running" is also used by heal/exec, so exclude those).
+  // Covers the regenerate case (old code preserved) and the window before the first
+  // authoring.progress event / before the specs query refetches.
   const authoringActive =
     (authoringForSelected != null && !authoringForSelected.done) ||
-    (selectedStatus === "running" && !(selectedSpec?.code ?? "").trim());
+    (selectedStatus === "running" && !healingThisCase && !runningThisSpec);
   // Last placeholder-gate outcome for the selected spec: surface a non-destructive
   // note when the most recent regeneration was rejected (previous good spec kept).
   const gateReport = useMemo(() => parseGateReport(selectedSpec?.gateReport), [selectedSpec?.gateReport]);

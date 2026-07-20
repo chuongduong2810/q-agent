@@ -149,7 +149,7 @@ async function armAuthAndNavigate(chromium, port, byOrigin) {
     '--no-first-run', '--no-default-browser-check', '--new-window',
     ...containerFlags(),
     launchUrl,
-  ], { detached: false, stdio: 'ignore' });
+  ], { detached: false, stdio: 'ignore', windowsHide: true });
   console.error('authoring_browser launched:', exe, 'port', PORT, 'replay:', Boolean(chromium));
 
   if (!(await waitForCDP(PORT, 20000))) {
