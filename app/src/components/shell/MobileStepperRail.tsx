@@ -6,22 +6,20 @@ import { useRun } from "@/hooks/queries";
 
 /**
  * The in-run pipeline as a horizontal, swipeable stepper — the mobile
- * replacement for the desktop `RunSidebar` pipeline. Seven pills (run overview
- * + the six navigable stages) that auto-scroll to centre the active pill on
- * navigation. Shown only inside a run, below the mobile top bar. See
- * MOBILE_SPEC §1c.
+ * replacement for the desktop `RunSidebar` pipeline. Six pills (the navigable
+ * stages) that auto-scroll to centre the active pill on navigation. Shown only
+ * inside a run, below the mobile top bar. See MOBILE_SPEC §1c.
  */
 // The per-run pipeline as pills. Stage numbers match runStatusToStage +
-// navConfig.PIPELINE (7 stages; Sync/Select are pre-run, not shown). "Overview"
-// is the run index = the Analyze stage (1).
+// navConfig.PIPELINE (6 stages; Analyze/processing folds into Review, and
+// Sync/Select are pre-run — none are shown here).
 const STEPPER: { label: string; seg: string; stage: number }[] = [
-  { label: "Overview", seg: "", stage: 1 },
-  { label: "Review", seg: "review", stage: 2 },
-  { label: "Link", seg: "sync", stage: 3 },
-  { label: "Automation", seg: "automation", stage: 4 },
-  { label: "Execution", seg: "execution", stage: 5 },
-  { label: "Evidence", seg: "evidence", stage: 6 },
-  { label: "Publish", seg: "comment", stage: 7 },
+  { label: "Review", seg: "review", stage: 1 },
+  { label: "Link", seg: "sync", stage: 2 },
+  { label: "Automation", seg: "automation", stage: 3 },
+  { label: "Execution", seg: "execution", stage: 4 },
+  { label: "Evidence", seg: "evidence", stage: 5 },
+  { label: "Publish", seg: "comment", stage: 6 },
 ];
 
 export function MobileStepperRail({ runId }: { runId: number }) {
@@ -50,14 +48,14 @@ export function MobileStepperRail({ runId }: { runId: number }) {
       ref={railRef}
       className="scrollbar-none z-[19] flex shrink-0 gap-1.5 overflow-x-auto rounded-[16px] bg-[rgba(12,12,18,.5)] px-3 py-2.5"
     >
-      {STEPPER.map((step, i) => {
+      {STEPPER.map((step) => {
         const active = urlSeg === step.seg;
         const done = currentStage > step.stage;
         return (
           <button
             key={step.label}
             ref={active ? activeRef : undefined}
-            onClick={() => navigate(step.seg ? `/runs/${runId}/${step.seg}` : `/runs/${runId}`)}
+            onClick={() => navigate(`/runs/${runId}/${step.seg}`)}
             className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-[20px] border py-1.5 pl-1.5 pr-3 text-[12px] font-bold transition-colors"
             style={{
               borderColor: active ? "rgba(139,92,246,.5)" : "rgba(255,255,255,.08)",
@@ -73,7 +71,7 @@ export function MobileStepperRail({ runId }: { runId: number }) {
                 color: done || active ? "#fff" : "#7a7a8c",
               }}
             >
-              {done ? <Check size={11} strokeWidth={3} /> : i + 1}
+              {done ? <Check size={11} strokeWidth={3} /> : step.stage}
             </span>
             {step.label}
           </button>
