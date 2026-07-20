@@ -1193,6 +1193,12 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
         (errTail ? `\n[claude stderr] ${errTail}` : "");
     }
     emitStep(ok ? "✓ spec authored" : `✗ no spec (claude exit ${exitCode})`);
+    // Terminal event so the UI can close the live authoring trail.
+    await api
+      .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
+        case: job.caseId, phase: ok ? "done" : "failed", message: (summary || "").slice(0, 300),
+      })
+      .catch(() => {});
     await finalize(code, discovered, summary, ok);
   } finally {
     try { claude?.kill(); } catch {}

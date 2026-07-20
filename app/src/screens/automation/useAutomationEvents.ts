@@ -50,6 +50,15 @@ export type ExploreProgress = {
   done: boolean;
 };
 
+/** Live authoring trail (#400): the rolling step log the paired agent streams on
+ * `authoring.progress` while it drives browser-harness to author a spec. */
+export type AuthoringProgress = {
+  caseId: number;
+  lines: string[];
+  /** True once the agent emitted a terminal `done`/`failed` phase. */
+  done: boolean;
+};
+
 /**
  * Wraps the run's WS event handling for the Automation screen: captures live
  * generation and self-heal progress for the banners, surfaces per-spec errors as
@@ -76,6 +85,10 @@ export function useAutomationEvents(runId: number, generating: boolean) {
   // the live banner; the same trail powers the discovery-review panel once the
   // session ends. Reset only when a new session starts (a different sessionId).
   const [exploreProgress, setExploreProgress] = useState<ExploreProgress | null>(null);
+
+  // Live authoring trail (from the WS stream). Accumulates each streamed step for
+  // one case; cleared shortly after the terminal done/failed phase.
+  const [authoringProgress, setAuthoringProgress] = useState<AuthoringProgress | null>(null);
 
   // Capture live progress for the banner, surface per-spec generation errors,
   // and clear progress when the background pass finishes (run.status flips once
@@ -139,6 +152,26 @@ export function useAutomationEvents(runId: number, generating: boolean) {
         setTimeout(() => setHealProgress(null), 4000);
       }
     }
+    if (evt.event === "authoring.progress") {
+      const p = evt.payload as { case?: number; caseId?: number; phase?: string; message?: string };
+      const caseId = p.case ?? p.caseId ?? 0;
+      const message = (p.message ?? "").trim();
+      const terminal = p.phase === "done" || p.phase === "failed";
+      setAuthoringProgress((prev) => {
+        // Same case still running ⇒ keep appending; otherwise start a fresh trail.
+        const sameCase = prev != null && prev.caseId === caseId && !prev.done;
+        const lines = sameCase ? [...prev.lines] : [];
+        if (message) lines.push(message);
+        return { caseId, lines: lines.slice(-40), done: terminal };
+      });
+      if (terminal) {
+        // The spec + cases changed on the server — refresh so the row reflects it.
+        qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+        qc.invalidateQueries({ queryKey: queryKeys.runCases(runId) });
+        setTimeout(() => setAuthoringProgress(null), 8000);
+      }
+      return;
+    }
     if (evt.event === "explore.progress") {
       const p = evt.payload as {
         sessionId?: string;
@@ -189,5 +222,5 @@ export function useAutomationEvents(runId: number, generating: boolean) {
     if (!generating) setGenProgress(null);
   }, [generating]);
 
-  return { genProgress, healProgress, exploreProgress };
+  return { genProgress, healProgress, exploreProgress, authoringProgress };
 }
