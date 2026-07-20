@@ -1047,7 +1047,7 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
     launcher = spawn(
       nodeBin(),
       [vendorAuthoringScript(), job.baseUrl, String(port), profileDir, sess ? sess.sessionStoragePath : ""],
-      { env: nodePathEnv(nm), stdio: ["pipe", "pipe", "pipe"] }
+      { env: nodePathEnv(nm), stdio: ["pipe", "pipe", "pipe"], windowsHide: true }
     );
     activeChild = launcher;
     let launcherErr = "";
@@ -1128,6 +1128,7 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
       cwd: workDir,
       env: claudeEnv,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     activeChild = claude;
 
