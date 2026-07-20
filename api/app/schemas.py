@@ -426,12 +426,15 @@ class AuthoringEventRequest(ApiModel):
 
 class AuthoringFinalizeRequest(ApiModel):
     """Body for ``POST /agent/authoring/{id}/finalize`` — the authored spec code,
-    the runtime-verified ``discovered`` routes/selectors, and a short summary."""
+    the runtime-verified ``discovered`` routes/selectors, a short summary, and the
+    Claude ``cost_usd`` the agent's agentic run spent (so it rolls into the run's
+    cost breakdown — the agent-side Claude isn't otherwise visible server-side)."""
 
     code: str = ""
     discovered: dict = Field(default_factory=dict)
     summary: str = ""
     ok: bool = True
+    cost_usd: float = 0.0
 
 
 class AuthoringFinalizeOut(ApiModel):

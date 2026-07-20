@@ -103,10 +103,43 @@ export function HealProgressBanner({ healProgress }: { healProgress: HealProgres
   );
 }
 
+/** The streamed step log body — Claude's messages + browser-harness tool calls —
+ * with a working spinner until done. Reused by the banner and the code panel. */
+export function AuthoringTrail({ lines, done }: { lines: string[]; done: boolean }) {
+  return (
+    <div className="flex max-h-[280px] flex-col gap-1.5 overflow-auto font-mono text-[12px]">
+      {lines.map((l, i) => (
+        <div key={i} className="whitespace-pre-wrap break-words text-muted">
+          {l}
+        </div>
+      ))}
+      {!done && (
+        <div className="flex items-center gap-2 text-[12px]">
+          <span
+            className="h-[14px] w-[14px] shrink-0 rounded-full border-2"
+            style={{ borderColor: "rgba(167,139,250,.35)", borderTopColor: "#a78bfa", animation: "spin .8s linear infinite" }}
+          />
+          <span className="text-ink">working…</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Cost pill shown once the authoring run reports its Claude spend. */
+export function AuthoringCost({ costUsd }: { costUsd: number | undefined }) {
+  if (typeof costUsd !== "number") return null;
+  return (
+    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] text-muted">
+      ${costUsd.toFixed(2)}
+    </span>
+  );
+}
+
 /** Live authoring trail (#400): the streamed step log while the paired agent
  * drives browser-harness to author a spec — Claude's messages + tool calls. */
 export function AuthoringProgressBanner({ authoringProgress }: { authoringProgress: AuthoringProgress }) {
-  const { lines, done } = authoringProgress;
+  const { lines, done, costUsd } = authoringProgress;
   return (
     <GlassCard className="mb-3.5 p-4 md:p-[22px]" style={{ borderColor: "rgba(139,92,246,.32)" }}>
       <div className="mb-[14px] flex items-center gap-[13px]">
@@ -117,26 +150,14 @@ export function AuthoringProgressBanner({ authoringProgress }: { authoringProgre
           <Sparkles size={22} color="#fff" />
         </div>
         <div className="min-w-0">
-          <div className="text-[15px] font-bold">Live authoring</div>
+          <div className="flex items-center gap-2 text-[15px] font-bold">
+            Live authoring
+            <AuthoringCost costUsd={costUsd} />
+          </div>
           <div className="mt-0.5 text-xs text-muted">Claude is driving the browser to author this spec</div>
         </div>
       </div>
-      <div className="flex max-h-[280px] flex-col gap-1.5 overflow-auto font-mono text-[12px]">
-        {lines.map((l, i) => (
-          <div key={i} className="whitespace-pre-wrap break-words text-muted">
-            {l}
-          </div>
-        ))}
-        {!done && (
-          <div className="flex items-center gap-2 text-[12px]">
-            <span
-              className="h-[14px] w-[14px] shrink-0 rounded-full border-2"
-              style={{ borderColor: "rgba(167,139,250,.35)", borderTopColor: "#a78bfa", animation: "spin .8s linear infinite" }}
-            />
-            <span className="text-ink">working…</span>
-          </div>
-        )}
-      </div>
+      <AuthoringTrail lines={lines} done={done} />
     </GlassCard>
   );
 }

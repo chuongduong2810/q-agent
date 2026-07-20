@@ -400,6 +400,14 @@ export function Automation() {
   const runSuppressed = selectedStatus === "product_defect";
   const isProductDefect = selectedStatus === "product_defect";
   const isBlocked = selectedStatus === "blocked";
+  // Live authoring (#400) for the SELECTED spec: show the streamed trail in the
+  // code panel (instead of an empty editor) while it's being authored — either an
+  // active trail for this case, or a running+empty spec waiting on the first event.
+  const authoringForSelected =
+    authoringProgress && authoringProgress.caseId === selectedSpec?.testCaseId ? authoringProgress : null;
+  const authoringActive =
+    (authoringForSelected != null && !authoringForSelected.done) ||
+    (selectedStatus === "running" && !(selectedSpec?.code ?? "").trim());
   // Last placeholder-gate outcome for the selected spec: surface a non-destructive
   // note when the most recent regeneration was rejected (previous good spec kept).
   const gateReport = useMemo(() => parseGateReport(selectedSpec?.gateReport), [selectedSpec?.gateReport]);
@@ -646,7 +654,11 @@ export function Automation() {
         <ExploreProgressBanner exploreProgress={exploreProgress} />
       )}
 
-      {authoringProgress && <AuthoringProgressBanner authoringProgress={authoringProgress} />}
+      {/* Top banner only when authoring a case that is NOT the selected spec — the
+          selected spec shows its trail inside the code panel (no duplication). */}
+      {authoringProgress && authoringProgress.caseId !== selectedSpec?.testCaseId && (
+        <AuthoringProgressBanner authoringProgress={authoringProgress} />
+      )}
 
       {/* AI chat panel — edit the selected spec conversationally (portals to body). */}
       <SpecChatPanel runId={runId} spec={selectedSpec} />
@@ -734,6 +746,9 @@ export function Automation() {
             isProductDefect={isProductDefect}
             gateRejected={gateRejected}
             gateReport={gateReport}
+            authoringActive={authoringActive}
+            authoringLines={authoringForSelected?.lines ?? []}
+            authoringDone={authoringForSelected?.done ?? false}
             updateSpecPending={updateSpec.isPending}
             startExecutionPending={startExecution.isPending}
             copyLabel={copyLabel}
