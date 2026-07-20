@@ -147,6 +147,19 @@ export function vendorExploreScript(): string {
   return found;
 }
 
+/** The vendored Playwright live reporter (`live_reporter.cjs`) — emits per-test
+ * results so execution status updates immediately instead of at end-of-run. */
+export function vendorLiveReporter(): string {
+  const root = packagedRoot();
+  const found = firstExisting([
+    ...(root ? [path.join(root, "vendor", "live_reporter.cjs")] : []),
+    path.join(__dirname, "..", "..", "vendor", "live_reporter.cjs"),
+    path.join(__dirname, "..", "vendor", "live_reporter.cjs"),
+  ]);
+  if (!found) throw new Error("live_reporter.cjs not found — the agent package is missing vendor/");
+  return found;
+}
+
 /** The vendored live-authoring Chrome launcher (`authoring_browser.cjs`, #403).
  * Uses only Node built-ins (no Playwright), so it runs with a bare `node`. */
 export function vendorAuthoringScript(): string {

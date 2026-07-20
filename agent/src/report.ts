@@ -30,6 +30,12 @@ const STATUS_MAP: Record<string, "pass" | "fail" | "skipped"> = {
   skipped: "skipped",
 };
 
+/** Normalize a raw Playwright test status to the server's vocabulary — shared by
+ * the batch report parse and the live per-test reporter stream so both agree. */
+export function normalizeStatus(pwStatus: string): "pass" | "fail" | "skipped" {
+  return STATUS_MAP[pwStatus] ?? "fail";
+}
+
 // Evidence kind values a Playwright attachment `name` can map to.
 const ATTACHMENT_KIND_MAP: Record<string, string> = {
   screenshot: "screenshot",

@@ -16,10 +16,10 @@ import * as api from "./api";
 import { emit } from "./bus";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
-import { agentNodeModules, childNodeEnv, claudeCli, nodeBin, playwrightCli, vendorAuthoringScript, vendorCaptureScript, vendorExploreScript } from "./paths";
+import { agentNodeModules, childNodeEnv, claudeCli, nodeBin, playwrightCli, vendorAuthoringScript, vendorCaptureScript, vendorExploreScript, vendorLiveReporter } from "./paths";
 import { ensureBrowserHarness } from "./ensureTooling";
 import { applyFixtures, writeConfig } from "./playwrightConfig";
-import { ParsedAttachment, ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
+import { ParsedAttachment, ParsedResult, normalizeStatus, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
 import { agentVersion } from "./version";
 
@@ -53,11 +53,18 @@ interface ProcResult {
   timedOut: boolean;
 }
 
-function runProcess(cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<ProcResult> {
+function runProcess(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+  onLine?: (line: string) => void,
+): Promise<ProcResult> {
   return new Promise((resolve) => {
     // No shell: cmd is always an absolute node path (nodeBin()) and args are
     // absolute script/CLI paths, so this is safe even when paths contain spaces.
-    const child = spawn(cmd, args, { cwd, env });
+    const child = spawn(cmd, args, { cwd, env, windowsHide: true });
     activeChild = child;
     let stdout = "";
     let stderr = "";
@@ -70,9 +77,17 @@ function runProcess(cmd: string, args: string[], cwd: string, env: NodeJS.Proces
         // Already gone.
       }
     }, timeoutMs);
-    child.stdout?.on("data", (d) => {
-      stdout += d.toString();
-    });
+    // Read stdout line-by-line so a per-line callback (the live test reporter)
+    // can forward results mid-run; still accumulate the full text for diagnostics.
+    if (child.stdout) {
+      const rl = readline.createInterface({ input: child.stdout });
+      rl.on("line", (line) => {
+        stdout += line + "\n";
+        if (onLine) {
+          try { onLine(line); } catch { /* a forwarder must never break the run */ }
+        }
+      });
+    }
     child.stderr?.on("data", (d) => {
       stderr += d.toString();
     });
@@ -113,14 +128,19 @@ async function captureAuth(baseUrl: string, storageStatePath: string, sessionSto
   }
 }
 
-async function runPlaywright(workDir: string, workers: number, specFile: string): Promise<ProcResult> {
+async function runPlaywright(
+  workDir: string,
+  workers: number,
+  specFile: string,
+  onLine?: (line: string) => void,
+): Promise<ProcResult> {
   // Invoke Playwright's CLI through the resolved node runtime (`node cli.js test …`)
   // so the same path works from source, via npx, and in a packaged bundle where
   // `node`/`node_modules` live beside the executable rather than on PATH.
   const args = [playwrightCli(), "test", `--workers=${workers}`];
   if (specFile) args.push(specFile);
   const nm = agentNodeModules();
-  return runProcess(nodeBin(), args, workDir, nodePathEnv(nm), EXEC_TIMEOUT_MS);
+  return runProcess(nodeBin(), args, workDir, nodePathEnv(nm), EXEC_TIMEOUT_MS, onLine);
 }
 
 /**
@@ -234,7 +254,9 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     }
     const { storageState, sessionStoragePath } = auth;
 
-    writeConfig(workDir, job.workers, job.headless, job.baseUrl, storageState);
+    writeConfig(workDir, job.workers, job.headless, job.baseUrl, storageState, {
+      liveReporterPath: vendorLiveReporter(),
+    });
 
     // Always inject the generated fixtures.ts (DOM capture on every run) + rewrite
     // spec imports to it. sessionStorage replay (MSAL/SPA tokens) is additionally
@@ -248,6 +270,7 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     );
 
     const total = job.specs.length;
+    const specByFile = new Map(job.specs.map((s) => [s.filename, s]));
     for (let i = 0; i < job.specs.length; i++) {
       const { ticket, caseCode } = identityFor(job.specs[i]);
       await api.postEvent(cfg, job.executionId, "exec.case.running", { ticket, caseCode, index: i + 1, total });
@@ -259,8 +282,58 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
     // as the server's `single_spec`.
     const singleSpec = job.specs.length === 1 ? job.specs[0].filename : "";
 
+    // Post one case's result + progress. The `handled` guard makes it idempotent
+    // per spec, so a result streamed live by the reporter is NOT re-posted by the
+    // end-of-run reconcile pass. Counts are reserved synchronously (before the
+    // awaits), so they're correct by the time the run ends.
+    let passed = 0;
+    let failed = 0;
+    const handled = new Set<string>();
+    const postCaseResult = async (
+      spec: api.JobSpec,
+      status: "pass" | "fail" | "skipped",
+      durationMs: number,
+      error: string,
+    ): Promise<void> => {
+      if (handled.has(spec.filename)) return;
+      handled.add(spec.filename);
+      if (status === "pass") passed++;
+      else if (status === "fail") failed++;
+      const { ticket, caseCode } = identityFor(spec);
+      const progress = total ? Math.trunc((100 * handled.size) / total) : 100;
+      await api
+        .postResult(cfg, job.executionId, { file: spec.filename, status, duration_ms: durationMs, error_message: error })
+        .catch(() => {});
+      await api
+        .postEvent(cfg, job.executionId, "exec.case.result", { ticket, caseCode, status, durationMs })
+        .catch(() => {});
+      await api
+        .postEvent(cfg, job.executionId, "exec.progress", { progress, passed, failed, remaining: total - handled.size })
+        .catch(() => {});
+      emit("case-result", { ticket, caseCode, status, durationMs });
+      emit("progress", { progress, passed, failed, remaining: total - handled.size });
+    };
+
+    // Live streaming (#exec-live): the vendored reporter prints one
+    // `QAGENT_TEST {json}` line per finished test, which runProcess feeds here so
+    // each spec's status reaches the UI the moment Playwright finishes it — rather
+    // than in a burst after the whole run + report.json parse.
+    const LIVE_PREFIX = "QAGENT_TEST ";
+    const onLine = (line: string): void => {
+      if (!line.startsWith(LIVE_PREFIX)) return;
+      let r: { file?: string; status?: string; durationMs?: number; error?: string };
+      try {
+        r = JSON.parse(line.slice(LIVE_PREFIX.length));
+      } catch {
+        return;
+      }
+      const spec = specByFile.get(path.basename(String(r.file || "")));
+      if (!spec) return;
+      void postCaseResult(spec, normalizeStatus(String(r.status || "")), Math.trunc(Number(r.durationMs) || 0), r.error || "");
+    };
+
     const started = Date.now();
-    const { stdout, stderr, timedOut } = await runPlaywright(workDir, job.workers, singleSpec);
+    const { stdout, stderr, timedOut } = await runPlaywright(workDir, job.workers, singleSpec, onLine);
     const elapsedMs = Date.now() - started;
     const procOutput = [stdout, stderr].filter(Boolean).join("\n").trim();
     let runError = "";
@@ -281,70 +354,28 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
       }
     }
 
-    let passed = 0;
-    let failed = 0;
-    const matched = new Set<string>();
-    // Evidence uploads are deferred until AFTER results + complete are posted:
-    // the browser has already closed when a test finishes, so the web should mark
-    // the case/run done immediately rather than waiting on (potentially multi-MB)
-    // video/trace/DOM uploads over the network.
+    // End-of-run reconcile: gather evidence for every reported spec (from
+    // report.json), and post any case the live reporter didn't already stream (a
+    // missed test, or a run-error where nothing streamed). Already-streamed specs
+    // are skipped by postCaseResult's guard — only their evidence is collected.
+    // Evidence uploads are deferred until AFTER results + complete are posted so
+    // the web marks the run done immediately rather than waiting on (multi-MB)
+    // video/trace/DOM uploads.
     const pendingEvidence: { ticket: string; caseCode: string; kind: string; filePath: string }[] = [];
     for (const spec of job.specs) {
       const entry = parsed.find((e) => path.basename(e.file) === spec.filename);
-      if (!entry) continue;
-      matched.add(spec.filename);
-      const durationMs = entry.duration_ms || elapsedMs;
-      await api.postResult(cfg, job.executionId, {
-        file: spec.filename,
-        status: entry.status,
-        duration_ms: durationMs,
-        error_message: entry.error_message,
-      });
-      if (entry.status === "pass") passed++;
-      else if (entry.status === "fail") failed++;
-
       const { ticket, caseCode } = identityFor(spec);
-      await api.postEvent(cfg, job.executionId, "exec.case.result", {
-        ticket,
-        caseCode,
-        status: entry.status,
-        durationMs,
-      });
-      emit("case-result", { ticket, caseCode, status: entry.status, durationMs });
-      const progress = total ? Math.trunc((100 * matched.size) / total) : 100;
-      await api.postEvent(cfg, job.executionId, "exec.progress", {
-        progress,
-        passed,
-        failed,
-        remaining: total - matched.size,
-      });
-      emit("progress", { progress, passed, failed, remaining: total - matched.size });
-
-      for (const att of entry.attachments) {
-        const filePath = path.isAbsolute(att.path) ? att.path : path.join(workDir, att.path);
-        if (!fs.existsSync(filePath)) continue;
-        pendingEvidence.push({ ticket, caseCode, kind: att.kind, filePath });
+      if (entry) {
+        for (const att of entry.attachments) {
+          const filePath = path.isAbsolute(att.path) ? att.path : path.join(workDir, att.path);
+          if (fs.existsSync(filePath)) pendingEvidence.push({ ticket, caseCode, kind: att.kind, filePath });
+        }
+        await postCaseResult(spec, entry.status, entry.duration_ms || elapsedMs, entry.error_message);
+      } else {
+        // No report entry: if it wasn't streamed either, it's a failure (run error
+        // / crash). The guard no-ops when the reporter already streamed it.
+        await postCaseResult(spec, "fail", elapsedMs, runError || "No result reported by Playwright");
       }
-    }
-
-    // Any spec Playwright didn't report on (e.g. run_error) is marked failed.
-    for (const spec of job.specs) {
-      if (matched.has(spec.filename)) continue;
-      failed++;
-      const message = runError || "No result reported by Playwright";
-      await api.postResult(cfg, job.executionId, {
-        file: spec.filename,
-        status: "fail",
-        duration_ms: elapsedMs,
-        error_message: message,
-      });
-      const { ticket, caseCode } = identityFor(spec);
-      await api.postEvent(cfg, job.executionId, "exec.case.result", {
-        ticket,
-        caseCode,
-        status: "fail",
-        durationMs: elapsedMs,
-      });
     }
 
     // Keep the LAST ~20000 chars so the failing tail survives truncation,
