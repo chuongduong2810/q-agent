@@ -123,7 +123,7 @@ export function ReviewCenter() {
       </div>
 
       <div className="mb-3.5 hidden md:block">
-        <PipelineRail stage={4} />
+        <PipelineRail stage={2} />
       </div>
 
       <div className="mb-4 grid grid-cols-3 gap-3 md:grid-cols-4">

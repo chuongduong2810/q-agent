@@ -78,7 +78,7 @@ export function CreateLinkSync() {
       </div>
 
       <div className="mb-4 hidden md:block">
-        <PipelineRail stage={5} />
+        <PipelineRail stage={3} />
       </div>
 
       {state === "idle" && (

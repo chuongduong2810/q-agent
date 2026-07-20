@@ -13,7 +13,9 @@ from app.db import Base, UTCDateTime, timestamp_column
 RUN_STATUSES = (
     "processing",  # AI analysis + test-case generation
     "review",
-    "sync",  # create approved cases in the provider + link to work items
+    "sync",  # create approved cases in the provider + link to work items. NOTE:
+    # this is the pipeline's "Link" stage (UI route /sync, screen CreateLinkSync) —
+    # NOT a "Sync tickets" stage. Ticket sync + selection happen before a run exists.
     "automation",
     "executing",
     "evidence",

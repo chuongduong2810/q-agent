@@ -34,7 +34,7 @@
     "searchPlaceholder": "Tìm kiếm hoặc hỏi Q‑Agent bất cứ điều gì…",
     "newRun": "Lượt chạy mới",
     "switchRun": "Chuyển lượt chạy",
-    "stageOfNine": "giai đoạn {{stage}} / 9"
+    "stageOfTotal": "giai đoạn {{stage}} / {{total}}"
   },
   "run": {
     "back": "Toàn bộ Q‑Agent",

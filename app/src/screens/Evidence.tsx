@@ -115,7 +115,7 @@ export function Evidence() {
       </div>
 
       <div className="mb-4 hidden md:block">
-        <PipelineRail stage={8} />
+        <PipelineRail stage={6} />
       </div>
 
       {isLoading ? (
