@@ -15,7 +15,7 @@ export default defineConfig({
   testDir: '.',
   timeout: __TIMEOUT__,
   workers: __WORKERS__,
-  reporter: [['json', { outputFile: 'report.json' }]],
+  reporter: __REPORTERS__,
   use: {
     headless: __HEADLESS__,
     screenshot: 'only-on-failure',
@@ -35,6 +35,10 @@ export interface ConfigOptions {
   actionTimeoutMs?: number;
   /** When false, `video`/`trace` are `'off'` — intermediate heal attempts. */
   heavyEvidence?: boolean;
+  /** Absolute path to the vendored live reporter (`live_reporter.cjs`). When set,
+   * it's added alongside the JSON reporter so per-test results stream out during
+   * the run (execution only; heal/regen don't need it). */
+  liveReporterPath?: string;
 }
 
 /**
@@ -56,7 +60,12 @@ export function writeConfig(
   storageState = "",
   opts: ConfigOptions = {}
 ): void {
-  const { testTimeoutMs = 30000, actionTimeoutMs, heavyEvidence = true } = opts;
+  const { testTimeoutMs = 30000, actionTimeoutMs, heavyEvidence = true, liveReporterPath } = opts;
+  // JSON reporter (drives report.json for evidence + reconcile) + optionally the
+  // live reporter (streams per-test results). Paths JSON-escaped for Windows.
+  const reporters = ["['json', { outputFile: 'report.json' }]"];
+  if (liveReporterPath) reporters.push(`[${JSON.stringify(liveReporterPath)}]`);
+  const reportersStr = `[${reporters.join(", ")}]`;
   const extraLines: string[] = [];
   if (baseUrl) extraLines.push(`    baseURL: ${JSON.stringify(baseUrl)},`);
   if (storageState) extraLines.push(`    storageState: ${JSON.stringify(storageState)},`);
@@ -69,6 +78,7 @@ export function writeConfig(
   const content = PLAYWRIGHT_CONFIG_TEMPLATE.replace("__TIMEOUT__", String(Math.trunc(testTimeoutMs)))
     .replace("__WORKERS__", String(workers))
     .replace("__HEADLESS__", headless ? "true" : "false")
+    .replace("__REPORTERS__", reportersStr)
     .replace("__VIDEO__", retain)
     .replace("__TRACE__", retain)
     .replace("__EXTRA_USE__", extraUse);
