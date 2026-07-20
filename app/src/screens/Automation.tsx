@@ -37,7 +37,7 @@ import { useAutomationEvents } from "./automation/useAutomationEvents";
 import { useThinkingSteps } from "./automation/useThinkingSteps";
 import { useCodeFolding } from "./automation/useCodeFolding";
 import { TargetRepoPanel } from "./automation/TargetRepoPanel";
-import { ThinkingBanner, GeneratingBanner, HealProgressBanner, ExploreProgressBanner } from "./automation/ProgressBanners";
+import { ThinkingBanner, GeneratingBanner, HealProgressBanner, ExploreProgressBanner, AuthoringProgressBanner } from "./automation/ProgressBanners";
 import { NoAutomationEmptyState } from "./automation/EmptyState";
 import { SpecList } from "./automation/SpecList";
 import { ProductDefectBanner, BlockedBanner } from "./automation/banners";
@@ -119,7 +119,7 @@ export function Automation() {
   const generating = (autoStatus?.generating ?? false) || generateAutomation.isPending;
 
   // Live generation, self-heal, and DOM-exploration progress from the run's WS stream.
-  const { genProgress, healProgress, exploreProgress } = useAutomationEvents(runId, generating);
+  const { genProgress, healProgress, exploreProgress, authoringProgress } = useAutomationEvents(runId, generating);
 
   const specCount = specs ? specs.length : 0;
 
@@ -645,6 +645,8 @@ export function Automation() {
       {exploreProgress && exploringThisCase && (
         <ExploreProgressBanner exploreProgress={exploreProgress} />
       )}
+
+      {authoringProgress && <AuthoringProgressBanner authoringProgress={authoringProgress} />}
 
       {/* AI chat panel — edit the selected spec conversationally (portals to body). */}
       <SpecChatPanel runId={runId} spec={selectedSpec} />

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { THINKING_STEPS } from "./useThinkingSteps";
 import { describeExploreStep } from "./exploreStep";
-import type { ExploreProgress, ExploreStep, GenProgress, HealProgress } from "./useAutomationEvents";
+import type { AuthoringProgress, ExploreProgress, ExploreStep, GenProgress, HealProgress } from "./useAutomationEvents";
 
 /** Full-height placeholder card shown while the first generation pass runs. */
 export function ThinkingBanner({ runCode, thinkStep }: { runCode: string | undefined; thinkStep: number }) {
@@ -98,6 +98,44 @@ export function HealProgressBanner({ healProgress }: { healProgress: HealProgres
               })
             : t("progress.heal.runningSpec")}
         </div>
+      </div>
+    </GlassCard>
+  );
+}
+
+/** Live authoring trail (#400): the streamed step log while the paired agent
+ * drives browser-harness to author a spec — Claude's messages + tool calls. */
+export function AuthoringProgressBanner({ authoringProgress }: { authoringProgress: AuthoringProgress }) {
+  const { lines, done } = authoringProgress;
+  return (
+    <GlassCard className="mb-3.5 p-4 md:p-[22px]" style={{ borderColor: "rgba(139,92,246,.32)" }}>
+      <div className="mb-[14px] flex items-center gap-[13px]">
+        <div
+          className="flex h-11 w-11 items-center justify-center rounded-[14px]"
+          style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)", boxShadow: "0 0 26px rgba(139,92,246,.55)" }}
+        >
+          <Sparkles size={22} color="#fff" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[15px] font-bold">Live authoring</div>
+          <div className="mt-0.5 text-xs text-muted">Claude is driving the browser to author this spec</div>
+        </div>
+      </div>
+      <div className="flex max-h-[280px] flex-col gap-1.5 overflow-auto font-mono text-[12px]">
+        {lines.map((l, i) => (
+          <div key={i} className="whitespace-pre-wrap break-words text-muted">
+            {l}
+          </div>
+        ))}
+        {!done && (
+          <div className="flex items-center gap-2 text-[12px]">
+            <span
+              className="h-[14px] w-[14px] shrink-0 rounded-full border-2"
+              style={{ borderColor: "rgba(167,139,250,.35)", borderTopColor: "#a78bfa", animation: "spin .8s linear infinite" }}
+            />
+            <span className="text-ink">working…</span>
+          </div>
+        )}
       </div>
     </GlassCard>
   );
