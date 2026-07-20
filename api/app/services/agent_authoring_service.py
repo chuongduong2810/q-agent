@@ -40,8 +40,16 @@ def request_authoring(
     model: str,
     max_budget_usd: float,
 ) -> None:
-    """Enqueue one authoring session for the paired agent to claim."""
+    """Enqueue one authoring session for the paired agent to claim.
+
+    Idempotent per case: if a session for ``case_id`` is already queued or running
+    it is NOT enqueued again. Without this guard a stale ``queued`` session left in
+    ``_pending`` by an earlier generate pass could be claimed and re-author a case
+    that already has a spec (#419).
+    """
     with _lock:
+        if any(s["case_id"] == case_id and s["status"] in ("queued", "running") for s in _pending):
+            return
         _pending.append(
             {
                 "session_id": session_id,
@@ -103,3 +111,33 @@ def is_in_flight(project_key: str, repo: str) -> bool:
         return any(
             s["project_key"] == project_key and s["repo"] == repo for s in _pending
         )
+
+
+def drop_queued_cases(case_ids: set[int]) -> int:
+    """Remove not-yet-claimed (``queued``) sessions for the given cases (#419).
+
+    A ``running`` session (already being authored on the agent) is left alone so
+    an in-flight job still finalizes. Used before a fresh incremental generate to
+    evict stale sessions for cases that now already have a spec.
+    """
+    if not case_ids:
+        return 0
+    with _lock:
+        before = len(_pending)
+        _pending[:] = [
+            s for s in _pending if not (s["case_id"] in case_ids and s["status"] == "queued")
+        ]
+        return before - len(_pending)
+
+
+def purge_run(run_id: int) -> int:
+    """Drop every pending authoring session for a run and return how many were removed.
+
+    Called when a run is cancelled/stopped (#420) and defensively before a fresh
+    generate pass (#419), so an unclaimed session can never be picked up later and
+    re-author a case that is no longer in flight.
+    """
+    with _lock:
+        before = len(_pending)
+        _pending[:] = [s for s in _pending if s.get("run_id") != run_id]
+        return before - len(_pending)

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { ArrowRight, ListChecks, Loader2, Pause, Play, Plus } from "lucide-react";
+import { ArrowRight, ListChecks, Loader2, Pause, Play, Plus, Square } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,8 +15,10 @@ import {
 import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
 import { RunBulkBar } from "@/components/runs/RunBulkBar";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/misc";
-import { useRuns } from "@/hooks/queries";
+import { toast } from "@/lib/toast";
+import { useCancelRun, useRuns } from "@/hooks/queries";
 import { useUI, type RunFilter } from "@/store/ui";
 import type { RunOut } from "@/types/api";
 
@@ -200,10 +203,26 @@ function RunRow({
   onPlay: () => void;
 }) {
   const { t } = useTranslation("runs");
+  const cancelRun = useCancelRun();
+  const [confirmStop, setConfirmStop] = useState(false);
   const badge = runBadge(runEffectiveStatus(run));
   const working = isWorkingRun(run.status);
   const paused = isPausedRun(run.status);
   const isReview = run.status === "review";
+  // A run can be stopped whenever it isn't already terminal — this cancels the
+  // run AND all its in-flight work (authoring, self-heal, execution, analysis)
+  // and resets stuck rows server-side. See #420 / ADR 0005.
+  const canStop = !isTerminalRun(run.status);
+
+  const handleStop = () => {
+    cancelRun.mutate(run.id, {
+      onSuccess: () => {
+        toast.success(t("actions.toast.cancelled"));
+        setConfirmStop(false);
+      },
+      onError: (e) => toast.error(e instanceof Error ? e.message : t("actions.toast.cancelFailed")),
+    });
+  };
   // Play (start/watch execution) is offered once a run is past analysis and not
   // terminal — i.e. review and every later in-flight stage.
   const canRun = !isTerminalRun(run.status) && run.status !== "processing";
@@ -318,6 +337,19 @@ function RunRow({
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-1.5">
+        {canStop && (
+          <button
+            type="button"
+            title={t("row.stopRun")}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirmStop(true);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-[rgba(251,113,133,.16)] text-[#fb7185] transition-colors hover:bg-[rgba(251,113,133,.28)]"
+          >
+            <Square size={13} strokeWidth={2.6} fill="currentColor" />
+          </button>
+        )}
         {canRun && (
           <button
             type="button"
@@ -344,6 +376,17 @@ function RunRow({
         </button>
         <RunActionsMenu run={run} />
       </div>
+
+      <ConfirmDialog
+        open={confirmStop}
+        title={t("actions.confirmCancel.title")}
+        message={t("actions.confirmCancel.message", { name: run.name })}
+        confirmLabel={t("actions.confirmCancel.confirm")}
+        danger
+        loading={cancelRun.isPending}
+        onConfirm={handleStop}
+        onClose={() => setConfirmStop(false)}
+      />
     </motion.div>
   );
 }

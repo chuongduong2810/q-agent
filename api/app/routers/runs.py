@@ -27,11 +27,11 @@ from app.db import get_db, utcnow
 from app.deps_auth import current_user
 from app.models.claude_usage import ClaudeUsage
 from app.models.comment import TicketComment
-from app.models.execution import Execution
+from app.models.execution import Execution, ExecutionResult
 from app.models.linked import LinkedTestCase
 from app.models.report import Report
 from app.models.run import TERMINAL_RUN_STATUSES, Run, RunTicket
-from app.models.testcase import TestCase
+from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.routers import automation as automation_router
@@ -382,6 +382,74 @@ def regenerate_run(
     return run
 
 
+def _stop_run_work(db: Session, run: Run) -> None:
+    """Stop every in-flight process for a run and reset stuck rows (#420).
+
+    Complements the cooperative cancel (``run_control``): once the run is flipped
+    to ``cancelled`` this evicts queued/in-memory work so nothing gets claimed or
+    resumed later, and rewrites rows still marked in-flight to a terminal/idle
+    value so the UI stops showing perpetual spinners. Completed rows are left
+    untouched (see ADR 0005 / the confirmed "stop + reset stuck rows" scope).
+    """
+    run_id = run.id
+
+    # 1) Specs left "running" by live-authoring or self-heal: keep whatever was
+    #    authored so far (-> draft), else mark blocked with a reason.
+    for spec in (
+        db.query(AutomationSpec)
+        .join(TestCase, AutomationSpec.test_case_id == TestCase.id)
+        .filter(TestCase.run_id == run_id, AutomationSpec.status == "running")
+        .all()
+    ):
+        if (spec.code or "").strip():
+            spec.status = "draft"
+        else:
+            spec.status = "blocked"
+            spec.block_reason = (spec.block_reason or "").strip() or "Stopped before authoring finished."
+        db.add(spec)
+
+    # 2) In-flight executions + their pending/running case results.
+    for execution in (
+        db.query(Execution)
+        .filter(Execution.run_id == run_id, Execution.status.in_(("queued", "running")))
+        .all()
+    ):
+        execution.status = "failed"
+        db.add(execution)
+        for result in (
+            db.query(ExecutionResult)
+            .filter(
+                ExecutionResult.execution_id == execution.id,
+                ExecutionResult.status.in_(("pending", "running")),
+            )
+            .all()
+        ):
+            result.status = "skipped"
+            db.add(result)
+
+    # 3) Tickets stuck mid analyze/generate.
+    for run_ticket in (
+        db.query(RunTicket)
+        .filter(RunTicket.run_id == run_id, RunTicket.gen_status.in_(("analyzing", "generating")))
+        .all()
+    ):
+        run_ticket.gen_status = "error"
+        if not (run_ticket.analysis_error or "").strip():
+            run_ticket.analysis_error = "Stopped by user."
+        db.add(run_ticket)
+
+    db.commit()
+
+    # 4) Purge in-memory queues/registries so no worker picks the run up again.
+    from app.services import agent_authoring_service, agent_explore_service, playwright_runner
+
+    agent_authoring_service.purge_run(run_id)
+    agent_explore_service.purge_run(run_id)
+    playwright_runner.purge_run(run_id)
+    link_service.forget_run(run_id)
+    automation_router.forget_generating(run_id)
+
+
 @router.post("/{run_id}/cancel", response_model=RunOut)
 def cancel_run(
     run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
@@ -390,8 +458,10 @@ def cancel_run(
 
     Persists ``cancel_requested``/``cancelled_at``, signals the in-memory
     cancel event, kills any tracked live subprocess (mid-case Playwright kill),
-    then transitions the run to ``cancelled`` — authoritative because every
-    worker checkpoint checks the terminal guard before advancing.
+    transitions the run to ``cancelled``, then stops/cleans up every in-flight
+    process + stuck DB row for the run (#420 — authoring, self-heal, execution,
+    analysis). Authoritative because every worker checkpoint checks the terminal
+    guard before advancing.
     """
     run = get_owned_or_404(db, Run, run_id, user)
     if run.status in TERMINAL_RUN_STATUSES:
@@ -405,6 +475,7 @@ def cancel_run(
     run_control.request_cancel(run.id)
     run_control.kill_processes(run.id)
     set_run_status(db, run, "cancelled")
+    _stop_run_work(db, run)
 
     audit_service.record(
         category="run", actor_type="user", action="Cancelled run", target=run.code,

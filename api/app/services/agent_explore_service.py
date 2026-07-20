@@ -94,6 +94,18 @@ def request_exploration(
         )
 
 
+def purge_run(run_id: int) -> int:
+    """Drop every pending exploration session for a run (#420); return how many.
+
+    Called when a run is stopped so an unclaimed/queued session can't be picked up
+    by the agent after cancellation.
+    """
+    with _lock:
+        before = len(_pending)
+        _pending[:] = [s for s in _pending if s.get("run_id") != run_id]
+        return before - len(_pending)
+
+
 def claim_next(owner_id: int | None) -> dict | None:
     """Claim the oldest queued session for ``owner_id`` (marks it running).
 

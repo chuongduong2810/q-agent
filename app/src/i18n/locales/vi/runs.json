@@ -32,7 +32,8 @@
     "cases_other": "{{count}} trường hợp",
     "pass": "Đạt {{pct}}",
     "runExecution": "Chạy thực thi",
-    "openRun": "Mở lượt chạy"
+    "openRun": "Mở lượt chạy",
+    "stopRun": "Dừng lượt chạy — huỷ mọi tiến trình đang chạy"
   },
   "actions": {
     "menu": "Thao tác lượt chạy",
