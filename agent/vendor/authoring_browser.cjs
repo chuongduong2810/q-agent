@@ -1,5 +1,5 @@
 // Long-lived, pre-authenticated automation Chrome for live spec-authoring (#400).
-// Args: baseUrl, port, profileDir.
+// Args: baseUrl, port, profileDir, [sessionStoragePath].
 //
 // Launches a real Chrome/Edge (NOT via Playwright's launcher, so no automation
 // fingerprint) on a FIXED --remote-debugging-port using a DEDICATED, persistent
@@ -8,7 +8,16 @@
 // the Chrome "Allow remote debugging" popup / default-profile lockdown (see
 // browser_harness/daemon.py:128-131,148). Auth is inherited from the persistent
 // profile — reuse the capture `browser-profile` dir (already logged in via the
-// manual-login capture flow), so the session is present without any injection.
+// manual-login capture flow), so cookies + localStorage are present.
+//
+// sessionStorage (where MSAL/SPA auth tokens live) is NEVER persisted to a Chrome
+// profile on disk, so a profile-only relaunch lands unauthenticated for such apps.
+// When a `sessionStoragePath` is given AND Playwright is resolvable (agent side —
+// the API container ships no Playwright and passes no path), we attach over CDP
+// and register an init script that replays the saved sessionStorage for the
+// matching origin before app code runs — the same trick the run/explore paths use.
+// The Playwright connection is kept alive for the whole session so the init-script
+// registration persists for the tabs browser-harness opens.
 //
 // Unlike capture_auth.cjs (a short snapshot loop) this stays ALIVE for the whole
 // authoring session and only tears Chrome down when the parent closes our stdin
@@ -19,7 +28,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const [, , baseUrl, portArg, profileDir] = process.argv;
+const [, , baseUrl, portArg, profileDir, sessionStoragePath] = process.argv;
 const PORT = parseInt(portArg, 10);
 
 process.on('unhandledRejection', (e) => console.error('authoring_browser unhandledRejection:', e && (e.message || e)));
@@ -66,6 +75,38 @@ async function waitForCDP(port, timeoutMs) {
   return false;
 }
 
+// Replay saved sessionStorage into the running Chrome so MSAL/SPA apps that keep
+// their token in sessionStorage are authenticated. Playwright is OPTIONAL: if it
+// can't be required (the API container ships none) or no path was given, this is
+// a no-op. Returns the connected Playwright browser (kept alive so the init-script
+// registration survives) or null.
+async function replaySessionStorage(port) {
+  if (!sessionStoragePath) return null;
+  let byOrigin;
+  try { byOrigin = JSON.parse(fs.readFileSync(sessionStoragePath, 'utf-8')); }
+  catch { return null; }
+  if (!byOrigin || typeof byOrigin !== 'object' || !Object.keys(byOrigin).length) return null;
+  let chromium;
+  try { ({ chromium } = require('playwright')); } catch { return null; }
+  try {
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    const ctx = browser.contexts()[0];
+    if (ctx) {
+      await ctx.addInitScript((data) => {
+        try {
+          const o = data && data[location.origin];
+          if (o) for (const k of Object.keys(o)) window.sessionStorage.setItem(k, o[k]);
+        } catch (e) {}
+      }, byOrigin);
+      console.error('authoring_browser: sessionStorage replay armed for', Object.keys(byOrigin).join(','));
+    }
+    return browser;
+  } catch (e) {
+    console.error('authoring_browser: sessionStorage replay failed:', e && e.message);
+    return null;
+  }
+}
+
 (async () => {
   if (!PORT || Number.isNaN(PORT)) { console.error('authoring_browser: invalid port', portArg); process.exit(1); }
   const exe = findBrowser();
@@ -101,14 +142,19 @@ async function waitForCDP(port, timeoutMs) {
     process.exit(1);
   }
 
-  // Signal readiness on stdout so the parent can proceed (it also polls
-  // /json/version independently). The daemon resolves BU_CDP_URL to the WS.
+  // Arm sessionStorage replay (best-effort) BEFORE signalling readiness, so the
+  // token is restored before browser-harness navigates.
+  const pw = await replaySessionStorage(PORT);
+
+  // Signal readiness on stdout so the parent proceeds. The daemon resolves
+  // BU_CDP_URL to the WS.
   console.log(`AUTHORING_BROWSER_READY ${PORT}`);
 
   let shuttingDown = false;
   const shutdown = (code) => {
     if (shuttingDown) return;
     shuttingDown = true;
+    try { if (pw) pw.close(); } catch {}
     try { child.kill(); } catch {}
     process.exit(code || 0);
   };
