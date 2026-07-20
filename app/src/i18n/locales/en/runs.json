@@ -32,7 +32,8 @@
     "cases_other": "{{count}} cases",
     "pass": "Pass {{pct}}",
     "runExecution": "Run execution",
-    "openRun": "Open run"
+    "openRun": "Open run",
+    "stopRun": "Stop run — cancel all in-flight work"
   },
   "actions": {
     "menu": "Run actions",

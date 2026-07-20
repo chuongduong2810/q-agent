@@ -1020,6 +1020,20 @@ def heal_run_busy(run_id: int) -> bool:
     return any(state["runId"] == run_id for state in _healing.values())
 
 
+def purge_run(run_id: int) -> int:
+    """Forget in-flight heal tracking for a run's cases (#420); return how many.
+
+    The live heal subprocess itself is killed via ``run_control.kill_processes``;
+    this just clears the in-memory heal-busy registry so the run's cases aren't
+    reported as still healing after a stop.
+    """
+    with _healing_lock:
+        stale = [cid for cid, state in _healing.items() if state.get("runId") == run_id]
+        for cid in stale:
+            _healing.pop(cid, None)
+        return len(stale)
+
+
 def start_heal(case_id: int, run_id: int) -> bool:
     """Register + launch a self-heal pass for one case. Returns False if another
     case in the same run is already healing (idempotent True if this exact case

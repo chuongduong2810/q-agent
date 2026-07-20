@@ -27,7 +27,7 @@ from app.deps_auth import current_user
 from app.logging import logger
 from app.models.agent_device import AgentDevice
 from app.models.execution import Execution, ExecutionResult
-from app.models.run import Run, RunTicket
+from app.models.run import Run, RunTicket, TERMINAL_RUN_STATUSES
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
 from app.models.user import User
@@ -64,6 +64,11 @@ _regenerating_cases: set[int] = set()
 # Case ids with an in-flight AI-chat spec edit (background thread) — guards against
 # double-triggering while Claude edits the same spec.
 _chatting_cases: set[int] = set()
+
+
+def forget_generating(run_id: int) -> None:
+    """Clear the in-flight generation marker for a run (#420, on stop)."""
+    _generating.discard(run_id)
 
 
 def is_generating(run_id: int) -> bool:
@@ -293,6 +298,10 @@ def finalize_authored_spec(
     case = db.get(TestCase, case_id)
     if run is None or case is None:
         return None
+    # A run that was cancelled/stopped while its authoring job was still running on
+    # the agent must not be resurrected by the late post-back (#419/#420): drop it.
+    if run.status in TERMINAL_RUN_STATUSES or run_control.is_cancelled(run_id, db):
+        return None
     run_context.set_run(run_id)
     try:
         spec = _generate_one(db, run, case, authored={"code": code, "discovered": discovered})
@@ -485,6 +494,10 @@ def _run_generation(run_id: int, force: bool = False) -> None:
                     .all()
                 }
                 cases = [c for c in cases if c.id not in existing_case_ids]
+                # Evict any stale queued live-authoring sessions for cases that
+                # already have a spec, so the agent can't re-author them (#419).
+                from app.services import agent_authoring_service
+                agent_authoring_service.drop_queued_cases(existing_case_ids)
             total = len(cases)
             cancelled = False
             for index, case in enumerate(cases, start=1):

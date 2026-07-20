@@ -31,6 +31,11 @@ def is_running(run_id: int) -> bool:
     return run_id in _running
 
 
+def forget_run(run_id: int) -> None:
+    """Clear the in-flight create+link marker for a run (#420, on stop)."""
+    _running.discard(run_id)
+
+
 def link_status(db, run_id: int) -> dict[str, Any]:
     """Current create+link status + per-ticket results for a run."""
     rows = db.query(LinkedTestCase).filter(LinkedTestCase.run_id == run_id).all()
