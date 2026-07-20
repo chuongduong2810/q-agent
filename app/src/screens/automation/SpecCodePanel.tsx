@@ -1,4 +1,4 @@
-import { ChevronsDownUp, ChevronsUpDown, Copy, Download, Pencil, Play, Save, Sparkles, Telescope, Wand2, X } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Copy, Download, FileCode2, Pencil, Play, Save, Sparkles, Telescope, Wand2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { OverflowMenu } from "@/components/ui/OverflowMenu";
 import type { AutomationSpecOut } from "@/types/api";
@@ -292,6 +292,17 @@ export function SpecCodePanel({
       ) : authoringActive ? (
         <div className="px-4 py-[18px]" style={{ minHeight: 380, background: "rgba(8,8,13,.6)" }}>
           <AuthoringTrail lines={authoringLines} done={authoringDone} />
+        </div>
+      ) : selectedSpec && !(selectedSpec.code ?? "").trim() ? (
+        // Spec row exists but has no code yet (not generated) — show a friendly
+        // empty state instead of a blank one-line editor.
+        <div
+          className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center"
+          style={{ minHeight: 380, background: "rgba(8,8,13,.6)" }}
+        >
+          <FileCode2 size={30} className="text-faint" />
+          <div className="text-[13.5px] font-semibold text-ink-soft">{t("spec.empty.title")}</div>
+          <div className="max-w-sm text-xs text-muted">{t("spec.empty.hint")}</div>
         </div>
       ) : selectedSpec ? (
         <div className="relative">
