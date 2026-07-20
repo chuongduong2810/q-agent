@@ -99,6 +99,30 @@ export function playwrightCli(): string {
   return path.join(path.dirname(require.resolve("playwright/package.json")), "cli.js");
 }
 
+/** The bundled Claude Code CLI (`@anthropic-ai/claude-code`), so no separate
+ * `claude` install / PATH shim is needed (#400 — live-authoring drives it on the
+ * agent). NOTE: the package ships a NATIVE binary (`bin/claude[.exe]`), not a JS
+ * entry — spawn it DIRECTLY (not via node). Resolves the package's `bin` entry
+ * across source/npx and the packaged bundle. */
+export function claudeCli(): string {
+  const relFromDir = (dir: string): string => {
+    const fallback = path.join(dir, "bin", process.platform === "win32" ? "claude.exe" : "claude");
+    try {
+      const bin = (require(path.join(dir, "package.json")) as { bin?: string | Record<string, string> }).bin;
+      const rel = typeof bin === "string" ? bin : bin ? Object.values(bin)[0] : null;
+      return rel ? path.join(dir, rel) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const root = packagedRoot();
+  if (root) {
+    const dir = path.join(root, "node_modules", "@anthropic-ai", "claude-code");
+    if (fs.existsSync(dir)) return relFromDir(dir);
+  }
+  return relFromDir(path.dirname(require.resolve("@anthropic-ai/claude-code/package.json")));
+}
+
 /** The vendored headed-login capture script (`capture_auth.cjs`). */
 export function vendorCaptureScript(): string {
   const root = packagedRoot();

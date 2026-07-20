@@ -16,7 +16,8 @@ import * as api from "./api";
 import { emit } from "./bus";
 import { AgentConfig } from "./config";
 import { ensureChromium } from "./ensureBrowser";
-import { agentNodeModules, childNodeEnv, nodeBin, playwrightCli, vendorAuthoringScript, vendorCaptureScript, vendorExploreScript } from "./paths";
+import { agentNodeModules, childNodeEnv, claudeCli, nodeBin, playwrightCli, vendorAuthoringScript, vendorCaptureScript, vendorExploreScript } from "./paths";
+import { ensureBrowserHarness } from "./ensureTooling";
 import { applyFixtures, writeConfig } from "./playwrightConfig";
 import { ParsedAttachment, ParsedResult, parsePlaywrightReport, parseSpecIdentity } from "./report";
 import { hasSessionStorage, hasValidSession, sessionPathsForOrigin } from "./session";
@@ -1065,6 +1066,15 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
       return;
     }
 
+    // Ensure browser-harness is installed (first run provisions it via uv). Its
+    // bin dir is prepended to the claude subprocess PATH so `browser-harness`
+    // resolves for the Bash calls Claude makes.
+    const bh = await ensureBrowserHarness();
+    if (!bh.ok) {
+      await finalize("", { routes: [], selectors: [] }, `browser-harness unavailable: ${bh.error || "unknown"}`, false);
+      return;
+    }
+
     await api
       .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
         case: job.caseId, phase: "driving", message: "Driving the app live with browser-harness",
@@ -1073,7 +1083,9 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
 
     // 2) Local agentic Claude drives browser-harness (BU_CDP_URL → our Chrome),
     //    writing the spec + discovered.json into workDir. System prompt via a
-    //    file (avoids a huge argv); task prompt via stdin.
+    //    file (avoids a huge argv); task prompt via stdin. Invoked as
+    //    `nodeBin() <bundled claude cli.js>` so no `claude` install/PATH shim is
+    //    needed (and no Windows .cmd shell hack).
     const systemFile = path.join(workDir, "system-prompt.txt");
     fs.writeFileSync(systemFile, job.systemPrompt, "utf-8");
     // Use the app's saved Claude credential (shipped in the claim) so we don't
@@ -1088,27 +1100,30 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
       fs.writeFileSync(credFile, job.claudeCredentials, "utf-8");
       try { fs.chmodSync(credFile, 0o600); } catch { /* best-effort on Windows */ }
     }
-    // On Windows `claude` is a .cmd shim, which Node can only launch via a shell;
-    // quote the path-bearing args there. On POSIX we spawn without a shell.
-    const useShell = process.platform === "win32";
-    const q = (s: string) => (useShell ? `"${s}"` : s);
     const claudeArgs = [
       "-p",
       "--output-format", "json",
       "--model", job.model,
-      "--append-system-prompt-file", q(systemFile),
+      "--append-system-prompt-file", systemFile,
       "--allowedTools", "Bash", "Read", "Write", "Glob", "Grep",
       "--dangerously-skip-permissions",
-      "--add-dir", q(workDir),
+      "--add-dir", workDir,
       "--max-budget-usd", String(job.maxBudgetUsd),
     ];
-    const claudeEnv: NodeJS.ProcessEnv = { ...process.env, BU_CDP_URL: `http://127.0.0.1:${port}` };
+    // Prepend browser-harness's bin dir to PATH (overwrite the same-case key so
+    // Windows doesn't end up with both Path and PATH).
+    const pathVar = Object.keys(process.env).find((k) => k.toLowerCase() === "path") || "PATH";
+    const claudeEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      BU_CDP_URL: `http://127.0.0.1:${port}`,
+      [pathVar]: `${bh.binDir}${path.delimiter}${process.env[pathVar] || ""}`,
+    };
     if (claudeConfigDir) claudeEnv.CLAUDE_CONFIG_DIR = claudeConfigDir;
-    claude = spawn("claude", claudeArgs, {
+    // Spawn the native `claude` binary directly (it is not a JS entry).
+    claude = spawn(claudeCli(), claudeArgs, {
       cwd: workDir,
       env: claudeEnv,
       stdio: ["pipe", "pipe", "pipe"],
-      shell: useShell,
     });
     activeChild = claude;
     let cout = "";
