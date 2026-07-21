@@ -21,7 +21,7 @@ import { PipelineRail } from "@/components/ui/PipelineRail";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useAnnotate, useAutoAnnotate, useEvidence } from "@/hooks/queries";
+import { useAnnotate, useAutoAnnotate, useEvidence, useSettings } from "@/hooks/queries";
 import { useEvidenceUploading } from "@/hooks/useRunEvents";
 import { useUI, type AnnotationTool, type EvidenceTab } from "@/store/ui";
 import type { ExecutionResultOut } from "@/types/api";
@@ -81,6 +81,10 @@ export function Evidence() {
   // The Local Agent uploads a finished run's evidence AFTER reporting results, so
   // there's a window where the results are here but their artifacts aren't yet.
   const evidenceUploading = useEvidenceUploading();
+  // Video is only recorded when "Capture video" is on (default off), so an empty
+  // Video tab usually means the setting is off — not that upload is pending.
+  const { data: settings } = useSettings();
+  const videoEnabled = settings?.video ?? false;
   const annotate = useAnnotate(runId);
   const autoAnnotate = useAutoAnnotate(runId);
 
@@ -344,6 +348,8 @@ export function Evidence() {
                   <EvidencePanel
                     tab={evidenceTab}
                     result={selectedResult}
+                    evidenceUploading={evidenceUploading}
+                    videoEnabled={videoEnabled}
                     tool={tool}
                     setTool={setTool}
                     onAnnotate={(evidenceId, shapes) =>
@@ -391,6 +397,8 @@ export function Evidence() {
 function EvidencePanel({
   tab,
   result,
+  evidenceUploading,
+  videoEnabled,
   tool,
   setTool,
   onAnnotate,
@@ -399,6 +407,12 @@ function EvidencePanel({
 }: {
   tab: EvidenceTab;
   result: ExecutionResultOut;
+  /** The agent is still uploading this run's evidence — show a loader for a
+   * missing artifact instead of an empty state. */
+  evidenceUploading: boolean;
+  /** Whether "Capture video" is enabled — an empty Video tab means "off", not
+   * "still uploading", when this is false. */
+  videoEnabled: boolean;
   tool: AnnotationTool;
   setTool: (t: AnnotationTool) => void;
   onAnnotate: (evidenceId: number, shapes: { tool: string; x: number; y: number }[]) => void;
@@ -421,6 +435,7 @@ function EvidencePanel({
 
   if (tab === "screenshot") {
     if (!screenshot) {
+      if (evidenceUploading) return <ArtifactUploading />;
       const passed = result.status === "pass";
       return (
         <div className="overflow-hidden rounded-[14px] border border-white/10">
@@ -561,12 +576,15 @@ function EvidencePanel({
   if (tab === "video") {
     const video = result.evidence.find((e) => e.kind === "video");
     if (!video) {
+      if (evidenceUploading) return <ArtifactUploading />;
       return (
         <div className="flex aspect-video flex-col items-center justify-center gap-3.5 rounded-[14px] border border-white/10 bg-gradient-to-br from-[#12121a] to-[#1b1b28]">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(139,92,246,.2)]">
             <Play size={26} fill="#c4b5fd" stroke="none" />
           </div>
-          <div className="font-mono text-[13px] text-[#9494a6]">{tr("evidence.noVideo", { caseCode: result.caseCode })}</div>
+          <div className="max-w-[340px] text-center font-mono text-[13px] leading-relaxed text-[#9494a6]">
+            {videoEnabled ? tr("evidence.noVideo", { caseCode: result.caseCode }) : tr("evidence.videoOff")}
+          </div>
         </div>
       );
     }
@@ -585,6 +603,7 @@ function EvidencePanel({
 
   if (tab === "trace") {
     const trace = result.evidence.find((e) => e.kind === "trace");
+    if (!trace && evidenceUploading) return <ArtifactUploading />;
     return (
       <div className="overflow-hidden rounded-[14px] border border-white/10">
         <div className="flex items-center gap-[7px] bg-white/[0.04] p-[11px_14px] font-mono text-[12px] text-[#c7c7d4]">
@@ -650,6 +669,18 @@ function EvidencePanel({
       ) : (
         <div className="p-4 text-center text-[12.5px] text-ink-dim">{tr("evidence.noNetwork", { caseCode: result.caseCode })}</div>
       )}
+    </div>
+  );
+}
+
+/** Placeholder shown in an evidence panel while the Local Agent is still
+ * uploading this run's artifacts (results are already visible). */
+function ArtifactUploading() {
+  const { t: tr } = useTranslation("pipeline");
+  return (
+    <div className="flex aspect-video flex-col items-center justify-center gap-3.5 rounded-[14px] border border-white/10 bg-gradient-to-br from-[#12121a] to-[#1b1b28]">
+      <Loader2 size={26} strokeWidth={2.2} className="animate-spin text-[#c4b5fd]" />
+      <div className="font-mono text-[13px] text-[#9494a6]">{tr("evidence.uploadingArtifact")}</div>
     </div>
   );
 }
