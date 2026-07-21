@@ -105,7 +105,7 @@ export function Settings() {
       )}
 
       <div className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">{t("sections.profile")}</div>
-      <GlassCard className="mb-[26px] p-[22px]">
+      <GlassCard lift className="mb-[26px] p-[22px]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="text-[12px] text-muted">
             {t("profile.description")}
@@ -120,7 +120,7 @@ export function Settings() {
       </GlassCard>
 
       <div id="execution" className="mb-3 text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">{t("sections.defaultExecution")}</div>
-      <GlassCard className="p-[22px]">
+      <GlassCard lift className="p-[22px]">
         {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />
@@ -283,7 +283,7 @@ export function Settings() {
       </GlassCard>
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">{t("sections.specGate")}</div>
-      <GlassCard className="p-[22px]">
+      <GlassCard lift className="p-[22px]">
         {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />
@@ -300,7 +300,7 @@ export function Settings() {
       </GlassCard>
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">{t("sections.aiModel")}</div>
-      <GlassCard className="p-[22px]">
+      <GlassCard lift className="p-[22px]">
         {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />
@@ -343,7 +343,7 @@ export function Settings() {
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
         {t("sections.perAction")}
       </div>
-      <GlassCard className="p-[22px]">
+      <GlassCard lift className="p-[22px]">
         {settingsLoading || !draft ? (
           <div className="flex justify-center py-10">
             <Spinner />
@@ -405,13 +405,13 @@ export function Settings() {
         <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">
           {t("sections.claudeAccount")}
         </div>
-        <GlassCard className="p-[22px]">
+        <GlassCard lift className="p-[22px]">
           <ClaudeCredentialsCard />
         </GlassCard>
       </div>
 
       <div className="mb-3 mt-[26px] text-[12px] font-bold tracking-[0.08em] text-[#6c6c7e]">{t("sections.interface")}</div>
-      <GlassCard className="p-[22px]">
+      <GlassCard lift className="p-[22px]">
         <div className="flex items-center justify-between border-b border-white/[0.06] py-[13px]">
           <div>
             <div className="text-[14px] font-semibold">{tNav("language.label")}</div>

@@ -144,7 +144,7 @@ export function Dashboard() {
 
       <div className="mb-4 grid grid-cols-2 gap-3.5 md:grid-cols-4">
         {stats.map((s, i) => (
-          <GlassCard key={s.label} hover index={i} className="p-[18px]">
+          <GlassCard key={s.label} hover tilt index={i} className="p-[18px]">
             <div className="mb-4 flex items-center justify-between">
               <span className="text-[12.5px] font-medium text-[#9494a6]">{s.label}</span>
               <span style={{ color: s.color }}>{s.icon}</span>
@@ -231,7 +231,7 @@ export function Dashboard() {
           {heroSweepKey > 0 && <TiltSweep key={heroSweepKey} />}
         </motion.div>
 
-        <GlassCard className="flex flex-col p-[22px]">
+        <GlassCard tilt className="flex flex-col p-[22px]">
           <div className="mb-1.5 text-[13px] font-semibold text-[#c7c7d4]">{t("dashboard.suiteHealth.title")}</div>
           {/* No aggregate suite-health endpoint yet — decorative per design. */}
           <div className="relative flex flex-1 items-center justify-center">
@@ -275,7 +275,7 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
-        <GlassCard className="p-5">
+        <GlassCard tilt className="p-5">
           <div className="mb-4 text-[15px] font-bold">{t("dashboard.recentActivity.title")}</div>
           <div className="flex flex-col gap-0.5">
             {(activity ?? []).length === 0 ? (
@@ -316,7 +316,7 @@ export function Dashboard() {
           </div>
         </GlassCard>
 
-        <GlassCard className="p-5">
+        <GlassCard tilt className="p-5">
           <div className="mb-4 flex items-center">
             <span className="flex-1 text-[15px] font-bold">{t("dashboard.recentRuns.title")}</span>
             <button
