@@ -23,7 +23,7 @@ from app.models.run import Run
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas import CommentEdit, PublishRequest, TicketCommentOut
-from app.services import claude_cli, run_context
+from app.services import claude_cli, run_context, run_control
 from app.services.claude_cli import ClaudeError
 from app.services.ownership import get_owned_or_404
 from app.services.publish_service import publish_one
@@ -121,6 +121,13 @@ def prepare_comments(
     run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
 ) -> list[TicketComment]:
     get_owned_or_404(db, Run, run_id, user)
+    # Preparing comments is a deliberate, synchronous post-run action. If the run
+    # was previously cancelled, its in-memory cancel event lingers (run_control
+    # only clears it on retry/delete), and register_process would INSTANTLY SIGKILL
+    # this summarize Claude call (exit -9 → ClaudeError → HTTP 502). Drop that stale
+    # bookkeeping first — the durable Run.cancel_requested + the terminal-status
+    # guard in set_run_status still stand, so this can't un-cancel the run.
+    run_control.clear(run_id)
     report = _latest_report(db, run_id)
     ticket_summaries = report.data.get("ticketSummary", [])
     ai_failure_analysis = report.data.get("aiFailureAnalysis", "")
