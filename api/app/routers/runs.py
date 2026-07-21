@@ -56,6 +56,7 @@ from app.services import (
 from app.services.ai_service import run_generation_pipeline
 from app.services.ownership import get_owned_or_404, owned, stamp_owner
 from app.services.run_status import force_status, set_run_status
+from app.ws import hub
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -394,9 +395,11 @@ def _stop_run_work(db: Session, run: Run) -> None:
     run_id = run.id
 
     # 1) Specs left "running" by live-authoring or self-heal: keep whatever was
-    #    authored so far (-> draft), else mark blocked with a reason.
-    for spec in (
-        db.query(AutomationSpec)
+    #    authored so far (-> draft), else mark blocked with a reason. Collect their
+    #    cases so we can close the live trail on any open client (step 5).
+    stopped_cases: list[tuple[int, str, str]] = []
+    for spec, case in (
+        db.query(AutomationSpec, TestCase)
         .join(TestCase, AutomationSpec.test_case_id == TestCase.id)
         .filter(TestCase.run_id == run_id, AutomationSpec.status == "running")
         .all()
@@ -407,6 +410,7 @@ def _stop_run_work(db: Session, run: Run) -> None:
             spec.status = "blocked"
             spec.block_reason = (spec.block_reason or "").strip() or "Stopped before authoring finished."
         db.add(spec)
+        stopped_cases.append((case.id, case.ticket_external_id, case.code))
 
     # 2) In-flight executions + their pending/running case results.
     for execution in (
@@ -448,6 +452,22 @@ def _stop_run_work(db: Session, run: Run) -> None:
     playwright_runner.purge_run(run_id)
     link_service.forget_run(run_id)
     automation_router.forget_generating(run_id)
+
+    # 5) Close any live trail still open on a client. The agent's own progress
+    #    posts now 404 (its session was just purged), so it can no longer re-open
+    #    the trail — but the client is still holding the last non-terminal event,
+    #    so without a terminal event here the panel keeps showing "authoring…"
+    #    forever (the reported bug). Publish a terminal authoring.progress (covers
+    #    live authoring AND live-heal, which reuse the authoring pipeline) plus a
+    #    spec.regenerated refresh so the panel flips back to the (now draft) editor.
+    for case_id, ticket, code in stopped_cases:
+        hub.publish(
+            str(run_id),
+            "authoring.progress",
+            {"case": case_id, "caseId": case_id, "ticket": ticket, "caseCode": code,
+             "phase": "failed", "message": "Stopped by user."},
+        )
+        hub.publish(str(run_id), "spec.regenerated", {"caseId": case_id})
 
 
 @router.post("/{run_id}/cancel", response_model=RunOut)

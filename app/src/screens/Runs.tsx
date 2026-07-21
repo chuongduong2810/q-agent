@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowRight, Eraser, ListChecks, Loader2, Pause, Play, Plus, Square } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, ListChecks, Loader2, Pause, Play, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,11 +13,10 @@ import {
 } from "@/components/dashboard/runStatus";
 import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
 import { RunBulkBar } from "@/components/runs/RunBulkBar";
+import { RunStopButton } from "@/components/runs/RunStopButton";
 import { Button } from "@/components/ui/Button";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/misc";
-import { toast } from "@/lib/toast";
-import { useRuns, useStopRun } from "@/hooks/queries";
+import { useRuns } from "@/hooks/queries";
 import { useUI, type RunFilter } from "@/store/ui";
 import type { RunOut } from "@/types/api";
 
@@ -203,27 +201,10 @@ function RunRow({
   onPlay: () => void;
 }) {
   const { t } = useTranslation("runs");
-  const stopRun = useStopRun();
-  const [confirmStop, setConfirmStop] = useState(false);
   const badge = runBadge(runEffectiveStatus(run));
   const working = isWorkingRun(run.status);
   const paused = isPausedRun(run.status);
   const isReview = run.status === "review";
-  // Stop is offered on EVERY run (#420). On an in-progress run it cancels the run
-  // and all its in-flight work (authoring, self-heal, execution, analysis); on a
-  // terminal run it's a "force clean up" that resets orphaned running rows + stale
-  // agent queues left by a crashed pass, without touching the lifecycle status.
-  const terminal = isTerminalRun(run.status);
-
-  const handleStop = () => {
-    stopRun.mutate(run.id, {
-      onSuccess: () => {
-        toast.success(terminal ? t("actions.toast.cleaned") : t("actions.toast.cancelled"));
-        setConfirmStop(false);
-      },
-      onError: (e) => toast.error(e instanceof Error ? e.message : t("actions.toast.cancelFailed")),
-    });
-  };
   // Play (start/watch execution) is offered once a run is past analysis and not
   // terminal — i.e. review and every later in-flight stage.
   const canRun = !isTerminalRun(run.status) && run.status !== "processing";
@@ -338,25 +319,7 @@ function RunRow({
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-1.5">
-        <button
-          type="button"
-          title={terminal ? t("row.cleanupRun") : t("row.stopRun")}
-          onClick={(e) => {
-            e.stopPropagation();
-            setConfirmStop(true);
-          }}
-          className={
-            terminal
-              ? "flex h-8 w-8 items-center justify-center rounded-[9px] bg-[rgba(245,158,11,.16)] text-[#f59e0b] transition-colors hover:bg-[rgba(245,158,11,.28)]"
-              : "flex h-8 w-8 items-center justify-center rounded-[9px] bg-[rgba(251,113,133,.16)] text-[#fb7185] transition-colors hover:bg-[rgba(251,113,133,.28)]"
-          }
-        >
-          {terminal ? (
-            <Eraser size={14} strokeWidth={2.2} />
-          ) : (
-            <Square size={13} strokeWidth={2.6} fill="currentColor" />
-          )}
-        </button>
+        <RunStopButton run={run} />
         {canRun && (
           <button
             type="button"
@@ -383,21 +346,6 @@ function RunRow({
         </button>
         <RunActionsMenu run={run} />
       </div>
-
-      <ConfirmDialog
-        open={confirmStop}
-        title={terminal ? t("actions.confirmCleanup.title") : t("actions.confirmCancel.title")}
-        message={
-          terminal
-            ? t("actions.confirmCleanup.message", { name: run.name })
-            : t("actions.confirmCancel.message", { name: run.name })
-        }
-        confirmLabel={terminal ? t("actions.confirmCleanup.confirm") : t("actions.confirmCancel.confirm")}
-        danger={!terminal}
-        loading={stopRun.isPending}
-        onConfirm={handleStop}
-        onClose={() => setConfirmStop(false)}
-      />
     </motion.div>
   );
 }

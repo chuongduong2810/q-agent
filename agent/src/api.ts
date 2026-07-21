@@ -471,6 +471,31 @@ export async function postAuthoringEvent(
   await throwIfNotOk(res);
 }
 
+/**
+ * Post an authoring progress event and report whether the session is still alive
+ * (#420). Returns false on a 404 — the server purged the session because the run
+ * was stopped — which the caller uses as a mid-flight abort signal to kill the
+ * local Claude run. Never throws: a transient network error returns true so a
+ * blip doesn't abort a live session.
+ */
+export async function postAuthoringEventAlive(
+  cfg: AgentConfig,
+  sessionId: string,
+  event: string,
+  payload: Record<string, unknown>
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${cfg.serverUrl}/agent/authoring/${sessionId}/events`, {
+      method: "POST",
+      headers: { ...authHeaders(cfg.deviceToken), "Content-Type": "application/json" },
+      body: JSON.stringify({ event, payload }),
+    });
+    return res.status !== 404;
+  } catch {
+    return true;
+  }
+}
+
 /** Finalize an authoring session: the server gates + persists the authored spec
  * and KB-merges the runtime-verified discovery. */
 export async function postAuthoringFinalize(
