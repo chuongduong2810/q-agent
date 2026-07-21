@@ -39,6 +39,11 @@ DEFAULTS: dict[str, Any] = {
     # real selectors, then emit the spec (live_authoring_service). Orthogonal to
     # executionTarget — live-harness always authors server-side.
     "authoringMode": "blind",
+    # Verbosity of the live-authoring step trail shown in the UI (#400). "concise"
+    # (default) shows only user-readable lines (Claude's narration + phase status);
+    # "verbose" also shows the raw tool/Bash calls (browser-harness invocations).
+    # Presentation-only — the agent always streams both; the client filters.
+    "authoringLogVerbosity": "concise",
     # Global spec quality-gate toggle (#gate-toggle). True = gate specs on
     # generation/edit/heal (default); False = bypass gating and accept every
     # spec as runnable. See placeholder_gate + automation._gate_spec_or_bypass.

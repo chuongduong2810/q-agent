@@ -955,6 +955,9 @@ class SettingsOut(ApiModel):
     # Spec authoring mode (#400): "blind" (generate from KB + heal) or
     # "live-harness" (drive the real app via browser-harness, emit from live DOM).
     authoring_mode: str = "blind"
+    # Verbosity of the live-authoring step trail in the UI (#400): "concise"
+    # (Claude narration + phase status only) or "verbose" (also raw tool/Bash calls).
+    authoring_log_verbosity: str = "concise"
     # Global spec quality-gate toggle. When False, spec generation/edit/heal skip
     # the placeholder/invented-reference gate, the AI automation-reviewer and the
     # playwright --list parse check, accepting every spec as runnable (#gate-toggle).
@@ -976,6 +979,7 @@ class SettingsUpdate(ApiModel):
     weekly_token_budget: int | None = None
     execution_target: str | None = None
     authoring_mode: str | None = None
+    authoring_log_verbosity: str | None = None
     gate_enabled: bool | None = None
 
 

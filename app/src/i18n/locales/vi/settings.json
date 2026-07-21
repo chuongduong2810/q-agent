@@ -42,6 +42,13 @@
       "blind": "Tạo + tự chữa",
       "liveHarness": "Trực tiếp (browser-harness)"
     },
+    "authoringLog": {
+      "title": "Mức chi tiết nhật ký tạo script",
+      "description": "Hiển thị bao nhiêu nhật ký khi tạo script trực tiếp — gọn chỉ hiện phần diễn giải dễ đọc của Claude, đầy đủ hiện thêm các lệnh browser-harness/Bash thô",
+      "placeholder": "Chọn mức chi tiết",
+      "concise": "Gọn (dễ đọc)",
+      "verbose": "Đầy đủ (kèm lệnh)"
+    },
     "parallel": {
       "title": "Số luồng song song",
       "description": "Mặc định tối đa {{n}} ca cùng lúc mỗi lần chạy"

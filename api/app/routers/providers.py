@@ -367,6 +367,7 @@ def update_settings_endpoint(body: SettingsUpdate) -> SettingsOut:
         "weeklyTokenBudget": updates.get("weekly_token_budget"),
         "executionTarget": updates.get("execution_target"),
         "authoringMode": updates.get("authoring_mode"),
+        "authoringLogVerbosity": updates.get("authoring_log_verbosity"),
         "gateEnabled": updates.get("gate_enabled"),
     }
     saved = settings_store.save_settings(camel_updates)

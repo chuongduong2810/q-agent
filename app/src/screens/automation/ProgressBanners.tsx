@@ -1,9 +1,17 @@
 import { Check, Sparkles, Telescope } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { useSettings } from "@/hooks/queries";
 import { THINKING_STEPS } from "./useThinkingSteps";
 import { describeExploreStep } from "./exploreStep";
 import type { AuthoringProgress, ExploreProgress, ExploreStep, GenProgress, HealProgress } from "./useAutomationEvents";
+
+/** A raw tool/Bash step line in the authoring trail (emitted by the agent as
+ * `▷ <tool>: …`). These are the "system" lines hidden in concise mode. */
+function isToolLine(line: string): boolean {
+  return line.trimStart().startsWith("▷");
+}
 
 /** Full-height placeholder card shown while the first generation pass runs. */
 export function ThinkingBanner({ runCode, thinkStep }: { runCode: string | undefined; thinkStep: number }) {
@@ -104,11 +112,27 @@ export function HealProgressBanner({ healProgress }: { healProgress: HealProgres
 }
 
 /** The streamed step log body — Claude's messages + browser-harness tool calls —
- * with a working spinner until done. Reused by the banner and the code panel. */
+ * with a working spinner until done. Reused by the banner and the code panel.
+ *
+ * Respects the `authoringLogVerbosity` setting: in "concise" (default) the raw
+ * tool/Bash lines are hidden so users see only Claude's narration + phase status;
+ * "verbose" shows everything. Auto-scrolls to the latest line as it streams. */
 export function AuthoringTrail({ lines, done }: { lines: string[]; done: boolean }) {
+  const { data: settings } = useSettings();
+  const concise = (settings?.authoringLogVerbosity ?? "concise") === "concise";
+  const shown = concise ? lines.filter((l) => !isToolLine(l)) : lines;
+
+  // Keep the newest line in view as the trail streams (and when it finishes) —
+  // scroll the trail container only, never the page.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [shown.length, done]);
+
   return (
-    <div className="flex max-h-[280px] flex-col gap-1.5 overflow-auto font-mono text-[12px]">
-      {lines.map((l, i) => (
+    <div ref={scrollRef} className="flex max-h-[280px] flex-col gap-1.5 overflow-auto font-mono text-[12px]">
+      {shown.map((l, i) => (
         <div key={i} className="whitespace-pre-wrap break-words text-muted">
           {l}
         </div>

@@ -42,6 +42,13 @@
       "blind": "Generate + heal",
       "liveHarness": "Live (browser-harness)"
     },
+    "authoringLog": {
+      "title": "Authoring log detail",
+      "description": "How much of the live-authoring log to show — concise shows only Claude's readable narration, verbose also shows the raw browser-harness/Bash commands",
+      "placeholder": "Select detail",
+      "concise": "Concise (readable)",
+      "verbose": "Verbose (with commands)"
+    },
     "parallel": {
       "title": "Parallel workers",
       "description": "Default up to {{n}} cases at once per Run"
