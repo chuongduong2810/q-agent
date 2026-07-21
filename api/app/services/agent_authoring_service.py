@@ -39,6 +39,7 @@ def request_authoring(
     task_prompt: str,
     model: str,
     max_budget_usd: float,
+    log_verbosity: str = "concise",
 ) -> None:
     """Enqueue one authoring session for the paired agent to claim.
 
@@ -65,6 +66,7 @@ def request_authoring(
                 "task_prompt": task_prompt,
                 "model": model,
                 "max_budget_usd": max_budget_usd,
+                "log_verbosity": log_verbosity,
                 "status": "queued",
             }
         )

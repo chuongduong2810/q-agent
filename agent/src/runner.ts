@@ -1169,10 +1169,17 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
     // (#420), so abort the local Claude run immediately instead of burning the
     // rest of the budget on work whose result will be rejected anyway.
     let aborted = false;
+    // AGENT LOG mirrors the web trail's Settings verbosity (#438): in "concise"
+    // (default) skip the raw tool/Bash step lines (▷ …) so the local log shows
+    // only Claude's readable narration. The server WS still gets every line — the
+    // web filters its own stream — and abort-on-stop keys on those posts.
+    const conciseLog = (job.logVerbosity ?? "concise") === "concise";
     const emitStep = (line: string): void => {
       const trimmed = line.length > 300 ? line.slice(0, 300) + "…" : line;
       console.log(`[authoring ${job.caseId}] ${trimmed}`);
-      emit("authoring-step", { caseId: job.caseId, line: trimmed });
+      if (!(conciseLog && trimmed.trimStart().startsWith("▷"))) {
+        emit("authoring-step", { caseId: job.caseId, line: trimmed });
+      }
       void api
         .postAuthoringEventAlive(cfg, job.sessionId, "authoring.progress", {
           case: job.caseId, phase: "step", message: trimmed,
