@@ -456,16 +456,25 @@ def resolve_ambient_owner_id() -> int | None:
     """Best-effort resolve the user id to attribute for the in-flight Claude CLI call.
 
     Claude CLI calls happen deep in :mod:`app.services.claude_cli`, invoked from
-    run-scoped background worker threads that have no request/user object in
-    scope. Those workers already set the ambient run id (see
-    :mod:`app.services.run_context`) so per-run cost can be attributed; we reuse
-    that same mechanism here and resolve the run's ``owner_id`` — the user whose
-    credentials/usage this call belongs to. Returns ``None`` when there is no
-    ambient run, the run can't be found, or it has no owner (pre-ownership data
-    or shared/local-first use) — callers then fall back to the shared credential
-    and unattributed usage, matching today's behavior.
+    background worker threads that have no request/user object in scope. Two
+    ambient mechanisms carry the owner:
+
+    * An explicit ambient **owner** (``run_context.owner_scope``) — set by
+      background work that has no run to derive an owner from (e.g. a knowledge
+      build). It takes priority so that work resolves its owner's own/preferred
+      credentials rather than the shared fallback.
+    * Otherwise the ambient **run**'s ``owner_id`` — run-scoped workers set the
+      run id so per-run cost can be attributed, and we resolve its owner here.
+
+    Returns ``None`` when neither is set, the run can't be found, or it has no
+    owner (pre-ownership data or shared/local-first use) — callers then fall back
+    to the shared credential and unattributed usage, matching today's behavior.
     """
     from app.services import run_context
+
+    owner_id = run_context.get_owner()
+    if owner_id is not None:
+        return owner_id
 
     run_id = run_context.get_run()
     if run_id is None:

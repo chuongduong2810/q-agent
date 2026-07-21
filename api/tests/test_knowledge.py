@@ -59,6 +59,45 @@ def test_get_knowledge_404_when_absent(client):
     assert client.get("/projects/Ghost/knowledge").status_code == 404
 
 
+def _run_build_capturing_owner(db_session, monkeypatch, *, owner_id):
+    """Seed a KB row owned by ``owner_id``, run its build with Claude mocked, and
+    return the ambient owner id resolved at the moment the Claude call ran."""
+    from app.models.knowledge import ProjectKnowledge
+    from app.services import claude_credentials
+
+    captured: dict[str, int | None] = {}
+
+    def fake_run_json(*a, **k):
+        # Resolved at call time — i.e. inside the build's owner_scope (#466).
+        captured["owner"] = claude_credentials.resolve_ambient_owner_id()
+        return dict(CANNED)
+
+    monkeypatch.setattr(knowledge_service, "run_json", fake_run_json)
+    monkeypatch.setattr(knowledge_service, "_resolve_path_for_row", lambda *a, **k: None)
+
+    key = f"Owned-{owner_id}"
+    db_session.add(
+        ProjectKnowledge(
+            key=key, project_key=key, name=key, owner_id=owner_id, status="indexing", knowledge={}
+        )
+    )
+    db_session.commit()
+
+    knowledge_service._run_build(key)
+    return captured.get("owner")
+
+
+def test_build_resolves_row_owner_credentials(db_session, monkeypatch):
+    """A per-user KB build attributes the Claude call to the row owner, so it
+    resolves that user's own/preferred credentials instead of the shared one (#466)."""
+    assert _run_build_capturing_owner(db_session, monkeypatch, owner_id=7) == 7
+
+
+def test_shared_build_resolves_shared_credentials(db_session, monkeypatch):
+    """A shared KB build (owner_id is None) still resolves the shared credential (#466)."""
+    assert _run_build_capturing_owner(db_session, monkeypatch, owner_id=None) is None
+
+
 # --- Heal->KB DOM enrichment (#249) ------------------------------------------
 
 
