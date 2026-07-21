@@ -373,7 +373,18 @@
     "toast": {
       "publishingResults": "Đang xuất bản kết quả lên các ticket",
       "publishFailed": "Xuất bản thất bại",
-      "prepareFailed": "Chuẩn bị thất bại"
+      "prepareFailed": "Chuẩn bị thất bại",
+      "saved": "Đã lưu bình luận",
+      "saveFailed": "Lưu bình luận thất bại"
+    },
+    "editor": {
+      "edit": "Sửa",
+      "write": "Soạn",
+      "preview": "Xem trước",
+      "save": "Lưu",
+      "saving": "Đang lưu…",
+      "cancel": "Hủy",
+      "empty": "Chưa có nội dung để xem trước."
     },
     "empty": {
       "title": "Chưa có bình luận nào được chuẩn bị",
