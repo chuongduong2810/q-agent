@@ -39,6 +39,8 @@
   "actions": {
     "menu": "Run actions",
     "cancel": "Cancel run",
+    "stop": "Stop run",
+    "cleanup": "Clean up",
     "retry": "Retry run",
     "duplicate": "Duplicate",
     "delete": "Delete run",
