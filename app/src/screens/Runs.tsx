@@ -347,7 +347,7 @@ function RunRow({
           }}
           className={
             terminal
-              ? "flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.05] text-ink-soft transition-colors hover:bg-white/[0.1]"
+              ? "flex h-8 w-8 items-center justify-center rounded-[9px] bg-[rgba(245,158,11,.16)] text-[#f59e0b] transition-colors hover:bg-[rgba(245,158,11,.28)]"
               : "flex h-8 w-8 items-center justify-center rounded-[9px] bg-[rgba(251,113,133,.16)] text-[#fb7185] transition-colors hover:bg-[rgba(251,113,133,.28)]"
           }
         >
