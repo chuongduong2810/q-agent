@@ -44,13 +44,13 @@ export interface TiltBinding {
  * `glow` (0→1) so lighting overlays — a glass-reflection glare, a metallic
  * sheen — can track the pointer in lock-step with the tilt.
  *
- * @param options tilt strength — see {@link TiltOptions}. Defaults are a subtle
- *   card tilt (7° / 9° / scale 1.03 / perspective 780); the sidebar logo passes
- *   stronger values.
+ * @param options tilt strength — see {@link TiltOptions}. Defaults are a gentle
+ *   card tilt (4° / 5° / scale 1.02 / perspective 1000); the sidebar logo and
+ *   dropdown menus pass their own (stronger / gentler) values.
  * @returns tilt binding + lighting motion values — see {@link TiltBinding}.
  */
 export function useTilt(options: TiltOptions = {}): TiltBinding {
-  const { maxX = 7, maxY = 9, scale = 1.03, perspective = 780 } = options;
+  const { maxX = 4, maxY = 5, scale = 1.02, perspective = 1000 } = options;
 
   const rotateX = useMotionValue(0);
   const rotateY = useMotionValue(0);

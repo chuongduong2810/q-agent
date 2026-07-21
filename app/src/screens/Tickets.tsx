@@ -508,7 +508,14 @@ function TicketRow({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: Math.min(index * 0.03, 0.24), ease: "easeOut" }}
-      className="glass rounded-2xl transition-colors hover:border-[rgba(139,92,246,.28)]"
+      // Lift the row and expand its shadow on hover — matches the /runs rows.
+      whileHover={{
+        y: -4,
+        zIndex: 10,
+        boxShadow: "0 22px 48px -22px rgba(139,92,246,.5), 0 0 26px -12px rgba(34,211,238,.3)",
+        transition: { duration: 0.25, ease: [0.2, 0.8, 0.2, 1] },
+      }}
+      className="glass relative rounded-2xl transition-colors hover:border-[rgba(139,92,246,.28)]"
       style={{ borderColor: selected ? "rgba(139,92,246,.5)" : undefined }}
     >
       {/* Desktop row — unchanged single-line layout. */}
