@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
 import { Check, ChevronDown, X } from "lucide-react";
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { useTilt } from "@/hooks/useTilt";
-import { TiltSweep } from "@/components/ui/TiltSweep";
 
 export interface Option {
   value: string;
@@ -39,11 +38,6 @@ export function DropdownShell({
   const panelRef = useRef<HTMLDivElement>(null);
   // Same cursor-tracked glass tilt as GlassCard, gentled for a readable menu.
   const tilt = useTilt({ maxX: 6, maxY: 8, scale: 1.015 });
-  // Bumped on each hover-enter to remount (and thus replay) the shine sweep.
-  const [sweepKey, setSweepKey] = useState(0);
-  const replaySweep = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== "touch") setSweepKey((k) => k + 1);
-  };
 
   // Anchor the (portalled) panel to the trigger in viewport coordinates. Clamp
   // to the right edge so a trigger near the window border doesn't overflow.
@@ -111,7 +105,6 @@ export function DropdownShell({
         createPortal(
           <motion.div
             ref={panelRef}
-            onPointerEnter={replaySweep}
             onPointerMove={tilt.onPointerMove}
             onPointerLeave={tilt.onPointerLeave}
             className="fixed z-[1000] max-h-[320px] overflow-y-auto rounded-[14px] border border-white/[0.12] p-1.5 shadow-[0_30px_70px_-20px_rgba(0,0,0,.8)]"
@@ -120,7 +113,6 @@ export function DropdownShell({
             style={{ ...tilt.style, top: pos.top, left: pos.left, minWidth: pos.width, background: "rgb(24,24,32)" }}
           >
             {children(() => setOpen(false))}
-            {sweepKey > 0 && <TiltSweep />}
           </motion.div>,
           document.body,
         )}
