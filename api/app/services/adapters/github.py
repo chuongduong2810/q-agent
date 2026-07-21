@@ -66,17 +66,15 @@ class GitHubAdapter(ProviderAdapter):
             return {"ok": False, "message": f"GitHub connection failed: {exc}", "detail": {}}
 
     def list_repos(self) -> list[dict[str, Any]]:
-        """List repositories in the configured GitHub org (falls back to the single repo)."""
+        """List repositories owned by the configured GitHub account.
+
+        The configured ``org`` may be either a GitHub organization or a personal
+        user account — ``_discover_owner_repos`` handles both. Falls back to the
+        single configured ``repo`` when no owner is set.
+        """
         with self._client() as client:
             if self.org:
-                resp = client.get(f"/orgs/{self.org}/repos", params={"per_page": 100, "sort": "full_name"})
-                if resp.status_code >= 400 and self.repo:
-                    resp = client.get(f"/repos/{self.org}/{self.repo}")
-                    resp.raise_for_status()
-                    items = [resp.json()]
-                else:
-                    resp.raise_for_status()
-                    items = resp.json()
+                items = self._discover_owner_repos(client, self.org)
             elif self.repo:
                 resp = client.get(f"/repos/{self.repo}")
                 resp.raise_for_status()
@@ -92,6 +90,56 @@ class GitHubAdapter(ProviderAdapter):
             }
             for r in items
         ]
+
+    def _discover_owner_repos(self, client: httpx.Client, owner: str) -> list[dict[str, Any]]:
+        """Discover repositories owned by ``owner``, whether org or user account.
+
+        Args:
+            client: An authenticated GitHub API client.
+            owner: The org/user login whose repositories to list.
+
+        Returns:
+            The raw GitHub repository objects owned by ``owner``.
+
+        Strategy (each step handles a case the previous one misses):
+        1. ``/orgs/{owner}/repos`` — works only for GitHub *organizations*
+           (includes private repos for org members).
+        2. On failure ``owner`` is a *personal account* (the org endpoint 404s
+           for users), so fall back to the authenticated user's accessible repos
+           via ``/user/repos`` — which includes **private** repos the PAT can
+           see — filtered to those owned by ``owner``.
+        3. Last resort: fetch the single configured ``repo`` directly, covering
+           a PAT scoped to just one repository.
+        """
+        resp = client.get(f"/orgs/{owner}/repos", params={"per_page": 100, "sort": "full_name"})
+        if resp.status_code < 400:
+            return resp.json()
+
+        # Not an organization (or not accessible as one): treat as a user account.
+        resp = client.get(
+            "/user/repos",
+            params={
+                "per_page": 100,
+                "sort": "full_name",
+                "affiliation": "owner,collaborator,organization_member",
+            },
+        )
+        if resp.status_code < 400:
+            owned = [
+                r for r in resp.json()
+                if ((r.get("owner") or {}).get("login") or "").lower() == owner.lower()
+            ]
+            if owned:
+                return owned
+
+        # Last resort: the single configured repo (e.g. a repo-scoped PAT).
+        if self.repo:
+            single = client.get(f"/repos/{owner}/{self.repo}")
+            single.raise_for_status()
+            return [single.json()]
+
+        resp.raise_for_status()
+        return []
 
     # -- Read ---------------------------------------------------------------
     def list_projects(self) -> list[dict[str, Any]]:

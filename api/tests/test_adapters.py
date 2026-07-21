@@ -471,3 +471,71 @@ def test_adapter_raises_provider_error_without_config():
     adapter = GitHubAdapter(config={}, secrets={})
     with pytest.raises(ProviderError):
         adapter.fetch_tickets(mode="sprint")
+
+
+@respx.mock
+def test_github_list_repos_org_account():
+    adapter = GitHubAdapter(config={"org": "acme"}, secrets={"pat": "ghp_xxx"})
+    respx.get("https://api.github.com/orgs/acme/repos").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"name": "webapp", "clone_url": "https://github.com/acme/webapp.git",
+                 "html_url": "https://github.com/acme/webapp", "default_branch": "main"},
+            ],
+        )
+    )
+    repos = adapter.list_repos()
+    assert [r["name"] for r in repos] == ["webapp"]
+    assert repos[0]["clone_url"] == "https://github.com/acme/webapp.git"
+
+
+@respx.mock
+def test_github_list_repos_user_account_falls_back_to_user_repos():
+    """A personal account 404s on /orgs; discovery falls back to /user/repos
+    (which includes private repos) filtered to the configured owner."""
+    adapter = GitHubAdapter(config={"org": "Gift-Card-Market", "repo": "GiftcardMarketplace"},
+                            secrets={"pat": "ghp_xxx"})
+    respx.get("https://api.github.com/orgs/Gift-Card-Market/repos").mock(
+        return_value=httpx.Response(404, json={"message": "Not Found"})
+    )
+    respx.get("https://api.github.com/user/repos").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"name": "GiftcardMarketplace", "clone_url": "https://github.com/Gift-Card-Market/GiftcardMarketplace.git",
+                 "html_url": "https://github.com/Gift-Card-Market/GiftcardMarketplace", "default_branch": "main",
+                 "owner": {"login": "Gift-Card-Market"}},
+                {"name": "unrelated", "clone_url": "https://github.com/someone-else/unrelated.git",
+                 "html_url": "https://github.com/someone-else/unrelated", "default_branch": "main",
+                 "owner": {"login": "someone-else"}},
+            ],
+        )
+    )
+    repos = adapter.list_repos()
+    assert [r["name"] for r in repos] == ["GiftcardMarketplace"]
+
+
+@respx.mock
+def test_github_list_repos_falls_back_to_single_repo():
+    """When neither org nor user listing yields the owner's repos, fall back to
+    the single configured repo (e.g. a repo-scoped PAT)."""
+    adapter = GitHubAdapter(config={"org": "Gift-Card-Market", "repo": "GiftcardMarketplace"},
+                            secrets={"pat": "ghp_xxx"})
+    respx.get("https://api.github.com/orgs/Gift-Card-Market/repos").mock(
+        return_value=httpx.Response(404, json={"message": "Not Found"})
+    )
+    respx.get("https://api.github.com/user/repos").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://api.github.com/repos/Gift-Card-Market/GiftcardMarketplace").mock(
+        return_value=httpx.Response(
+            200,
+            json={"name": "GiftcardMarketplace",
+                  "clone_url": "https://github.com/Gift-Card-Market/GiftcardMarketplace.git",
+                  "html_url": "https://github.com/Gift-Card-Market/GiftcardMarketplace",
+                  "default_branch": "main"},
+        )
+    )
+    repos = adapter.list_repos()
+    assert [r["name"] for r in repos] == ["GiftcardMarketplace"]
