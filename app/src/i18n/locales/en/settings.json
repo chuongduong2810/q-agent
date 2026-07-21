@@ -49,6 +49,10 @@
       "classic": "Classic (fix + re-run)",
       "liveHarness": "Live (browser-harness)"
     },
+    "liveBudget": {
+      "title": "Live session budget",
+      "description": "Max Claude spend (USD) per live browser-harness session — shared by live authoring and live self-heal. Raise it if a session needs to create test data and drive a long flow before it runs out."
+    },
     "authoringLog": {
       "title": "Authoring log detail",
       "description": "How much of the live-authoring log to show — concise shows only Claude's readable narration, verbose also shows the raw browser-harness/Bash commands",

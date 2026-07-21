@@ -49,6 +49,10 @@
       "classic": "Cổ điển (vá + chạy lại)",
       "liveHarness": "Trực tiếp (browser-harness)"
     },
+    "liveBudget": {
+      "title": "Ngân sách phiên trực tiếp",
+      "description": "Mức chi tiêu Claude tối đa (USD) mỗi phiên browser-harness trực tiếp — dùng chung cho tạo script trực tiếp và tự chữa trực tiếp. Tăng lên nếu một phiên cần tạo dữ liệu kiểm thử và chạy một luồng dài trước khi hết ngân sách."
+    },
     "authoringLog": {
       "title": "Mức chi tiết nhật ký tạo script",
       "description": "Hiển thị bao nhiêu nhật ký khi tạo script trực tiếp — gọn chỉ hiện phần diễn giải dễ đọc của Claude, đầy đủ hiện thêm các lệnh browser-harness/Bash thô",

@@ -275,7 +275,7 @@ def _enqueue_agent_authoring(
         system_prompt=system_prompt,
         task_prompt=task_prompt,
         model=model,
-        max_budget_usd=float(settings.authoring_cost_budget_usd),
+        max_budget_usd=settings_store.authoring_cost_budget_usd(),
     )
 
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()

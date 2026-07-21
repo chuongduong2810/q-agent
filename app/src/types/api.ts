@@ -890,6 +890,10 @@ export interface SettingsOut {
    * then re-run Playwright; "live-harness" = drive the real app via browser-harness
    * (reusing the live-authoring pipeline), seeded with the failing spec + error. */
   healMode: HealMode;
+  /** Per-session Claude $ ceiling for a live browser-harness run — shared by live
+   * authoring and live self-heal (#430). Raise it when a heal/author needs to
+   * create data + drive a long flow. */
+  authoringCostBudgetUsd: number;
   /** Verbosity of the live-authoring step trail (#400). "concise" shows only
    * user-readable lines (Claude narration + phase status); "verbose" also shows
    * the raw browser-harness/Bash tool calls. Presentation-only. */
