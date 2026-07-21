@@ -851,6 +851,18 @@ def agent_authoring_finalize(
         body.discovered or {},
     )
     ok = spec is not None and (spec.code or "").strip() != ""
+    # Auto-rotate the uploaded credential (#cred-rotate): the device ran `claude`
+    # with the owner's credential and the CLI may have refreshed the OAuth token in
+    # its (now-deleted) temp config dir. Capture the rotated token the agent posted
+    # back so the stored credential's refresh token can't go stale. Best-effort.
+    if body.refreshed_credentials:
+        try:
+            from app.services import claude_credentials
+
+            if claude_credentials.persist_refreshed_from_raw(db, user.id, body.refreshed_credentials):
+                logger.info("Captured a Claude token the agent refreshed (owner={})", user.id)
+        except Exception as exc:  # noqa: BLE001 - rotation is additive; never break finalize
+            logger.warning("Could not persist agent-refreshed Claude credential: {}", exc)
     # Record the agent's agentic Claude spend against the run (it runs on the
     # paired device, so the server never saw it) — rolls into the run cost
     # breakdown + AI stats and the authoring budget pre-check. Best-effort.

@@ -439,6 +439,11 @@ class AuthoringFinalizeRequest(ApiModel):
     summary: str = ""
     ok: bool = True
     cost_usd: float = 0.0
+    # The `.credentials.json` content as it stands after the agent's `claude` run.
+    # If the CLI rotated the OAuth token on the device, the server captures the
+    # fresher token back into the store so the uploaded credential auto-rotates
+    # (#cred-rotate). Empty ⇒ nothing to capture. Never logged.
+    refreshed_credentials: str = ""
 
 
 class AuthoringFinalizeOut(ApiModel):

@@ -278,23 +278,56 @@ def persist_refreshed(db: Session, owner_id: int | None) -> bool:
     writes back to whichever row was actually used. Returns True if it updated
     the stored credential.
     """
-    row: ClaudeCredentials | None = None
-    key: str | None = None
+    row, key = _writeback_row(db, owner_id)
+    if row is None or key is None:
+        return False
+    try:
+        raw = (_config_dir_for(key) / ".credentials.json").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _persist_if_newer(db, row, raw)
+
+
+def persist_refreshed_from_raw(db: Session, owner_id: int | None, raw: str) -> bool:
+    """Capture a token rotated on a PAIRED DEVICE back into the store (#cred-rotate).
+
+    Mirror of :func:`persist_refreshed` for the Local Agent path: when a device
+    runs ``claude`` with the owner's uploaded credential (live authoring / heal),
+    the CLI refreshes the token in the device's temp config dir — which is then
+    deleted. Unless the device posts the rotated ``.credentials.json`` content back
+    (``raw``) and we persist it here, the stored credential's refresh token goes
+    stale and the credential eventually dies, exactly like an un-captured local
+    refresh. Same strictly-newer guard as the server path, so a logged-out/failed
+    refresh can never clobber a good stored credential. Returns True if it updated.
+    """
+    if not raw or not raw.strip():
+        return False
+    row, _key = _writeback_row(db, owner_id)
+    if row is None:
+        return False
+    return _persist_if_newer(db, row, raw)
+
+
+def _writeback_row(db: Session, owner_id: int | None) -> tuple[ClaudeCredentials | None, str | None]:
+    """The credential row a refresh should write back to — own→shared precedence,
+    matching :func:`resolve_effective_config_dir`."""
     if owner_id is not None:
         own = get_own(db, owner_id)
         if own is not None and not _own_yields_to_shared(db, own):
-            row, key = own, str(owner_id)
-    if row is None:
-        shared = get_shared(db)
-        if shared is not None:
-            row, key = shared, "shared"
-    if row is None or key is None:
-        return False
+            return own, str(owner_id)
+    shared = get_shared(db)
+    if shared is not None:
+        return shared, "shared"
+    return None, None
 
+
+def _persist_if_newer(db: Session, row: ClaudeCredentials, raw: str) -> bool:
+    """Persist ``raw`` (.credentials.json content) onto ``row`` only when it holds a
+    non-empty access token with a **strictly newer** ``expiresAt`` than the stored
+    one — so a failed/logged-out refresh never clobbers a good credential."""
     try:
-        raw = (_config_dir_for(key) / ".credentials.json").read_text(encoding="utf-8")
         new_oauth = json.loads(raw).get("claudeAiOauth") or {}
-    except (OSError, json.JSONDecodeError, AttributeError):
+    except (json.JSONDecodeError, AttributeError):
         return False
 
     new_token = str(new_oauth.get("accessToken") or "").strip()

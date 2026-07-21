@@ -507,7 +507,17 @@ export async function postAuthoringEventAlive(
 export async function postAuthoringFinalize(
   cfg: AgentConfig,
   sessionId: string,
-  body: { code: string; discovered: Record<string, unknown>; summary: string; ok: boolean; costUsd?: number }
+  body: {
+    code: string;
+    discovered: Record<string, unknown>;
+    summary: string;
+    ok: boolean;
+    costUsd?: number;
+    /** The `.credentials.json` content after the local `claude` run — sent back so
+     * the server can capture an OAuth token the CLI rotated on this device
+     * (auto-rotation of the uploaded credential). Omit/empty when unchanged. */
+    refreshedCredentials?: string;
+  }
 ): Promise<void> {
   const res = await fetchWithTimeout(
     `${cfg.serverUrl}/agent/authoring/${sessionId}/finalize`,
