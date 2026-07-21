@@ -98,7 +98,11 @@ def _summarize_ticket(
         + (f"Cross-case failure analysis: {ai_failure_analysis}\n\n" if failed and ai_failure_analysis else "")
         + "Structure the comment as: (1) a one-line overall verdict, (2) a short per-case "
         "breakdown, and (3) consolidated key findings for any failures (fold in each failing "
-        "case's diagnosis). Do not include a greeting or signature."
+        "case's diagnosis). Do not include a greeting or signature.\n\n"
+        "OUTPUT CONTRACT: Return ONLY the comment body as Markdown — nothing else. Do NOT "
+        "prepend any preamble, status line, or commentary about your process, tools, or files "
+        "(never mention knowledge.md or whether any file exists). Everything you need is in "
+        "this prompt; do NOT read, look for, or reference any files on disk."
     )
     # Attribute to the run so Claude resolves the run OWNER's credential
     # (own→shared) rather than the ambient/shared one — a request thread has no
