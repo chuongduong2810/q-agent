@@ -13,7 +13,6 @@ import {
 } from "@/components/dashboard/runStatus";
 import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
 import { RunBulkBar } from "@/components/runs/RunBulkBar";
-import { RunStopButton } from "@/components/runs/RunStopButton";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/misc";
 import { useRuns } from "@/hooks/queries";
@@ -319,7 +318,6 @@ function RunRow({
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-1.5">
-        <RunStopButton run={run} />
         {canRun && (
           <button
             type="button"

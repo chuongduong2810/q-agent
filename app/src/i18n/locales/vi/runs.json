@@ -39,6 +39,8 @@
   "actions": {
     "menu": "Thao tác lượt chạy",
     "cancel": "Hủy lượt chạy",
+    "stop": "Dừng lượt chạy",
+    "cleanup": "Dọn dẹp",
     "retry": "Thử lại lượt chạy",
     "duplicate": "Nhân bản",
     "delete": "Xóa lượt chạy",

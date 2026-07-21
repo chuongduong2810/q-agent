@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Copy, MoreVertical, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { Copy, Eraser, MoreVertical, RotateCcw, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
@@ -7,7 +7,7 @@ import { toast } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { isTerminalRun } from "@/components/dashboard/runStatus";
 import { ApiError } from "@/lib/api";
-import { useCancelRun, useCreateRun, useDeleteRun, useRetryRun } from "@/hooks/queries";
+import { useCreateRun, useDeleteRun, useRetryRun, useStopRun } from "@/hooks/queries";
 import type { RunOut } from "@/types/api";
 
 const MENU_WIDTH = 190;
@@ -33,10 +33,10 @@ export function RunActionsMenu({
   const { t } = useTranslation("runs");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const [confirming, setConfirming] = useState<"cancel" | "delete" | null>(null);
+  const [confirming, setConfirming] = useState<"stop" | "delete" | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  const cancelRun = useCancelRun();
+  const stopRun = useStopRun();
   const retryRun = useRetryRun();
   const deleteRun = useDeleteRun();
   const createRun = useCreateRun();
@@ -77,10 +77,13 @@ export function RunActionsMenu({
     };
   }, [open]);
 
-  const handleCancel = () => {
-    cancelRun.mutate(run.id, {
+  // Stop / force-clean-up — one action for any status (the standalone eraser
+  // button was folded into this menu). In-progress → cancel + clean up; terminal
+  // → reset orphaned in-flight rows without touching the lifecycle status.
+  const handleStop = () => {
+    stopRun.mutate(run.id, {
       onSuccess: () => {
-        toast.success(t("actions.toast.cancelled"));
+        toast.success(terminal ? t("actions.toast.cleaned") : t("actions.toast.cancelled"));
         setConfirming(null);
       },
       onError: (e) => toast.error(e instanceof Error ? e.message : t("actions.toast.cancelFailed")),
@@ -166,19 +169,24 @@ export function RunActionsMenu({
               style={{ top: pos.top, left: pos.left, width: MENU_WIDTH, background: "rgb(24,24,32)" }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {!terminal && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setConfirming("cancel");
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-semibold text-[#fbbf24] hover:bg-white/[0.06]"
-                >
-                  <XCircle size={14} strokeWidth={2} />
-                  {t("actions.cancel")}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setConfirming("stop");
+                }}
+                className={
+                  "flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[12.5px] font-semibold hover:bg-white/[0.06] " +
+                  (terminal ? "text-[#f59e0b]" : "text-[#fbbf24]")
+                }
+              >
+                {terminal ? (
+                  <Eraser size={14} strokeWidth={2} />
+                ) : (
+                  <Square size={12.5} strokeWidth={2.4} fill="currentColor" />
+                )}
+                {terminal ? t("actions.cleanup") : t("actions.stop")}
+              </button>
               {terminal && (
                 <button
                   type="button"
@@ -218,13 +226,17 @@ export function RunActionsMenu({
       )}
 
       <ConfirmDialog
-        open={confirming === "cancel"}
-        title={t("actions.confirmCancel.title")}
-        message={t("actions.confirmCancel.message", { name: run.name })}
-        confirmLabel={t("actions.confirmCancel.confirm")}
-        danger
-        loading={cancelRun.isPending}
-        onConfirm={handleCancel}
+        open={confirming === "stop"}
+        title={terminal ? t("actions.confirmCleanup.title") : t("actions.confirmCancel.title")}
+        message={
+          terminal
+            ? t("actions.confirmCleanup.message", { name: run.name })
+            : t("actions.confirmCancel.message", { name: run.name })
+        }
+        confirmLabel={terminal ? t("actions.confirmCleanup.confirm") : t("actions.confirmCancel.confirm")}
+        danger={!terminal}
+        loading={stopRun.isPending}
+        onConfirm={handleStop}
         onClose={() => setConfirming(null)}
       />
       <ConfirmDialog
