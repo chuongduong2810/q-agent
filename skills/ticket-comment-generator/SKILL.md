@@ -38,7 +38,9 @@ requirement-analyst → test-case-generator → test-case-reviewer
 - The **failure analysis** (from `execution-analyzer`) and/or **screenshot annotation notes**
   (from `screenshot-annotator`).
 - The related **Test Case ID** and its expected result; linked Acceptance Criteria if known.
-- `knowledge.md` — for environment details, URLs, and correct domain/UI terminology.
+- Any project terminology / environment names **provided in the task prompt** (URLs, domain/UI
+  terms). All context is supplied inline — do **not** read or look for files (e.g. `knowledge.md`)
+  on disk; if a detail isn't in the prompt, simply omit it rather than commenting on its absence.
 
 ## Consolidation Rule (one comment per ticket)
 
@@ -59,7 +61,7 @@ consolidated comment as:
 2. **Aggregate the ticket's cases** — collect every executed test case for the ticket with its
    pass/fail status, error, and annotation diagnosis; compute the overall (all-pass vs any-fail) status.
 3. **Gather facts** — repro steps, expected vs actual, environment, evidence links, from the inputs.
-4. **Write in project language** — reuse terminology and environment names from `knowledge.md`.
+4. **Write in project language** — reuse any terminology and environment names provided in the task.
 5. **Draft** using `templates/ticket-comment.md` for the chosen mode.
 6. **Attach evidence** — link the annotated screenshots, trace files, and annotation notes per case.
 
@@ -69,9 +71,12 @@ A ready-to-post Markdown comment or bug-ticket body following `templates/ticket-
 
 ## Quality Rules
 
+- **Output only the comment.** Return just the ready-to-post comment/ticket body — no preamble,
+  status line, or meta-commentary about your process, tools, or files (never narrate whether a
+  file such as `knowledge.md` exists).
 - **Factual and reproducible** — every step must be something a reader can follow to reproduce.
 - Professional, polite, spoken-style tone. **No blame**, no speculation stated as fact.
-- Reuse terminology and environment names from `knowledge.md`.
+- Reuse any terminology and environment names provided in the task prompt.
 - Always include evidence links and the linked Test Case ID / Acceptance Criteria.
 - Keep expected vs actual explicit and separate.
 
