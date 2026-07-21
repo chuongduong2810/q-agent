@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { applyFixtures, fixturesTs } from "../src/playwrightConfig";
+import { applyFixtures, fixturesTs, writeConfig } from "../src/playwrightConfig";
 
 test("fixturesTs always wires DOM capture; sessionStorage replay is gated", () => {
   const sessionFile = "/tmp/sessionStorage.json";
@@ -25,6 +25,39 @@ test("fixturesTs always wires DOM capture; sessionStorage replay is gated", () =
   const noReplay = fixturesTs(sessionFile, false);
   assert.ok(noReplay.includes("testInfo.attach('qagent-dom-distilled'"));
   assert.ok(!noReplay.includes("addInitScript"), "replay=false drops the session init script");
+});
+
+test("fixturesTs captures console + network on every test (#456)", () => {
+  const fx = fixturesTs("/tmp/sessionStorage.json", false);
+  assert.ok(fx.includes("testInfo.attach('qagent-network'"));
+  assert.ok(fx.includes("testInfo.attach('qagent-console'"));
+  assert.ok(fx.includes("page.on('response'"), "network responses are collected");
+  assert.ok(fx.includes("page.on('console'"), "console messages are collected");
+});
+
+test("writeConfig: screenshot always-on; video honors the setting (#456)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qa-cfg-"));
+  const read = () => fs.readFileSync(path.join(dir, "playwright.config.ts"), "utf-8");
+
+  // Screenshot is always 'on' now (captured pass or fail).
+  writeConfig(dir, 1, true);
+  assert.ok(read().includes("screenshot: 'on'"));
+
+  // Capture-video ON → video 'on' regardless of pass/fail; trace stays failure-only.
+  writeConfig(dir, 1, true, "", "", { captureVideo: true });
+  assert.ok(read().includes("video: 'on'"));
+  assert.ok(read().includes("trace: 'retain-on-failure'"));
+
+  // Capture-video OFF → no video.
+  writeConfig(dir, 1, true, "", "", { captureVideo: false });
+  assert.ok(read().includes("video: 'off'"));
+
+  // Intermediate heal attempts (heavyEvidence=false) never record video even when enabled.
+  writeConfig(dir, 1, true, "", "", { captureVideo: true, heavyEvidence: false });
+  assert.ok(read().includes("video: 'off'"));
+  assert.ok(read().includes("trace: 'off'"));
+
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("applyFixtures always rewrites imports to './fixtures' + writes fixtures.ts", () => {

@@ -73,7 +73,7 @@ export default defineConfig({
   reporter: [['json', { outputFile: 'report.json' }]],
   use: {
     headless: __HEADLESS__,
-    screenshot: 'only-on-failure',
+    screenshot: 'on',
     video: '__VIDEO__',
     trace: '__TRACE__',
 __EXTRA_USE__  },
@@ -97,6 +97,11 @@ _ATTACHMENT_KIND_MAP = {
     # distilled interactable-element inventory used to ground self-heal + the KB.
     "qagent-dom-raw": "dom",
     "qagent-dom-distilled": "dom-distilled",
+    # Console + network captured by the fixtures (see _fixtures_ts): these are NOT
+    # stored as media artifacts — the evidence sink parses their JSON into the
+    # result's console_logs / network_logs columns (see evidence_service).
+    "qagent-console": "console",
+    "qagent-network": "network",
 }
 
 
@@ -110,6 +115,7 @@ def _write_config(
     test_timeout_ms: int = 30000,
     action_timeout_ms: int | None = None,
     heavy_evidence: bool = True,
+    capture_video: bool = False,
 ) -> None:
     """(Re)write playwright.config.ts from current settings.
 
@@ -132,7 +138,11 @@ def _write_config(
             (heal re-runs only).
         heavy_evidence: When False, ``video``/``trace`` are ``'off'`` — used for
             intermediate heal attempts, where trace/video encoding is wasted work
-            (kept on the final attempt for evidence). Screenshot-on-failure stays.
+            (kept on the final attempt for evidence). Screenshot stays always-on.
+        capture_video: Honors the user's "Capture video" setting (#456). When
+            True (and ``heavy_evidence``), video is ``'on'`` so every case is
+            recorded regardless of pass/fail; when False, video is ``'off'``.
+            ``trace`` is independent — it stays ``retain-on-failure`` on heavy runs.
     """
     extra_lines: list[str] = []
     if base_url:
@@ -143,13 +153,16 @@ def _write_config(
         extra_lines.append(f"    actionTimeout: {int(action_timeout_ms)},")
         extra_lines.append(f"    navigationTimeout: {int(action_timeout_ms)},")
     extra_use = ("\n".join(extra_lines) + "\n") if extra_lines else ""
-    retain = "retain-on-failure" if heavy_evidence else "off"
+    trace = "retain-on-failure" if heavy_evidence else "off"
+    # Video follows the "Capture video" setting (always-on when enabled), not the
+    # failure-only trace policy — but intermediate heal attempts still skip it.
+    video = "on" if (capture_video and heavy_evidence) else "off"
     content = (
         _PLAYWRIGHT_CONFIG_TEMPLATE.replace("__WORKERS__", str(workers))
         .replace("__TIMEOUT__", str(int(test_timeout_ms)))
         .replace("__HEADLESS__", "true" if headless else "false")
-        .replace("__VIDEO__", retain)
-        .replace("__TRACE__", retain)
+        .replace("__VIDEO__", video)
+        .replace("__TRACE__", trace)
         .replace("__EXTRA_USE__", extra_use)
     )
     (spec_dir / "playwright.config.ts").write_text(content, encoding="utf-8")
@@ -328,6 +341,15 @@ def _fixtures_ts(session_file: Path, replay_session: bool, capture_raw: bool = T
         "  // Always-on DOM capture: after each test, snapshot the live page so the\n"
         "  // runner (evidence) and self-heal loop (real selectors) can use it.\n"
         "  _domCapture: [async ({ page }, use, testInfo) => {\n"
+        "    // Console + network capture (#456): collect for the whole test, pass or\n"
+        "    // fail. Listeners registered BEFORE use() so nothing is missed; the JSON\n"
+        "    // is attached after and parsed into console_logs/network_logs columns.\n"
+        "    const __net: any[] = []; const __con: any[] = []; const __started = new Map();\n"
+        "    page.on('request', (r) => { try { __started.set(r, Date.now()); } catch {} });\n"
+        "    page.on('response', (resp) => { try { if (__net.length < 300) { const req = resp.request(); const t0 = __started.get(req); __net.push({ method: req.method(), url: req.url(), status: resp.status(), durationMs: t0 ? Date.now() - t0 : 0 }); } } catch {} });\n"
+        "    page.on('requestfailed', (r) => { try { if (__net.length < 300) { const t0 = __started.get(r); __net.push({ method: r.method(), url: r.url(), status: 0, durationMs: t0 ? Date.now() - t0 : 0, failed: true }); } } catch {} });\n"
+        "    page.on('console', (msg) => { try { if (__con.length < 500) __con.push({ level: msg.type(), text: String(msg.text()).slice(0, 2000) }); } catch {} });\n"
+        "    page.on('pageerror', (err) => { try { if (__con.length < 500) __con.push({ level: 'error', text: String((err && err.message) || err).slice(0, 2000) }); } catch {} });\n"
         "    await use();\n"
         "    // Distilled inventory FIRST (it's what self-heal needs) — retry once\n"
         "    // after a short settle so a transiently-busy failure page still yields\n"
@@ -365,6 +387,16 @@ def _fixtures_ts(session_file: Path, replay_session: bool, capture_raw: bool = T
         "      } catch {}\n"
         "    }\n"
         f"{raw_block}"
+        "    try {\n"
+        "      const netPath = testInfo.outputPath('qagent-network.json');\n"
+        "      fs.writeFileSync(netPath, JSON.stringify(__net), 'utf-8');\n"
+        "      await testInfo.attach('qagent-network', { path: netPath, contentType: 'application/json' });\n"
+        "    } catch {}\n"
+        "    try {\n"
+        "      const conPath = testInfo.outputPath('qagent-console.json');\n"
+        "      fs.writeFileSync(conPath, JSON.stringify(__con), 'utf-8');\n"
+        "      await testInfo.attach('qagent-console', { path: conPath, contentType: 'application/json' });\n"
+        "    } catch {}\n"
         "  }, { auto: true }],\n"
         "});\n"
         "\n"
@@ -580,11 +612,18 @@ def _store_evidence(db, run: Run, result: ExecutionResult, attachments: list[dic
     :func:`app.services.evidence_service.store_uploaded_evidence` (shared with
     the Local Agent's multipart evidence upload) — each attachment's on-disk
     ``path`` is copied in using its own basename as the destination filename.
+
+    Console/network captures (#456) are JSON data, not media: they're decoded
+    into the result's ``console_logs`` / ``network_logs`` columns instead of
+    being stored as files.
     """
     for att in attachments:
-        evidence_service.store_uploaded_evidence(
-            db, run, result, att["kind"], att["path"], Path(att["path"]).name
-        )
+        if evidence_service.is_log_capture(att["kind"]):
+            evidence_service.apply_log_capture(result, att["kind"], att["path"])
+        else:
+            evidence_service.store_uploaded_evidence(
+                db, run, result, att["kind"], att["path"], Path(att["path"]).name
+            )
 
 
 def _resolve_project_for_run(db, run: Run, env: str) -> tuple[str | None, str, bool, str]:
@@ -742,7 +781,10 @@ def run_execution(execution_id: int) -> None:
                     _fail_all_results(db, run, execution, results, message)
                     return
 
-            _write_config(spec_dir, execution.workers, headless, base_url, storage_state)
+            _write_config(
+                spec_dir, execution.workers, headless, base_url, storage_state,
+                capture_video=bool(settings_store.load_settings().get("video", False)),
+            )
 
             # Always inject the generated fixtures.ts (DOM capture on every run) +
             # rewrite spec imports to it. sessionStorage replay (MSAL/SPA tokens) is
@@ -1246,6 +1288,7 @@ def heal_spec(case_id: int) -> None:
                 test_timeout_ms=settings.heal_test_timeout_ms,
                 action_timeout_ms=settings.heal_action_timeout_ms,
                 heavy_evidence=is_final_attempt,
+                capture_video=bool(settings_store.load_settings().get("video", False)),
             )
             _apply_fixtures(spec_dir, session_file, replay_session, capture_raw=is_final_attempt)
 

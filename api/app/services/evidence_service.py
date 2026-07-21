@@ -7,6 +7,7 @@ evidence through one implementation.
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -16,6 +17,58 @@ from app.logging import logger
 from app.models.execution import Evidence, ExecutionResult
 from app.models.run import Run
 from app.services.workspace_scope import scoped_evidence_dir
+
+# Log-capture "evidence" kinds (#456): these carry JSON data, not media, and are
+# written into the result's own columns rather than stored as files.
+_LOG_CAPTURE_COLUMNS = {"console": "console_logs", "network": "network_logs"}
+
+
+def is_log_capture(kind: str) -> bool:
+    """Whether ``kind`` is a JSON log capture (console/network) rather than media."""
+    return kind in _LOG_CAPTURE_COLUMNS
+
+
+def apply_log_capture(
+    result: ExecutionResult, kind: str, src_file_or_bytes: str | Path | bytes | bytearray
+) -> bool:
+    """Parse a console/network JSON capture into the matching result column (#456).
+
+    Console/network are captured by the injected Playwright fixtures and flow
+    through the same attachment/upload path as media evidence, but they are DATA
+    (a list of log entries), so instead of storing a file we decode the JSON and
+    assign it to ``result.console_logs`` / ``result.network_logs`` — the columns
+    the Evidence UI reads. Shared by the server runner (passes a file path a local
+    Playwright process just wrote) and the Local Agent upload endpoint (passes the
+    uploaded bytes). The caller commits.
+
+    Args:
+        result: The ExecutionResult whose column is populated.
+        kind: ``"console"`` or ``"network"``.
+        src_file_or_bytes: The JSON payload — a path to read, or raw bytes.
+
+    Returns:
+        True if a list was parsed and assigned; False on a missing/unparseable
+        payload (best-effort — a capture failure never fails the result).
+    """
+    column = _LOG_CAPTURE_COLUMNS.get(kind)
+    if column is None:
+        return False
+    try:
+        if isinstance(src_file_or_bytes, (bytes, bytearray)):
+            raw = bytes(src_file_or_bytes).decode("utf-8")
+        else:
+            src = Path(src_file_or_bytes)
+            if not src.exists():
+                return False
+            raw = src.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        logger.warning("Failed to parse {} capture: {}", kind, exc)
+        return False
+    if not isinstance(data, list):
+        return False
+    setattr(result, column, data)
+    return True
 
 
 def store_uploaded_evidence(

@@ -324,7 +324,7 @@
       "chromeNoShot": "{{caseCode}} · không có ảnh chụp màn hình",
       "allPassed": "Tất cả các kiểm chứng đều đạt",
       "noShotTitle": "Không có ảnh chụp màn hình cho ca này",
-      "passedBody": "Ảnh chụp màn hình chỉ được ghi lại khi thất bại — không có gì để chú thích ở đây.",
+      "passedBody": "Không có ảnh chụp màn hình nào được ghi lại cho trường hợp này.",
       "noShotBody": "Ca này không có ảnh chụp màn hình lỗi để chú thích.",
       "annotatedSuffix": " · đã chú thích"
     },

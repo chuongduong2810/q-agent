@@ -41,6 +41,9 @@ export interface Job {
   browser: string;
   workers: number;
   headless: boolean;
+  /** Honors the "Capture video" setting (#456): record video for every case when
+   * true, none when false. Optional for backward-compat with older servers. */
+  captureVideo?: boolean;
   baseUrl: string;
   manualAuth: boolean;
   authOrigins: string[];

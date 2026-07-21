@@ -18,7 +18,7 @@ export default defineConfig({
   reporter: __REPORTERS__,
   use: {
     headless: __HEADLESS__,
-    screenshot: 'only-on-failure',
+    screenshot: 'on',
     video: '__VIDEO__',
     trace: '__TRACE__',
 __EXTRA_USE__  },
@@ -35,6 +35,9 @@ export interface ConfigOptions {
   actionTimeoutMs?: number;
   /** When false, `video`/`trace` are `'off'` — intermediate heal attempts. */
   heavyEvidence?: boolean;
+  /** Honors the "Capture video" setting (#456). When true (and `heavyEvidence`),
+   * video is `'on'` so every case is recorded regardless of pass/fail; else `'off'`. */
+  captureVideo?: boolean;
   /** Absolute path to the vendored live reporter (`live_reporter.cjs`). When set,
    * it's added alongside the JSON reporter so per-test results stream out during
    * the run (execution only; heal/regen don't need it). */
@@ -60,7 +63,7 @@ export function writeConfig(
   storageState = "",
   opts: ConfigOptions = {}
 ): void {
-  const { testTimeoutMs = 30000, actionTimeoutMs, heavyEvidence = true, liveReporterPath } = opts;
+  const { testTimeoutMs = 30000, actionTimeoutMs, heavyEvidence = true, captureVideo = false, liveReporterPath } = opts;
   // JSON reporter (drives report.json for evidence + reconcile) + optionally the
   // live reporter (streams per-test results). Paths JSON-escaped for Windows.
   const reporters = ["['json', { outputFile: 'report.json' }]"];
@@ -74,13 +77,16 @@ export function writeConfig(
     extraLines.push(`    navigationTimeout: ${Math.trunc(actionTimeoutMs)},`);
   }
   const extraUse = extraLines.length ? extraLines.join("\n") + "\n" : "";
-  const retain = heavyEvidence ? "retain-on-failure" : "off";
+  const trace = heavyEvidence ? "retain-on-failure" : "off";
+  // Video follows the "Capture video" setting (always-on when enabled), not the
+  // failure-only trace policy — but intermediate heal attempts still skip it.
+  const video = captureVideo && heavyEvidence ? "on" : "off";
   const content = PLAYWRIGHT_CONFIG_TEMPLATE.replace("__TIMEOUT__", String(Math.trunc(testTimeoutMs)))
     .replace("__WORKERS__", String(workers))
     .replace("__HEADLESS__", headless ? "true" : "false")
     .replace("__REPORTERS__", reportersStr)
-    .replace("__VIDEO__", retain)
-    .replace("__TRACE__", retain)
+    .replace("__VIDEO__", video)
+    .replace("__TRACE__", trace)
     .replace("__EXTRA_USE__", extraUse);
   fs.writeFileSync(path.join(specDir, "playwright.config.ts"), content, "utf-8");
 }
@@ -138,6 +144,15 @@ export function fixturesTs(sessionFile: string, replaySession: boolean, captureR
     "  // Always-on DOM capture: after each test, snapshot the live page so the\n" +
     "  // runner (evidence) and self-heal loop (real selectors) can use it.\n" +
     "  _domCapture: [async ({ page }, use, testInfo) => {\n" +
+    "    // Console + network capture (#456): collect for the whole test, pass or\n" +
+    "    // fail. Listeners registered BEFORE use() so nothing is missed; the JSON\n" +
+    "    // is attached after and parsed into console_logs/network_logs columns.\n" +
+    "    const __net: any[] = []; const __con: any[] = []; const __started = new Map();\n" +
+    "    page.on('request', (r) => { try { __started.set(r, Date.now()); } catch {} });\n" +
+    "    page.on('response', (resp) => { try { if (__net.length < 300) { const req = resp.request(); const t0 = __started.get(req); __net.push({ method: req.method(), url: req.url(), status: resp.status(), durationMs: t0 ? Date.now() - t0 : 0 }); } } catch {} });\n" +
+    "    page.on('requestfailed', (r) => { try { if (__net.length < 300) { const t0 = __started.get(r); __net.push({ method: r.method(), url: r.url(), status: 0, durationMs: t0 ? Date.now() - t0 : 0, failed: true }); } } catch {} });\n" +
+    "    page.on('console', (msg) => { try { if (__con.length < 500) __con.push({ level: msg.type(), text: String(msg.text()).slice(0, 2000) }); } catch {} });\n" +
+    "    page.on('pageerror', (err) => { try { if (__con.length < 500) __con.push({ level: 'error', text: String((err && err.message) || err).slice(0, 2000) }); } catch {} });\n" +
     "    await use();\n" +
     "    // Distilled inventory FIRST (what self-heal needs) — retry once after a\n" +
     "    // short settle so a transiently-busy failure page still yields real\n" +
@@ -175,6 +190,16 @@ export function fixturesTs(sessionFile: string, replaySession: boolean, captureR
     "      } catch {}\n" +
     "    }\n" +
     rawBlock +
+    "    try {\n" +
+    "      const netPath = testInfo.outputPath('qagent-network.json');\n" +
+    "      fs.writeFileSync(netPath, JSON.stringify(__net), 'utf-8');\n" +
+    "      await testInfo.attach('qagent-network', { path: netPath, contentType: 'application/json' });\n" +
+    "    } catch {}\n" +
+    "    try {\n" +
+    "      const conPath = testInfo.outputPath('qagent-console.json');\n" +
+    "      fs.writeFileSync(conPath, JSON.stringify(__con), 'utf-8');\n" +
+    "      await testInfo.attach('qagent-console', { path: conPath, contentType: 'application/json' });\n" +
+    "    } catch {}\n" +
     "  }, { auto: true }],\n" +
     "});\n" +
     "\n" +

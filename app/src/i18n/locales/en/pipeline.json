@@ -324,7 +324,7 @@
       "chromeNoShot": "{{caseCode}} · no screenshot captured",
       "allPassed": "All assertions passed",
       "noShotTitle": "No screenshot for this case",
-      "passedBody": "Screenshots are captured only on failure — nothing to annotate here.",
+      "passedBody": "No screenshot was captured for this case.",
       "noShotBody": "This case has no failure screenshot to annotate.",
       "annotatedSuffix": " · annotated"
     },
