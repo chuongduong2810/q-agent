@@ -11,10 +11,29 @@
  * Build: npm run dist:desktop    (electron-builder → Windows installer)
  */
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, shell } = require("electron");
 const { startUi } = require(path.join(__dirname, "..", "dist", "src", "ui.js"));
 
 let win = null;
+let tray = null;
+// The agent's in-process UI URL (port may bump from 7420). Kept so the window can
+// be recreated from the tray after a hide/destroy without restarting the agent.
+let uiUrl = null;
+// Set true only for a real quit (tray "Quit" / update install) — closing the
+// window otherwise HIDES it so the agent keeps running (connection + in-flight
+// job + the log ring buffer stay alive), and reopening replays the log (#agent-log).
+app.isQuitting = false;
+
+/** Show/focus the window, recreating + reloading it if it was destroyed. */
+function showWindow() {
+  if (win && !win.isDestroyed()) {
+    win.show();
+    win.focus();
+    return;
+  }
+  createWindow();
+  if (uiUrl) win.loadURL(uiUrl);
+}
 
 /** Wire the update feed (build.publish → latest.yml on the server's /downloads/
  * route) to an EXPLICIT, user-driven flow: we notify the renderer that a version
@@ -45,7 +64,10 @@ function initAutoUpdate() {
   // the event by subscribing too late). Errors resolve, never reject.
   ipcMain.handle("update:check", () => updater.checkForUpdates().catch((e) => ({ error: String(e) })));
   ipcMain.handle("update:download", () => updater.downloadUpdate().catch((e) => ({ error: String(e) })));
-  ipcMain.handle("update:install", () => updater.quitAndInstall());
+  ipcMain.handle("update:install", () => {
+    app.isQuitting = true; // let the window close for the install instead of hiding
+    return updater.quitAndInstall();
+  });
 }
 
 function createWindow() {
@@ -69,9 +91,39 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
+  // Closing the window HIDES it (agent keeps running in the tray) unless we're
+  // actually quitting — so an in-flight live-authoring/heal session and its log
+  // survive, and reopening shows the ongoing log. A real exit is via the tray.
+  win.on("close", (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      win.hide();
+    }
+  });
   win.on("closed", () => {
     win = null;
   });
+}
+
+/** Tray icon so the agent stays reachable while its window is hidden. */
+function createTray() {
+  if (tray) return;
+  tray = new Tray(path.join(__dirname, "icons", "icon-32.png"));
+  tray.setToolTip("Q-Agent Local Agent");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Show Q-Agent", click: showWindow },
+      { type: "separator" },
+      {
+        label: "Quit",
+        click: () => {
+          app.isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  tray.on("click", showWindow);
 }
 
 // Titlebar controls (from preload → renderer).
@@ -81,20 +133,23 @@ ipcMain.on("win:close", () => win?.close());
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
   // Start the agent's web UI in-process; load the window once it's listening
   // (the port may bump from 7420 if taken). `open: false` — no browser tab.
   startUi({
     open: false,
     onListening: (url) => {
+      uiUrl = url;
       if (win) win.loadURL(url);
     },
   });
   initAutoUpdate();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  app.on("activate", () => showWindow());
 });
 
+// Don't quit when the window closes — the agent keeps running in the tray so its
+// connection + in-flight job + log survive a window close (#agent-log). A real
+// exit only happens via the tray "Quit" (which sets app.isQuitting).
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (app.isQuitting && process.platform !== "darwin") app.quit();
 });

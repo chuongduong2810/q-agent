@@ -473,6 +473,7 @@ function logColor(t){
   if (t === "auth-captured") return "#6ee7b7";
   if (t === "job-claimed") return "#c4b5fd";
   if (t === "job-complete") return "#6ee7b7";
+  if (t === "authoring-step") return "#c3c3d0";
   return "#8b8b9e";
 }
 function logMsg(ev){
@@ -486,6 +487,7 @@ function logMsg(ev){
     case "job-complete": return "execution #" + ev.executionId + " complete \\u00b7 " + ev.passed + " passed, " + ev.failed + " failed";
     case "error": return ev.message || "error";
     case "log": return ev.message || "";
+    case "authoring-step": return ev.line || null; // live authoring / self-heal steps (#400/#428)
     default: return null;
   }
 }
