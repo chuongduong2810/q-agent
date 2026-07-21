@@ -256,6 +256,7 @@ export async function processJob(cfg: AgentConfig, job: api.Job): Promise<void> 
 
     writeConfig(workDir, job.workers, job.headless, job.baseUrl, storageState, {
       liveReporterPath: vendorLiveReporter(),
+      captureVideo: Boolean(job.captureVideo),
     });
 
     // Always inject the generated fixtures.ts (DOM capture on every run) + rewrite
@@ -516,6 +517,7 @@ async function processHealJob(cfg: AgentConfig, job: api.Job, heal: NonNullable<
           testTimeoutMs: heal.testTimeoutMs,
           actionTimeoutMs: heal.actionTimeoutMs,
           heavyEvidence: isFinalAttempt,
+          captureVideo: Boolean(job.captureVideo),
         });
         const replaySession = Boolean(
           job.manualAuth && storageState && sessionStoragePath && fs.statSync(sessionStoragePath).size > 0

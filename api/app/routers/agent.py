@@ -224,6 +224,9 @@ def claim_next_job(
         "browser": execution.browser,
         "workers": execution.workers,
         "headless": bool(settings_store.load_settings().get("headless", True)),
+        # Honor the "Capture video" setting on the agent too (#456): ON records
+        # video for every case (pass or fail); OFF records none.
+        "captureVideo": bool(settings_store.load_settings().get("video", False)),
         "baseUrl": base_url,
         "manualAuth": manual_auth,
         "authOrigins": auth_origins,
@@ -310,6 +313,12 @@ async def push_job_evidence(
     if result is None:
         raise HTTPException(status_code=404, detail="No matching result for this ticket/case")
     content = await file.read()
+    # Console/network (#456) are JSON data, not media — decode into the result's
+    # console_logs/network_logs columns instead of storing a file.
+    if evidence_service.is_log_capture(kind):
+        evidence_service.apply_log_capture(result, kind, content)
+        db.commit()
+        return {"ok": True, "kind": kind}
     evidence = evidence_service.store_uploaded_evidence(
         db, run, result, kind, content, file.filename or "evidence"
     )

@@ -45,6 +45,10 @@ const ATTACHMENT_KIND_MAP: Record<string, string> = {
   // raw page HTML + a distilled interactable-element inventory.
   "qagent-dom-raw": "dom",
   "qagent-dom-distilled": "dom-distilled",
+  // Console + network captured by the fixtures (#456): uploaded via the evidence
+  // path but decoded server-side into console_logs/network_logs (not media rows).
+  "qagent-console": "console",
+  "qagent-network": "network",
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
