@@ -439,6 +439,9 @@ export interface AuthoringJob {
   taskPrompt: string;
   model: string;
   maxBudgetUsd: number;
+  /** Authoring log verbosity from Settings (#438): "concise" hides raw tool/Bash
+   * step lines in the agent's AGENT LOG, "verbose" shows them. */
+  logVerbosity?: string;
   /** The run owner's saved Claude credential (.credentials.json content) so the
    * local `claude` uses the app's Settings credential instead of a separate
    * `claude login`. Empty ⇒ fall back to the agent's own local login. */

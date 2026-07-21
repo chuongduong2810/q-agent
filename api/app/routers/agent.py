@@ -793,6 +793,7 @@ def agent_authoring_next(
         task_prompt=claim["task_prompt"],
         model=claim["model"],
         max_budget_usd=claim["max_budget_usd"],
+        log_verbosity=claim.get("log_verbosity", "concise"),
         claude_credentials=creds,
     ).model_dump(by_alias=True)
 

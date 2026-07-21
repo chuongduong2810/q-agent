@@ -276,6 +276,7 @@ def _enqueue_agent_authoring(
         task_prompt=task_prompt,
         model=model,
         max_budget_usd=settings_store.authoring_cost_budget_usd(),
+        log_verbosity=settings_store.load_settings().get("authoringLogVerbosity", "concise"),
     )
 
     spec = db.query(AutomationSpec).filter(AutomationSpec.test_case_id == case.id).first()

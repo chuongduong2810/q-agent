@@ -407,6 +407,10 @@ class AuthoringClaimOut(ApiModel):
     task_prompt: str
     model: str
     max_budget_usd: float
+    # Authoring log verbosity (#438) — mirrors the Settings value so the agent's
+    # own AGENT LOG filters the same way the web trail does: "concise" hides the
+    # raw tool/Bash step lines, "verbose" shows them.
+    log_verbosity: str = "concise"
     # The run owner's effective Claude credential (.credentials.json content), so
     # the agent's local `claude` authenticates with the app's saved credential
     # instead of a separate `claude login` on the agent machine. Empty ⇒ the agent
