@@ -27,7 +27,7 @@ from app.deps_auth import current_user
 from app.logging import logger
 from app.models.agent_device import AgentDevice
 from app.models.execution import Execution, ExecutionResult
-from app.models.run import Run, RunTicket, TERMINAL_RUN_STATUSES
+from app.models.run import Run, RunTicket
 from app.models.testcase import AutomationSpec, TestCase
 from app.models.ticket import Ticket
 from app.models.user import User
@@ -306,10 +306,13 @@ def finalize_authored_spec(
     case = db.get(TestCase, case_id)
     if run is None or case is None:
         return None
-    # A run that was cancelled/stopped while its authoring job was still running on
-    # the agent must not be resurrected by the late post-back (#419/#420): drop it.
-    if run.status in TERMINAL_RUN_STATUSES or run_control.is_cancelled(run_id, db):
-        return None
+    # Note: we intentionally do NOT drop the post-back for a terminal/cancelled run.
+    # Persisting the finished spec never advances the run status (authoring doesn't
+    # touch run.status), so it can't "resurrect" a stopped run — and dropping it
+    # instead left the spec stuck at status="running" forever, keeping the UI trail
+    # spinning after the agent had already written the spec (#440-followup). A run
+    # that was properly stopped has its authoring session purged, so this endpoint
+    # 404s before reaching here; this path only runs for a genuinely finished job.
     run_context.set_run(run_id)
     try:
         spec = _generate_one(db, run, case, authored={"code": code, "discovered": discovered})
