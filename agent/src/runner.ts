@@ -410,6 +410,13 @@ async function uploadEvidenceThenCleanup(
   pendingEvidence: { ticket: string; caseCode: string; kind: string; filePath: string }[],
   workDir: string
 ): Promise<void> {
+  // Tell the UI evidence is still incoming so it can show a loader instead of an
+  // empty panel while these deferred uploads land (results are already visible).
+  if (pendingEvidence.length > 0) {
+    await api
+      .postEvent(cfg, executionId, "exec.evidence.uploading", { count: pendingEvidence.length })
+      .catch(() => {});
+  }
   try {
     for (const ev of pendingEvidence) {
       await api
@@ -424,6 +431,13 @@ async function uploadEvidenceThenCleanup(
     }
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
+    // Signal completion so the UI drops the loader and refetches the now-uploaded
+    // evidence — always fire (even on partial failure) so the loader never sticks.
+    if (pendingEvidence.length > 0) {
+      await api
+        .postEvent(cfg, executionId, "exec.evidence.done", {})
+        .catch(() => {});
+    }
   }
 }
 
