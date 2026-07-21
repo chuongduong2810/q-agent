@@ -24,7 +24,7 @@ from app.config import settings
 from app.db import utcnow
 from app.logging import logger
 from app.models.knowledge import ProjectKnowledge, compose_key
-from app.services import audit_service, project_config_service, repo_service
+from app.services import audit_service, project_config_service, repo_service, run_context
 from app.services.claude_cli import run_json
 from app.services.skills import PROJECT_BOOTSTRAP
 from app.services.workspace_scope import scoped_knowledge_dir, slug
@@ -382,9 +382,15 @@ def _run_build(row_key: str) -> None:
         )
         try:
             repo_path = _resolve_path_for_row(db, row, config)
-            payload = build_knowledge_payload(
-                row.name, row.provider, row.repo, row.framework, config=config, repo_path=repo_path
-            )
+            # Attribute the Claude call to the row's owner so it resolves that
+            # user's own/preferred credentials (mirrors the clone PAT + output
+            # scoping above). A shared build (owner_id is None) still resolves the
+            # shared credential. Without this, the build thread has no ambient run,
+            # so the Claude call would fall back to the shared credential (#466).
+            with run_context.owner_scope(row.owner_id):
+                payload = build_knowledge_payload(
+                    row.name, row.provider, row.repo, row.framework, config=config, repo_path=repo_path
+                )
             apply_build(row, payload, config=config)
             db.commit()
             audit_service.record(
