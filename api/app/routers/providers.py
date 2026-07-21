@@ -368,6 +368,7 @@ def update_settings_endpoint(body: SettingsUpdate) -> SettingsOut:
         "executionTarget": updates.get("execution_target"),
         "authoringMode": updates.get("authoring_mode"),
         "healMode": updates.get("heal_mode"),
+        "authoringCostBudgetUsd": updates.get("authoring_cost_budget_usd"),
         "authoringLogVerbosity": updates.get("authoring_log_verbosity"),
         "gateEnabled": updates.get("gate_enabled"),
     }

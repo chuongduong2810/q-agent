@@ -46,6 +46,12 @@ DEFAULTS: dict[str, Any] = {
     # spec + error, and emit a corrected spec. live-harness needs a paired local
     # agent (browser-harness + claude run there); falls back to classic otherwise.
     "healMode": "classic",
+    # Per-session Claude $ ceiling for a live browser-harness run — shared by live
+    # authoring AND live self-heal (#430). Enforced natively by the CLI's
+    # --max-budget-usd. Defaults to the config value; Settings-configurable so the
+    # operator can raise it when a heal/author needs to create data + drive a long
+    # flow. See config.authoring_cost_budget_usd.
+    "authoringCostBudgetUsd": 2.00,
     # Verbosity of the live-authoring step trail shown in the UI (#400). "concise"
     # (default) shows only user-readable lines (Claude's narration + phase status);
     # "verbose" also shows the raw tool/Bash calls (browser-harness invocations).
@@ -84,6 +90,19 @@ def gate_enabled() -> bool:
     that predates the setting.
     """
     return bool(load_settings().get("gateEnabled", True))
+
+
+def authoring_cost_budget_usd() -> float:
+    """Effective per-session $ ceiling for live authoring + live heal (#430).
+
+    The Settings-configurable ``authoringCostBudgetUsd`` if set, else the config
+    default (``settings.authoring_cost_budget_usd``) for installs that predate it.
+    """
+    val = load_settings().get("authoringCostBudgetUsd")
+    try:
+        return float(val) if val is not None else float(app_settings.authoring_cost_budget_usd)
+    except (TypeError, ValueError):
+        return float(app_settings.authoring_cost_budget_usd)
 
 
 def save_settings(data: dict[str, Any]) -> dict[str, Any]:

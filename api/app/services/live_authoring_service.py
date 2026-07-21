@@ -34,6 +34,7 @@ from app.services import (
     audit_service,
     claude_cli,
     project_config_service,
+    settings_store,
     spec_service,
 )
 from app.services.exploration_agent import normalize_discovered
@@ -249,12 +250,13 @@ def author_case(db, case, run, *, owner_id: int | None, run_id: int | None) -> A
         )
 
     # Per-session cost ceiling: don't start if the run has already spent the budget.
+    budget = settings_store.authoring_cost_budget_usd()
     if run_id is not None:
         try:
             spent = float(ai_usage_service.run_breakdown(db, run_id).get("totalCostUsd") or 0.0)
-            if spent >= settings.authoring_cost_budget_usd:
+            if spent >= budget:
                 raise LiveAuthoringError(
-                    f"Authoring cost budget (${settings.authoring_cost_budget_usd:.2f}) "
+                    f"Authoring cost budget (${budget:.2f}) "
                     f"already reached for this run (${spent:.2f} spent)."
                 )
         except LiveAuthoringError:
@@ -301,6 +303,7 @@ def author_case(db, case, run, *, owner_id: int | None, run_id: int | None) -> A
             include_template=True,
             label=f"Live authoring: {case.ticket_external_id} · {case.code}",
             extra_env={"BU_CDP_URL": f"http://127.0.0.1:{port}"},
+            max_budget_usd=budget,
         )
     finally:
         _teardown(proc)

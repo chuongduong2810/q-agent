@@ -958,6 +958,9 @@ class SettingsOut(ApiModel):
     # Self-heal engine (#428): "classic" (generate fix + re-run Playwright) or
     # "live-harness" (drive the real app via browser-harness, reusing live-authoring).
     heal_mode: str = "classic"
+    # Per-session Claude $ ceiling for a live browser-harness run — shared by live
+    # authoring and live self-heal (#430). Enforced via the CLI's --max-budget-usd.
+    authoring_cost_budget_usd: float = 2.00
     # Verbosity of the live-authoring step trail in the UI (#400): "concise"
     # (Claude narration + phase status only) or "verbose" (also raw tool/Bash calls).
     authoring_log_verbosity: str = "concise"
@@ -983,6 +986,7 @@ class SettingsUpdate(ApiModel):
     execution_target: str | None = None
     authoring_mode: str | None = None
     heal_mode: str | None = None
+    authoring_cost_budget_usd: float | None = None
     authoring_log_verbosity: str | None = None
     gate_enabled: bool | None = None
 
