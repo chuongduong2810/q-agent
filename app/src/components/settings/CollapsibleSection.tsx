@@ -23,6 +23,11 @@ export function CollapsibleSection({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // The height-collapse animation needs `overflow: hidden`, but that clips a
+  // child card's hover-lift shadow/glow (#430) once a section is open. Keep it
+  // hidden while collapsed/animating and switch to `visible` only after the
+  // open animation settles, so an open section no longer crops child shadows.
+  const [overflow, setOverflow] = useState<"hidden" | "visible">(defaultOpen ? "visible" : "hidden");
   return (
     <section id={id} className="mt-[26px] first:mt-0">
       <button
@@ -45,7 +50,11 @@ export function CollapsibleSection({
         initial={false}
         animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
         transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
-        style={{ overflow: "hidden" }}
+        // Clip during the transition; reveal (visible) once fully open so child
+        // hover-lift shadows aren't cropped.
+        onAnimationStart={() => setOverflow("hidden")}
+        onAnimationComplete={() => setOverflow(open ? "visible" : "hidden")}
+        style={{ overflow }}
       >
         {children}
       </motion.div>
