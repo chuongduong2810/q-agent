@@ -1,8 +1,7 @@
 import { motion } from "framer-motion";
-import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useTilt } from "@/hooks/useTilt";
-import { TiltSweep } from "@/components/ui/TiltSweep";
 
 interface GlassCardProps {
   children: ReactNode;
@@ -12,9 +11,9 @@ interface GlassCardProps {
   index?: number;
   onClick?: () => void;
   style?: React.CSSProperties;
-  /** Opt a card into the cursor-tracked 3D tilt (the hover brighten + shine
-   *  sweep always apply). Defaults to false — only the Dashboard cards enable
-   *  it. Mutually exclusive with `lift`. */
+  /** Opt a card into the cursor-tracked 3D tilt (the hover brighten always
+   *  applies). Defaults to false — only the Dashboard cards enable it.
+   *  Mutually exclusive with `lift`. */
   tilt?: boolean;
   /** Opt a card into the hover-lift effect (raise + expanded shadow on hover,
    *  as on the /runs and /tickets rows). Defaults to false. */
@@ -22,13 +21,13 @@ interface GlassCardProps {
 }
 
 /**
- * Frosted glass surface — the design's default panel. Cards brighten on hover
- * and replay a shine sweep. Two opt-in hover motions are available and mutually
- * exclusive: `tilt` (a cursor-tracked 3D tilt pivoting from the top edge, used
- * only on the Dashboard — see `useTilt` / `design/tilt-effect.html`) and `lift`
- * (a plain raise + expanded shadow, matching the /runs & /tickets rows). Cards
- * flagged `hover` or given an `onClick` are interactive: they get the richer
- * border-highlight + cyan glow and a pointer cursor.
+ * Frosted glass surface — the design's default panel. Cards brighten on hover.
+ * Two opt-in hover motions are available and mutually exclusive: `tilt` (a
+ * cursor-tracked 3D tilt pivoting from the top edge, used only on the Dashboard
+ * — see `useTilt` / `design/tilt-effect.html`) and `lift` (a plain raise +
+ * expanded shadow, matching the /runs & /tickets rows). Cards flagged `hover` or
+ * given an `onClick` are interactive: they get the richer border-highlight +
+ * cyan glow and a pointer cursor.
  */
 export function GlassCard({
   children,
@@ -42,11 +41,6 @@ export function GlassCard({
 }: GlassCardProps) {
   const interactive = hover || Boolean(onClick);
   const tilt = useTilt();
-  // Bumped on each hover-enter to remount (and thus replay) the shine sweep.
-  const [sweepKey, setSweepKey] = useState(0);
-  const replaySweep = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== "touch") setSweepKey((k) => k + 1);
-  };
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -66,7 +60,6 @@ export function GlassCard({
         transition: { duration: 0.25, ease: [0.2, 0.8, 0.2, 1] },
       }}
       onClick={onClick}
-      onPointerEnter={replaySweep}
       onPointerMove={tiltEnabled ? tilt.onPointerMove : undefined}
       onPointerLeave={tiltEnabled ? tilt.onPointerLeave : undefined}
       // tilt.style provides the perspective + rotate/scale motion values; the
@@ -80,7 +73,6 @@ export function GlassCard({
       )}
     >
       {children}
-      {sweepKey > 0 && <TiltSweep key={sweepKey} />}
     </motion.div>
   );
 }
