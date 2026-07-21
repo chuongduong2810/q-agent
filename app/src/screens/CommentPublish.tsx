@@ -1,9 +1,11 @@
 import { motion } from "framer-motion";
-import { FileText, Send, Sparkles } from "lucide-react";
+import { Eye, FileText, Pencil, Send, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { MarkdownLite } from "@/components/ui/MarkdownLite";
 import { PipelineRail } from "@/components/ui/PipelineRail";
 import { Pill, providerGlyph } from "@/components/ui/badges";
 import { EmptyState, Spinner } from "@/components/ui/misc";
@@ -25,7 +27,7 @@ export function CommentPublish() {
   const runId = Number(useParams().runId);
   const { data: run } = useRun(runId);
   const { data: comments, isLoading } = useComments(runId);
-  const { prepare, publishOne, publishAll, retry } = useCommentMutations(runId);
+  const { prepare, publishOne, publishAll, retry, edit } = useCommentMutations(runId);
 
   const anyFailed = (comments ?? []).some((c) => c.status === "failed");
 
@@ -125,6 +127,19 @@ export function CommentPublish() {
                 })
               }
               publishing={publishOne.isPending && (publishOne.variables as number) === c.id}
+              onSave={(body, done) =>
+                edit.mutate(
+                  { commentId: c.id, body: { body } },
+                  {
+                    onSuccess: () => {
+                      toast.success(t("publish.toast.saved"));
+                      done();
+                    },
+                    onError: (e) => toast.error(e instanceof Error ? e.message : t("publish.toast.saveFailed")),
+                  },
+                )
+              }
+              saving={edit.isPending && (edit.variables as { commentId: number })?.commentId === c.id}
             />
           ))}
         </div>
@@ -138,15 +153,43 @@ function PublishCard({
   index,
   onPublish,
   publishing,
+  onSave,
+  saving,
 }: {
   comment: TicketCommentOut;
   index: number;
   onPublish: () => void;
   publishing: boolean;
+  /** Persist an edited body; call `done` once the save succeeds to leave edit mode. */
+  onSave: (body: string, done: () => void) => void;
+  saving: boolean;
 }) {
   const { t } = useTranslation("pipeline");
   const [glyph, glyphBg] = providerGlyph[comment.providerKind] ?? ["?", "#6b7280"];
   const [color, statusKey, bg] = PUBLISH_STATUS[comment.status] ?? PUBLISH_STATUS.draft;
+
+  // Inline editor: `editing` swaps the rendered preview for a raw-markdown
+  // textarea; `previewing` toggles a live rendered preview of the current draft.
+  const [editing, setEditing] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [draft, setDraft] = useState(comment.body);
+  // Re-sync the draft if the comment changes underneath us (e.g. re-prepared)
+  // while not actively editing.
+  useEffect(() => {
+    if (!editing) setDraft(comment.body);
+  }, [comment.body, editing]);
+
+  const startEdit = () => {
+    setDraft(comment.body);
+    setPreviewing(false);
+    setEditing(true);
+  };
+  const cancelEdit = () => {
+    setEditing(false);
+    setPreviewing(false);
+  };
+  const save = () => onSave(draft, () => setEditing(false));
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -168,13 +211,69 @@ function PublishCard({
           <Pill color={color} bg={bg}>
             {publishing ? t("publish.status.publishing") : t(`publish.status.${statusKey}`)}
           </Pill>
-          <Button variant="glass" size="sm" onClick={onPublish} disabled={publishing}>
+          {editing ? (
+            <button
+              type="button"
+              onClick={() => setPreviewing((p) => !p)}
+              className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-soft transition-colors hover:bg-white/[0.1]"
+            >
+              {previewing ? <Pencil size={13} strokeWidth={2} /> : <Eye size={13} strokeWidth={2} />}
+              {previewing ? t("publish.editor.write") : t("publish.editor.preview")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={startEdit}
+              className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-soft transition-colors hover:bg-white/[0.1]"
+            >
+              <Pencil size={13} strokeWidth={2} />
+              {t("publish.editor.edit")}
+            </button>
+          )}
+          <Button variant="glass" size="sm" onClick={onPublish} disabled={publishing || editing}>
             {t("publish.publish")}
           </Button>
         </div>
-        <div className="whitespace-pre-wrap p-3 text-[13px] leading-[1.6] text-ink-soft md:p-[14px_18px]">
-          {comment.body}
-        </div>
+
+        {editing ? (
+          <div className="flex flex-col gap-2.5 p-3 md:p-[14px_18px]">
+            {previewing ? (
+              <div className="min-h-[160px] rounded-[11px] border border-white/[0.08] bg-white/[0.02] p-3">
+                {draft.trim() ? (
+                  <MarkdownLite text={draft} />
+                ) : (
+                  <span className="text-[12.5px] text-ink-dim">{t("publish.editor.empty")}</span>
+                )}
+              </div>
+            ) : (
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                spellCheck={false}
+                className="min-h-[200px] w-full resize-y rounded-[11px] border border-white/[0.1] bg-white/[0.03] p-3 font-mono text-[12.5px] leading-[1.6] text-ink outline-none focus:border-[rgba(139,92,246,.5)]"
+              />
+            )}
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="glass" size="sm" onClick={cancelEdit} disabled={saving}>
+                {t("publish.editor.cancel")}
+              </Button>
+              <Button variant="primary" size="sm" onClick={save} disabled={saving || draft === comment.body}>
+                {saving ? (
+                  <>
+                    <Spinner size={13} className="border-white/40 border-t-white" /> {t("publish.editor.saving")}
+                  </>
+                ) : (
+                  t("publish.editor.save")
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3 md:p-[14px_18px]">
+            <MarkdownLite text={comment.body} />
+          </div>
+        )}
+
         {comment.errorMessage && (
           <div className="px-[18px] pb-2 text-[12px] text-danger-soft">{comment.errorMessage}</div>
         )}

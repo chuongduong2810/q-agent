@@ -373,7 +373,18 @@
     "toast": {
       "publishingResults": "Publishing results to tickets",
       "publishFailed": "Publish failed",
-      "prepareFailed": "Prepare failed"
+      "prepareFailed": "Prepare failed",
+      "saved": "Comment saved",
+      "saveFailed": "Failed to save comment"
+    },
+    "editor": {
+      "edit": "Edit",
+      "write": "Write",
+      "preview": "Preview",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "empty": "Nothing to preview yet."
     },
     "empty": {
       "title": "No comments prepared",
