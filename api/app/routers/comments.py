@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps_auth import current_user
 from app.models.comment import TicketComment
+from app.models.knowledge import ProjectKnowledge
 from app.models.report import Report
 from app.models.run import Run
 from app.models.ticket import Ticket
@@ -68,8 +69,55 @@ def _latest_report(db: Session, run_id: int) -> Report:
     return report
 
 
+def _project_context_block(db: Session, run: Run) -> str:
+    """Concise project-KB grounding for the comment prompt (#452-followup): the
+    environment URL plus the app's domain/architecture and key screen names, so
+    comments use REAL project terminology and URLs instead of generic wording.
+
+    Best-effort — returns "" when the run has no resolvable project or indexed KB.
+    """
+    try:
+        from app.services.playwright_runner import _resolve_project_for_run
+
+        project_key, base_url, _manual, _provider = _resolve_project_for_run(db, run, run.env)
+    except Exception:  # noqa: BLE001 - grounding is additive; never block comments
+        project_key, base_url = None, ""
+
+    parts: list[str] = []
+    if base_url:
+        parts.append(f"Environment ({run.env}): {base_url}")
+    if project_key:
+        row = (
+            db.query(ProjectKnowledge)
+            .filter(
+                ProjectKnowledge.project_key == project_key,
+                ProjectKnowledge.owner_id == run.owner_id,
+            )
+            .order_by(ProjectKnowledge.confidence.desc())
+            .first()
+        )
+        kb = (row.knowledge if row else {}) or {}
+        if kb.get("domain"):
+            parts.append(f"Domain: {str(kb['domain'])[:600]}")
+        if kb.get("architecture"):
+            parts.append(f"Architecture: {str(kb['architecture'])[:400]}")
+        names = [
+            (r.get("name") or r.get("path") or r.get("url"))
+            for r in (kb.get("routes") or [])
+            if isinstance(r, dict)
+        ]
+        names = [str(n) for n in names if n][:12]
+        if names:
+            parts.append("Key screens/routes: " + ", ".join(names))
+    return "\n".join(parts)
+
+
 def _summarize_ticket(
-    ticket_external_id: str, summary: dict, ai_failure_analysis: str, run_id: int
+    ticket_external_id: str,
+    summary: dict,
+    ai_failure_analysis: str,
+    run_id: int,
+    project_context: str = "",
 ) -> str:
     """Ask Claude for ONE consolidated QA comment aggregating all of a ticket's
     test cases — overall verdict, per-case breakdown, and consolidated findings.
@@ -96,6 +144,11 @@ def _summarize_ticket(
         f"ticket failed. Overall: {passed}/{total} cases passed, {failed} failed.\n\n"
         f"Per test case:\n{cases_block}\n\n"
         + (f"Cross-case failure analysis: {ai_failure_analysis}\n\n" if failed and ai_failure_analysis else "")
+        + (
+            f"## Project context (use these real URLs + terminology; do not invent names)\n{project_context}\n\n"
+            if project_context.strip()
+            else ""
+        )
         + "Structure the comment as: (1) a one-line overall verdict, (2) a short per-case "
         "breakdown, and (3) consolidated key findings for any failures (fold in each failing "
         "case's diagnosis). Do not include a greeting or signature.\n\n"
@@ -124,7 +177,7 @@ def _summarize_ticket(
 def prepare_comments(
     run_id: int, db: Session = Depends(get_db), user: User | None = Depends(current_user)
 ) -> list[TicketComment]:
-    get_owned_or_404(db, Run, run_id, user)
+    run = get_owned_or_404(db, Run, run_id, user)
     # Preparing comments is a deliberate, synchronous post-run action. If the run
     # was previously cancelled, its in-memory cancel event lingers (run_control
     # only clears it on retry/delete), and register_process would INSTANTLY SIGKILL
@@ -135,6 +188,8 @@ def prepare_comments(
     report = _latest_report(db, run_id)
     ticket_summaries = report.data.get("ticketSummary", [])
     ai_failure_analysis = report.data.get("aiFailureAnalysis", "")
+    # Resolve once per run — same project KB grounds every ticket's comment.
+    project_context = _project_context_block(db, run)
 
     tickets = {
         t.external_id: t
@@ -159,7 +214,9 @@ def prepare_comments(
             _TARGET_STATUS_ALL_PASS if ticket_status == "Passed" else _TARGET_STATUS_ANY_FAIL
         )
         try:
-            body = _summarize_ticket(ticket_external_id, summary, ai_failure_analysis, run_id)
+            body = _summarize_ticket(
+                ticket_external_id, summary, ai_failure_analysis, run_id, project_context
+            )
         except ClaudeError as exc:
             raise HTTPException(status_code=502, detail=f"Claude CLI failed: {exc}") from exc
 
