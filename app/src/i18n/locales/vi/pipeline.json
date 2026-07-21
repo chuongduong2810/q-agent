@@ -295,6 +295,7 @@
   "evidence": {
     "title": "Bằng chứng",
     "subtitle": "RUN-{{runId}} · bằng chứng theo từng ca kiểm thử, nhóm theo ticket",
+    "uploading": "Đang tải bằng chứng từ local agent… các tệp sẽ hiển thị ở đây trong giây lát.",
     "empty": {
       "title": "Chưa có bằng chứng",
       "body": "Chạy bộ kiểm thử đã duyệt để thu thập bằng chứng cho mọi ticket trong Lần chạy.",

@@ -295,6 +295,7 @@
   "evidence": {
     "title": "Evidence",
     "subtitle": "RUN-{{runId}} · evidence per test case, grouped by ticket",
+    "uploading": "Uploading evidence from the local agent… artifacts will appear here shortly.",
     "empty": {
       "title": "No evidence yet",
       "body": "Run the approved suite to capture evidence for every ticket in the Run.",

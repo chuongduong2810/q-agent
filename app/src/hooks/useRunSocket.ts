@@ -86,6 +86,10 @@ export function useRunSocket(
             );
           }
           qc.invalidateQueries({ queryKey: queryKeys.execution(runId) });
+          // Evidence is a separate query and uploads AFTER results are reported
+          // (deferred on the Local Agent) — refresh it too so newly-uploaded
+          // artifacts appear (esp. on `exec.evidence.done`). See #evidence-loader.
+          qc.invalidateQueries({ queryKey: queryKeys.evidence(runId) });
         }
         if (evt.event.startsWith("publish")) {
           qc.invalidateQueries({ queryKey: queryKeys.comments(runId) });

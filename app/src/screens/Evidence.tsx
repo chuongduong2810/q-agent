@@ -11,6 +11,7 @@ import {
   Rows3,
   Sparkles,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useTranslation } from "react-i18next";
@@ -21,6 +22,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAnnotate, useAutoAnnotate, useEvidence } from "@/hooks/queries";
+import { useEvidenceUploading } from "@/hooks/useRunEvents";
 import { useUI, type AnnotationTool, type EvidenceTab } from "@/store/ui";
 import type { ExecutionResultOut } from "@/types/api";
 
@@ -76,6 +78,9 @@ export function Evidence() {
   );
 
   const { data: evidence, isLoading, isError } = useEvidence(runId);
+  // The Local Agent uploads a finished run's evidence AFTER reporting results, so
+  // there's a window where the results are here but their artifacts aren't yet.
+  const evidenceUploading = useEvidenceUploading();
   const annotate = useAnnotate(runId);
   const autoAnnotate = useAutoAnnotate(runId);
 
@@ -118,7 +123,14 @@ export function Evidence() {
         <PipelineRail stage={5} />
       </div>
 
-      {isLoading ? (
+      {evidenceUploading && (
+        <div className="mb-3.5 flex items-center gap-2.5 rounded-[14px] border border-[rgba(139,92,246,.3)] bg-[rgba(139,92,246,.1)] px-4 py-3 text-[12.5px] font-medium text-[#c4b5fd]">
+          <Loader2 size={15} strokeWidth={2.2} className="animate-spin" />
+          {tr("evidence.uploading")}
+        </div>
+      )}
+
+      {isLoading || (evidenceUploading && notReady) ? (
         <div className="flex flex-col gap-3.5 md:grid md:grid-cols-[240px_1fr]">
           <div className="glass h-64 animate-pulse rounded-[18px]" />
           <div className="glass h-96 animate-pulse rounded-[18px]" />
