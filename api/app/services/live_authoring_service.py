@@ -154,8 +154,16 @@ def _test_data_lines(case) -> str:
     return "\n".join(f"- {d.get('field', '')}: {d.get('value', '')}" for d in data)
 
 
-def _build_prompt(case, context: dict, spec_filename: str, sidecar: str, base_url: str) -> str:
-    """Build the live-authoring task prompt (the skill supplies the methodology)."""
+def _build_prompt(
+    case, context: dict, spec_filename: str, sidecar: str, base_url: str, heal: dict | None = None
+) -> str:
+    """Build the live task prompt (the skill supplies the methodology).
+
+    When ``heal`` is given (``{"code": <failing spec>, "error": <failure>}``) this
+    frames the task as a self-heal (#428): reproduce the failure live, find the
+    real cause, and emit a CORRECTED spec — instead of authoring from scratch.
+    Reuses the same browser-harness/skill machinery either way.
+    """
     accounts = context.get("testAccounts") or []
     cred_lines = "\n".join(
         f"- role={a.get('role', '')} username={a.get('username', '')} password={a.get('password', '')}"
@@ -164,9 +172,26 @@ def _build_prompt(case, context: dict, spec_filename: str, sidecar: str, base_ur
     routes = json.dumps(context.get("routes", []), ensure_ascii=False)[:4000]
     selectors = json.dumps(context.get("selectors", []), ensure_ascii=False)[:4000]
     auth = json.dumps(context.get("auth", {}), ensure_ascii=False)[:1500]
+    if heal is not None:
+        failing_code = (heal.get("code") or "").strip()[:8000]
+        error = (heal.get("error") or "").strip()[:3000] or "(no error text captured)"
+        intro = (
+            f"A Playwright spec for this test case FAILED. Repair it by driving the REAL app live "
+            f"with browser-harness (already wired to a signed-in Chrome via BU_CDP_URL — just run it): "
+            f"reproduce the failing step, find the REAL cause (wrong/stale selector, changed flow, "
+            f"missing test data, timing), and emit a CORRECTED, self-contained spec built from what "
+            f"actually works on the live DOM. Keep the test intent + assertions; do NOT weaken them "
+            f"to make it pass.\n\n"
+            f"## Failing spec (repair this)\n```ts\n{failing_code}\n```\n\n"
+            f"## Failure\n{error}\n\n"
+        )
+    else:
+        intro = (
+            f"Author a Playwright spec for this test case by driving the REAL app live with "
+            f"browser-harness (it is already wired to a signed-in Chrome via BU_CDP_URL — just run it).\n\n"
+        )
     return (
-        f"Author a Playwright spec for this test case by driving the REAL app live with "
-        f"browser-harness (it is already wired to a signed-in Chrome via BU_CDP_URL — just run it).\n\n"
+        f"{intro}"
         f"## Test case\n"
         f"Ticket: {case.ticket_external_id}\n"
         f"Test Case ID: {case.code}\n"

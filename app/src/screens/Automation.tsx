@@ -535,14 +535,18 @@ export function Automation() {
     setEditing(true);
   };
 
-  // Kick off the self-heal loop for the selected spec: run it, and while it
-  // fails feed the error back to Claude to regenerate + re-run, until it passes
-  // or hits the attempts cap. Progress streams over WS (see useAutomationEvents).
+  // Kick off self-heal for the selected spec. Classic mode runs the fix+re-run
+  // loop; live-harness mode (#428) reuses the browser-harness authoring pipeline —
+  // either way the spec flips to "running" server-side, so refresh specs too so the
+  // in-panel live trail / running state appears immediately (not only once the
+  // first WS event lands). Progress streams over WS (see useAutomationEvents).
   const startHeal = () => {
     if (!selectedSpec) return;
     healSpec.mutate(selectedSpec.testCaseId, {
-      onSuccess: () =>
-        qc.invalidateQueries({ queryKey: queryKeys.healStatus(selectedSpec.testCaseId) }),
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: queryKeys.healStatus(selectedSpec.testCaseId) });
+        qc.invalidateQueries({ queryKey: queryKeys.specs(runId) });
+      },
       onError: (e) => toast.error(e instanceof Error ? e.message : t("automation.healFailedToStart")),
     });
   };

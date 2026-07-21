@@ -42,6 +42,13 @@
       "blind": "Tạo + tự chữa",
       "liveHarness": "Trực tiếp (browser-harness)"
     },
+    "heal": {
+      "title": "Chế độ tự chữa",
+      "description": "Cách sửa một script lỗi — cổ điển tạo bản vá rồi chạy lại, hoặc trực tiếp điều khiển ứng dụng qua browser-harness để tái hiện và sửa từ DOM thật (cần một local agent đã ghép nối)",
+      "placeholder": "Chọn chế độ",
+      "classic": "Cổ điển (vá + chạy lại)",
+      "liveHarness": "Trực tiếp (browser-harness)"
+    },
     "authoringLog": {
       "title": "Mức chi tiết nhật ký tạo script",
       "description": "Hiển thị bao nhiêu nhật ký khi tạo script trực tiếp — gọn chỉ hiện phần diễn giải dễ đọc của Claude, đầy đủ hiện thêm các lệnh browser-harness/Bash thô",
