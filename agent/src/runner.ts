@@ -1037,7 +1037,14 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
   const sess = origin ? sessionPathsForOrigin(origin) : null;
   const profileDir = sess ? path.join(sess.dir, "browser-profile") : "";
 
-  const finalize = async (code: string, discovered: unknown, summary: string, ok: boolean, costUsd = 0) => {
+  const finalize = async (
+    code: string,
+    discovered: unknown,
+    summary: string,
+    ok: boolean,
+    costUsd = 0,
+    refreshedCredentials = "",
+  ) => {
     await api
       .postAuthoringFinalize(cfg, job.sessionId, {
         code,
@@ -1045,6 +1052,7 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
         summary,
         ok,
         costUsd,
+        refreshedCredentials,
       })
       .catch((err) => console.error("postAuthoringFinalize failed:", err));
   };
@@ -1258,7 +1266,17 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
         case: job.caseId, phase: ok ? "done" : "failed", message: (summary || "").slice(0, 300), costUsd,
       })
       .catch(() => {});
-    await finalize(code, discovered, summary, ok, costUsd);
+    // Auto-rotation (#cred-rotate): if we ran with the app's saved credential and
+    // the CLI refreshed the OAuth token in our temp config dir, post the rotated
+    // .credentials.json back so the server captures it before workDir is deleted.
+    let refreshedCredentials = "";
+    if (claudeConfigDir) {
+      try {
+        const credFile = path.join(claudeConfigDir, ".credentials.json");
+        if (fs.existsSync(credFile)) refreshedCredentials = fs.readFileSync(credFile, "utf-8");
+      } catch { /* best-effort — a missing/unreadable file just skips rotation */ }
+    }
+    await finalize(code, discovered, summary, ok, costUsd, refreshedCredentials);
   } finally {
     try { claude?.kill(); } catch {}
     // Closing the launcher's stdin tells it to kill Chrome (cross-platform).
