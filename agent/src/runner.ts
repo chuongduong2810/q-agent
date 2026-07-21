@@ -1164,16 +1164,26 @@ export async function processAuthoringJob(cfg: AgentConfig, job: api.AuthoringJo
     activeChild = claude;
 
     // Surface each step to the agent console + the run WebSocket so the operator
-    // can watch Claude drive browser-harness live.
+    // can watch Claude drive browser-harness live. Each post also reports whether
+    // the session is still alive: a 404 means the run was stopped server-side
+    // (#420), so abort the local Claude run immediately instead of burning the
+    // rest of the budget on work whose result will be rejected anyway.
+    let aborted = false;
     const emitStep = (line: string): void => {
       const trimmed = line.length > 300 ? line.slice(0, 300) + "…" : line;
       console.log(`[authoring ${job.caseId}] ${trimmed}`);
       emit("authoring-step", { caseId: job.caseId, line: trimmed });
       void api
-        .postAuthoringEvent(cfg, job.sessionId, "authoring.progress", {
+        .postAuthoringEventAlive(cfg, job.sessionId, "authoring.progress", {
           case: job.caseId, phase: "step", message: trimmed,
         })
-        .catch(() => {});
+        .then((alive) => {
+          if (!alive && !aborted) {
+            aborted = true;
+            console.log(`[authoring ${job.caseId}] session gone — run stopped; aborting Claude`);
+            try { claude?.kill(); } catch { /* already exited */ }
+          }
+        });
     };
     let cerr = "";
     let finalResult = "";

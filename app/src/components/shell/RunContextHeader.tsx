@@ -6,6 +6,7 @@ import { AiActivityIndicator } from "@/components/shell/AiActivityIndicator";
 import { ClaudeStatsButton } from "@/components/shell/ClaudeStatsButton";
 import { RunSwitcher } from "@/components/shell/RunSwitcher";
 import { RunActionsMenu } from "@/components/runs/RunActionsMenu";
+import { RunStopButton } from "@/components/runs/RunStopButton";
 import { RUN_STAGE_COUNT, runStatusToStage } from "@/components/ui/PipelineRail";
 import { runEffectiveStatus, runRateLabel } from "@/components/dashboard/runStatus";
 import { useRun } from "@/hooks/queries";
@@ -80,6 +81,7 @@ export function RunContextHeader({ runId }: { runId: number }) {
         >
           {t("topbar.switchRun")} <ChevronDown size={12} strokeWidth={2} />
         </button>
+        {run && <RunStopButton run={run} />}
         {run && <RunActionsMenu run={run} onDeleted={() => navigate("/runs")} />}
       </div>
 
