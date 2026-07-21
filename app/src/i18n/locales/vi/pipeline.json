@@ -348,6 +348,8 @@
     },
     "saveAnnotation": "Lưu chú thích",
     "noVideo": "Không có video nào được ghi cho {{caseCode}}.",
+    "videoOff": "Chế độ quay video đang tắt cho lần chạy này. Bật “Quay video” trong Cài đặt → Thực thi mặc định để ghi video cho các lần chạy sau.",
+    "uploadingArtifact": "Đang tải từ local agent… sẽ hiển thị trong giây lát.",
     "noTrace": "Không có tệp dấu vết nào được ghi cho ca này.",
     "noConsole": "Không có đầu ra console nào được ghi cho {{caseCode}}.",
     "net": {

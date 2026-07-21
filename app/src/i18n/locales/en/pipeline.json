@@ -348,6 +348,8 @@
     },
     "saveAnnotation": "Save annotation",
     "noVideo": "No video captured for {{caseCode}}.",
+    "videoOff": "Video capture is off for this run. Turn on “Capture video” in Settings → Default execution to record video on future runs.",
+    "uploadingArtifact": "Uploading from the local agent… this will appear shortly.",
     "noTrace": "No trace file recorded for this case.",
     "noConsole": "No console output captured for {{caseCode}}.",
     "net": {
