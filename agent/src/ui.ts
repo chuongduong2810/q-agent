@@ -467,6 +467,7 @@ function renderCells(){
 }
 
 function timeStr(ts){ return new Date(ts).toTimeString().slice(0,8); }
+var LOG_EMPTY_HTML = '<div id="logEmptyPh" style="color:#5c5c6e;padding:2px 0;line-height:1.7">Ready \\u00b7 waiting for activity\\u2026<br><span style="color:#4c4c5a;font-size:10.5px">Runs, live-authoring and self-heal will stream here.</span></div>';
 function logColor(t){
   if (t === "error" || t === "auth-error") return "#ff9ea1";
   if (t === "auth-waiting") return "#fbbf24";
@@ -494,6 +495,7 @@ function logMsg(ev){
 function addLog(ev){
   if (ev.type === "agent-status") return; // status events aren't log lines; pill is driven by view state
   var msg = logMsg(ev); if (!msg) return;
+  var ph = document.getElementById("logEmptyPh"); if (ph) ph.remove(); // first real line clears the placeholder
   var row = document.createElement("div");
   row.style.cssText = "display:flex;gap:10px;animation:logIn .4s ease both";
   var t = document.createElement("span"); t.style.cssText = "color:#5c5c6e;flex-shrink:0"; t.textContent = timeStr(ev.ts);
@@ -552,7 +554,9 @@ function showConnected(s){
   el("sessionId").textContent = "device #" + (s.deviceId==null?"?":s.deviceId);
   // The SSE stream replays the recent-events buffer on connect, so seed the log
   // ONLY from the stream (seeding from /api/state too would double every line).
-  el("log").innerHTML = ""; openStream();
+  // Show a placeholder until the first line arrives so an idle/just-reconnected
+  // agent reads as "ready & waiting", not a broken empty panel (#agent-log-empty).
+  el("log").innerHTML = LOG_EMPTY_HTML; openStream();
 }
 function refresh(){
   fetch("/api/state").then(function(r){ return r.json(); }).then(function(s){
