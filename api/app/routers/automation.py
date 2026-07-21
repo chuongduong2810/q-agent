@@ -227,13 +227,20 @@ def _merge_authored_discovery(context: dict, run: Run, discovered: dict) -> None
     )
 
 
-def _enqueue_agent_authoring(db: Session, run: Run, case: TestCase, context: dict) -> AutomationSpec:
+def _enqueue_agent_authoring(
+    db: Session, run: Run, case: TestCase, context: dict, heal: dict | None = None
+) -> AutomationSpec:
     """Queue a live-authoring session for the paired agent and return a pending spec (#403).
 
     Composes the skill system prompt + task prompt server-side (the agent has no
     ``skills/`` dir), enqueues via :mod:`agent_authoring_service`, and marks the
     spec ``running``; the agent claims it, authors locally, and the finalize
     endpoint fills in the real spec via :func:`finalize_authored_spec`.
+
+    When ``heal`` (``{"code": <failing spec>, "error": <failure>}``) is given the
+    task prompt is framed as a self-heal (#428) — reproduce + fix the failing spec
+    live — instead of authoring from scratch. Same job shape, so the agent runs it
+    with no changes.
     """
     from app.services import agent_authoring_service, agent_capture_service, skills
 
@@ -252,7 +259,7 @@ def _enqueue_agent_authoring(db: Session, run: Run, case: TestCase, context: dic
     spec_filename = spec_service.spec_filename(case.ticket_external_id, case.code)
     system_prompt = skills.load_skill("live-authoring", include_template=True) or ""
     task_prompt = live_authoring_service._build_prompt(
-        case, context, spec_filename, "discovered.json", base_url
+        case, context, spec_filename, "discovered.json", base_url, heal=heal
     )
     model = settings_store.load_settings().get("claudeModel") or settings.claude_model
     agent_authoring_service.request_authoring(
@@ -890,12 +897,42 @@ def heal_case_spec(
     if run.status == "executing":
         raise HTTPException(status_code=409, detail="Run is executing — wait for it to finish")
 
+    stored = settings_store.load_settings()
+    target = stored.get("executionTarget", "server")
+    heal_mode = stored.get("healMode", "classic")
+
+    # Live self-heal (#428): reuse the browser-harness live-authoring pipeline —
+    # drive the REAL app, reproduce the failure, and emit a corrected spec (seeded
+    # with the failing spec + its last failure). Needs the paired agent (that's
+    # where browser-harness + claude run), so it only applies on local-agent; any
+    # other target falls through to the classic loop below.
+    if heal_mode == "live-harness" and target == "local-agent":
+        last_fail = (
+            db.query(ExecutionResult)
+            .filter(ExecutionResult.test_case_id == case_id, ExecutionResult.error_message != "")
+            .order_by(ExecutionResult.id.desc())
+            .first()
+        )
+        error = (last_fail.error_message if last_fail else "") or (spec.block_reason or "")
+        context = spec_service.build_case_context(db, case, env=run.env)
+        try:
+            _enqueue_agent_authoring(
+                db, run, case, context, heal={"code": spec.code or "", "error": error}
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        db.commit()
+        audit_service.record(
+            category="ai", actor_type="ai", action="Self-healed spec (live browser-harness)",
+            target=f"{case.ticket_external_id} · {case.code}",
+        )
+        return {"started": True, "maxAttempts": settings.heal_max_attempts, "mode": "live-harness"}
+
     # Where the heal's Playwright runs. The server image ships no Playwright, so on
     # a local-agent deployment the heal LOOP must run on the paired device: queue a
     # single-case heal Execution the agent claims via /agent/jobs/next (it then
     # drives run→/heal/fix→re-run and posts /heal/finalize). Server-target keeps the
     # in-process loop.
-    target = settings_store.load_settings().get("executionTarget", "server")
     if target == "local-agent":
         has_device = (
             db.query(AgentDevice)

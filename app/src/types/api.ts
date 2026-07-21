@@ -787,6 +787,7 @@ export type ExecutionTarget = "server" | "local-agent";
  * KB then heal, or drive the real app live via browser-harness and emit from
  * the verified DOM. */
 export type AuthoringMode = "blind" | "live-harness";
+export type HealMode = "classic" | "live-harness";
 export type AuthoringLogVerbosity = "verbose" | "concise";
 
 export interface ExecutionOut {
@@ -885,6 +886,10 @@ export interface SettingsOut {
    * failures; "live-harness" = drive the real app via browser-harness to
    * discover real selectors, then emit the spec. Configured on Settings. */
   authoringMode: AuthoringMode;
+  /** Self-heal engine (#428). "classic" = generate a fix from the failure + DOM
+   * then re-run Playwright; "live-harness" = drive the real app via browser-harness
+   * (reusing the live-authoring pipeline), seeded with the failing spec + error. */
+  healMode: HealMode;
   /** Verbosity of the live-authoring step trail (#400). "concise" shows only
    * user-readable lines (Claude narration + phase status); "verbose" also shows
    * the raw browser-harness/Bash tool calls. Presentation-only. */

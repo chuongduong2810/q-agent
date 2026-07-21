@@ -42,6 +42,13 @@
       "blind": "Generate + heal",
       "liveHarness": "Live (browser-harness)"
     },
+    "heal": {
+      "title": "Self-heal mode",
+      "description": "How a failing spec is repaired — classic generates a fix and re-runs, or live drives the app via browser-harness to reproduce and fix from the real DOM (needs a paired local agent)",
+      "placeholder": "Select mode",
+      "classic": "Classic (fix + re-run)",
+      "liveHarness": "Live (browser-harness)"
+    },
     "authoringLog": {
       "title": "Authoring log detail",
       "description": "How much of the live-authoring log to show — concise shows only Claude's readable narration, verbose also shows the raw browser-harness/Bash commands",

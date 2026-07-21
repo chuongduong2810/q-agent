@@ -39,6 +39,13 @@ DEFAULTS: dict[str, Any] = {
     # real selectors, then emit the spec (live_authoring_service). Orthogonal to
     # executionTarget — live-harness always authors server-side.
     "authoringMode": "blind",
+    # How a failing spec is self-healed (#428). "classic" (default) = generate a
+    # fix from the failure + captured DOM then re-run Playwright, up to
+    # heal_max_attempts. "live-harness" = drive the real app live via
+    # browser-harness (reusing the live-authoring pipeline) seeded with the failing
+    # spec + error, and emit a corrected spec. live-harness needs a paired local
+    # agent (browser-harness + claude run there); falls back to classic otherwise.
+    "healMode": "classic",
     # Verbosity of the live-authoring step trail shown in the UI (#400). "concise"
     # (default) shows only user-readable lines (Claude's narration + phase status);
     # "verbose" also shows the raw tool/Bash calls (browser-harness invocations).

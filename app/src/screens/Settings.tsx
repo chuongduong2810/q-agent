@@ -11,7 +11,7 @@ import { PROVIDER_META, PROVIDER_ORDER } from "@/components/settings/providerMet
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { useProviders, useSettings, useUpdateSettings } from "@/hooks/queries";
 import { AI_MODEL_OPTIONS } from "@/lib/models";
-import type { AuthoringLogVerbosity, AuthoringMode, ExecutionTarget, ProviderGroupOut, ProviderKind, SettingsOut } from "@/types/api";
+import type { AuthoringLogVerbosity, AuthoringMode, ExecutionTarget, HealMode, ProviderGroupOut, ProviderKind, SettingsOut } from "@/types/api";
 
 /** A never-configured provider: the backend catalog omits it (fresh machine),
  * so synthesize an empty group the user can add a first connection under. */
@@ -163,6 +163,26 @@ export function Settings() {
                   options={[
                     { value: "blind", label: t("execution.authoring.blind") },
                     { value: "live-harness", label: t("execution.authoring.liveHarness") },
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2.5 border-b border-white/[0.06] py-[13px] md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-[14px] font-semibold">{t("execution.heal.title")}</div>
+                <div className="text-[12px] text-muted">
+                  {t("execution.heal.description")}
+                </div>
+              </div>
+              <div className="w-full md:w-[170px]">
+                <Select
+                  value={draft.healMode}
+                  onChange={(v) => v && set({ healMode: v as HealMode })}
+                  placeholder={t("execution.heal.placeholder")}
+                  allowClear={false}
+                  options={[
+                    { value: "classic", label: t("execution.heal.classic") },
+                    { value: "live-harness", label: t("execution.heal.liveHarness") },
                   ]}
                 />
               </div>
